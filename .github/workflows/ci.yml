@@ -12,6 +12,21 @@ jobs:
   backend-build:
     runs-on: ubuntu-latest
 
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -26,6 +41,12 @@ jobs:
 
       - name: Build backend
         run: dotnet build backend/RescuePlate.slnx --no-restore --configuration Release
+
+      - name: Run Unit Tests
+        run: dotnet test backend/UserService.UnitTests --configuration Release --no-restore
+
+      - name: Run Integration Tests
+        run: dotnet test backend/UserService.IntegrationTests --configuration Release --no-restore
 
   frontend-build:
     runs-on: ubuntu-latest
