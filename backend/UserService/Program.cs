@@ -11,7 +11,8 @@ var builder = WebApplication.CreateBuilder(args);
 
 // 1. Database Configuration (PostgreSQL - RescuePlateDB)
 var connectionString = builder.Configuration.GetConnectionString("PostgreSQLConnection")
-    ?? "Host=localhost;Port=5432;Database=RescuePlateDB;Username=postgres;Password=postgres";
+    ?? throw new InvalidOperationException(
+        "PostgreSQLConnection connection string is not configured.");
 
 builder.Services.AddDbContext<RescuePlateDbContext>(options =>
 {
@@ -27,6 +28,7 @@ builder.Services.AddScoped<IProfileService, ProfileService>();
 var secretKey = builder.Configuration["Jwt:SecretKey"] ?? "RescuePlate_Super_Secret_Key_For_Jwt_Authentication_2026_Sprint1_RescueFood";
 var issuer = builder.Configuration["Jwt:Issuer"] ?? "RescuePlate.UserService";
 var audience = builder.Configuration["Jwt:Audience"] ?? "RescuePlate.Client";
+var frontendUrl = builder.Configuration["FrontendUrl"] ?? "http://localhost:5173";
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -58,7 +60,7 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
     {
-        policy.WithOrigins("http://localhost:5173", "http://localhost:3000")
+        policy.WithOrigins(frontendUrl, "http://localhost:3000")
               .AllowAnyHeader()
               .AllowAnyMethod()
               .AllowCredentials();
