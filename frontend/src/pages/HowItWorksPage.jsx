@@ -1,24 +1,14 @@
 import React from 'react';
-import HowItWorks from '../components/HowItWorks';
-import { HelpCircle } from 'lucide-react';
 
 export default function HowItWorksPage() {
   return (
-    <div className="page-view animate-fade-in-up">
-      <div className="page-hero-banner">
-        <div className="container text-center">
-          <div className="badge badge-amber">
-            <HelpCircle size={14} />
-            <span>End-to-End Workflow Guide</span>
-          </div>
-          <h1 className="page-hero-title">How Food Redistribution Works</h1>
-          <p className="page-hero-subtitle">
-            A simple step-by-step breakdown of how surplus food is posted, claimed by charities, and collected safely.
-          </p>
-        </div>
+    <div className="page-view animate-fade-in-up" style={{ minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '120px 20px' }}>
+      <div className="container" style={{ maxWidth: '600px' }}>
+        <h1 style={{ fontSize: '2.4rem', marginBottom: '16px' }}>How It Works</h1>
+        <p style={{ color: 'var(--text-muted)', fontSize: '1.1rem', lineHeight: '1.6' }}>
+          Platform redistribution workflows and step-by-step donation guide coming soon.
+        </p>
       </div>
-
-      <HowItWorks />
     </div>
   );
 }
