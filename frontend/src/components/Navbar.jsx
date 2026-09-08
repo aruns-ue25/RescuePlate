@@ -58,9 +58,11 @@ export default function Navbar() {
           <NavLink to="/browse-food" className={({ isActive }) => `nav-link ${isActive ? 'nav-link-active' : ''}`}>
             Browse Food
           </NavLink>
-          <NavLink to="/donor-portal" className={({ isActive }) => `nav-link ${isActive ? 'nav-link-active' : ''}`}>
-            Post Surplus
-          </NavLink>
+          {currentUser?.role !== 'ORGANIZATION' && (
+            <NavLink to="/donor-portal" className={({ isActive }) => `nav-link ${isActive ? 'nav-link-active' : ''}`}>
+              Post Surplus
+            </NavLink>
+          )}
           <NavLink to="/how-it-works" className={({ isActive }) => `nav-link ${isActive ? 'nav-link-active' : ''}`}>
             How It Works
           </NavLink>
@@ -121,10 +123,12 @@ export default function Navbar() {
               <span>Browse Surplus Food</span>
               <ChevronRight size={16} />
             </Link>
-            <Link to="/donor-portal" className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>
-              <span>Donor Portal / Post Food</span>
-              <ChevronRight size={16} />
-            </Link>
+            {currentUser?.role !== 'ORGANIZATION' && (
+              <Link to="/donor-portal" className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>
+                <span>Donor Portal / Post Food</span>
+                <ChevronRight size={16} />
+              </Link>
+            )}
             <Link to="/how-it-works" className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>
               <span>How It Works</span>
               <ChevronRight size={16} />
