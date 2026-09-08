@@ -239,7 +239,7 @@ export default function ProfilePage() {
                   value={profileData.phone}
                   disabled={!isEditing}
                   placeholder="+1 (555) 000-0000"
-                  onChange={(e) => setProfileData({ ...profileData, phone: e.target.value })}
+                  onChange={(e) => setProfileData({ ...profileData, phone: e.target.value.replace(/[^0-9+\-\s()]/g, '') })}
                 />
               </div>
             </div>

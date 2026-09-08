@@ -231,7 +231,7 @@ export default function RegisterPage() {
                     className="form-input"
                     placeholder="+1 (555) 019-2834"
                     value={formData.phone}
-                    onChange={(e) => handleInputChange('phone', e.target.value)}
+                    onChange={(e) => handleInputChange('phone', e.target.value.replace(/[^0-9+\-\s()]/g, ''))}
                   />
                 </div>
               </div>
