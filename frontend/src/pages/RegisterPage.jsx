@@ -229,9 +229,15 @@ export default function RegisterPage() {
                   <input
                     type="tel"
                     className="form-input"
-                    placeholder="+1 (555) 019-2834"
+                    placeholder="e.g. 0771234567"
+                    maxLength={12}
                     value={formData.phone}
-                    onChange={(e) => handleInputChange('phone', e.target.value.replace(/[^0-9+\-\s()]/g, ''))}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/[^0-9+]/g, '');
+                      if (val.startsWith('+') ? val.length <= 12 : val.length <= 10) {
+                        handleInputChange('phone', val);
+                      }
+                    }}
                   />
                 </div>
               </div>
