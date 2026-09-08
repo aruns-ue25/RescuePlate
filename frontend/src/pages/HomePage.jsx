@@ -2,6 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import HeroSection from '../components/HeroSection';
 import ImpactStats from '../components/ImpactStats';
+import FeaturesSection from '../components/FeaturesSection';
 import { ArrowRight, Store, HeartHandshake } from 'lucide-react';
 
 export default function HomePage() {
@@ -49,6 +50,9 @@ export default function HomePage() {
           </div>
         </div>
       </section>
+
+      {/* Platform Reliability & Safety Features */}
+      <FeaturesSection />
     </div>
   );
 }
