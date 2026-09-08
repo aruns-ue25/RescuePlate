@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import HeroSection from '../components/HeroSection';
+import ImpactStats from '../components/ImpactStats';
 import { ArrowRight, Store, HeartHandshake } from 'lucide-react';
 
 export default function HomePage() {
@@ -8,6 +9,9 @@ export default function HomePage() {
     <div className="home-page animate-fade-in-up">
       {/* Hero Section */}
       <HeroSection />
+
+      {/* Live Impact Telemetry Stats */}
+      <ImpactStats />
 
       {/* Quick Action Portals */}
       <section className="portal-cards-section" style={{ padding: '60px 0 80px 0' }}>
