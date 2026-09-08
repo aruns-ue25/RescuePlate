@@ -1,11 +1,18 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import HeroSection from '../components/HeroSection';
 import ImpactStats from '../components/ImpactStats';
 import FeaturesSection from '../components/FeaturesSection';
+import CategoriesSection from '../components/CategoriesSection';
 import { ArrowRight, Store, HeartHandshake } from 'lucide-react';
 
 export default function HomePage() {
+  const navigate = useNavigate();
+
+  const handleOpenAuth = (mode, role) => {
+    navigate('/register');
+  };
+
   return (
     <div className="home-page animate-fade-in-up">
       {/* Hero Section */}
@@ -53,6 +60,9 @@ export default function HomePage() {
 
       {/* Platform Reliability & Safety Features */}
       <FeaturesSection />
+
+      {/* Accepted Food Categories Grid */}
+      <CategoriesSection onOpenAuth={handleOpenAuth} />
     </div>
   );
 }
