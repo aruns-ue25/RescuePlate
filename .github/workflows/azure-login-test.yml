@@ -1,7 +1,9 @@
 name: Azure Login Test
 
 on:
-  workflow_dispatch:
+  push:
+    branches:
+      - cd-pipeline
 
 jobs:
   test-azure-login:
