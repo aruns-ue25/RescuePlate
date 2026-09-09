@@ -16,7 +16,7 @@ env:
   AZURE_RESOURCE_GROUP: RescuePlate-RG
 
   ACR_NAME: rescueplateacr26
-  ACR_LOGIN_SERVER: rescueplateacr26-d6c8a0e097d6ajby.azurecr.io
+  ACR_LOGIN_SERVER: rescueplateacr26-d6c8a0e0g7d6ajby.azurecr.io
 
   BACKEND_APP: rescueplate-userservice
   FRONTEND_APP: rescueplate-frontend
