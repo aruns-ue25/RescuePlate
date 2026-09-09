@@ -1,32 +1,11 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Utensils, Mail, Globe, ArrowRight } from 'lucide-react';
+import { Utensils } from 'lucide-react';
 
 export default function Footer() {
   return (
     <footer className="site-footer">
-      {/* Top Pre-Footer CTA Bar */}
-      <div className="pre-footer-cta">
-        <div className="container">
-          <div className="pre-footer-content">
-            <div className="pre-footer-text">
-              <h3>Start Preventing Food Waste Today</h3>
-              <p>Join commercial restaurants, hotels, and charities redistributing quality surplus meals.</p>
-            </div>
-            <div className="pre-footer-btns">
-              <Link to="/donor-portal" className="btn btn-primary btn-lg">
-                <span>Donate Surplus Food</span>
-                <ArrowRight size={18} />
-              </Link>
-              <Link to="/browse-food" className="btn btn-dark-outline btn-lg">
-                <span>Claim Food for Charity</span>
-              </Link>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="container footer-main-content">
+      <div className="container footer-main-content" style={{ paddingTop: '48px' }}>
         <div className="footer-columns-grid" style={{ gridTemplateColumns: '2fr 1fr 1fr' }}>
           {/* Brand Col */}
           <div className="footer-col brand-col">

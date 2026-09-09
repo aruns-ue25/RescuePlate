@@ -238,8 +238,14 @@ export default function ProfilePage() {
                   className="form-input"
                   value={profileData.phone}
                   disabled={!isEditing}
-                  placeholder="+1 (555) 000-0000"
-                  onChange={(e) => setProfileData({ ...profileData, phone: e.target.value })}
+                  placeholder="e.g. 0771234567"
+                  maxLength={12}
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/[^0-9+]/g, '');
+                    if (val.startsWith('+') ? val.length <= 12 : val.length <= 10) {
+                      setProfileData({ ...profileData, phone: val });
+                    }
+                  }}
                 />
               </div>
             </div>
