@@ -59,6 +59,34 @@ public class AuthController : ControllerBase
         return Ok(new { success = true, message = "Successfully signed out of RescuePlate session." });
     }
 
+    [HttpPost("change-password")]
+    [Authorize]
+    public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordDto dto)
+    {
+        if (!ModelState.IsValid)
+        {
+            var firstError = ModelState.Values
+                .SelectMany(v => v.Errors)
+                .Select(e => e.ErrorMessage)
+                .FirstOrDefault() ?? "Invalid password data.";
+            return BadRequest(new { success = false, message = firstError, errors = ModelState });
+        }
+
+        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
+        {
+            return Unauthorized(new { success = false, message = "Invalid user session." });
+        }
+
+        var (success, message) = await _authService.ChangePasswordAsync(userId, dto);
+        if (!success)
+        {
+            return BadRequest(new { success = false, message });
+        }
+
+        return Ok(new { success = true, message });
+    }
+
     [HttpDelete("account")]
     [Authorize]
     public async Task<IActionResult> DeleteAccount([FromBody] DeleteAccountDto dto)
