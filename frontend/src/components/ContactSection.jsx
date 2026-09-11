@@ -40,7 +40,7 @@ export default function ContactSection({ onShowToast }) {
     },
     {
       q: "What happens if a donation is not claimed before its availability deadline?",
-      a: "RescuePlate incorporates automated expiry timers (SRS FR12 & FR24). If food reaches its safety deadline without being claimed, it automatically shifts to Expired status and cannot receive late requests, ensuring recipients only receive safe, fresh food."
+      a: "RescuePlate incorporates automated expiry timers. If food reaches its safety deadline without being claimed, it automatically shifts to Expired status and cannot receive late requests, ensuring recipients only receive safe, fresh food."
     }
   ];
 

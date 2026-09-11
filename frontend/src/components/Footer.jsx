@@ -14,27 +14,6 @@ export default function Footer() {
 
   return (
     <footer className="site-footer">
-      {/* Top Pre-Footer CTA Bar */}
-      <div className="pre-footer-cta">
-        <div className="container">
-          <div className="pre-footer-content">
-            <div className="pre-footer-text">
-              <h3>Start Preventing Food Waste Today</h3>
-              <p>Join hundreds of restaurants, hotels, and charities redistributing meals in your city.</p>
-            </div>
-            <div className="pre-footer-btns">
-              <Link to="/donor-portal" className="btn btn-primary btn-lg">
-                <span>Donate Surplus Food</span>
-                <ArrowRight size={18} />
-              </Link>
-              <Link to="/browse-food" className="btn btn-dark-outline btn-lg">
-                <span>Claim Food for Charity</span>
-              </Link>
-            </div>
-          </div>
-        </div>
-      </div>
-
       <div className="container footer-main-content">
         <div className="footer-columns-grid">
           {/* Brand Col */}

@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
 import { 
   PlusCircle, 
   Search, 
@@ -120,25 +119,6 @@ export default function HowItWorks() {
               )}
             </div>
           ))}
-        </div>
-
-        {/* Workflow Callout Banner */}
-        <div className="workflow-callout-box">
-          <div className="callout-text">
-            <h4>Ready to make an immediate impact in your neighborhood?</h4>
-            <p>
-              {activeRole === 'donor'
-                ? "Join top restaurants and grocers turning end-of-day surplus into smiles."
-                : "Register your charity to receive automatic alerts when fresh food is posted nearby."}
-            </p>
-          </div>
-          <Link
-            to="/register"
-            className={`btn ${activeRole === 'donor' ? 'btn-primary' : 'btn-amber'} btn-lg`}
-          >
-            <span>{activeRole === 'donor' ? 'Register as Food Donor' : 'Register as Organization'}</span>
-            <ArrowRight size={18} />
-          </Link>
         </div>
       </div>
     </section>

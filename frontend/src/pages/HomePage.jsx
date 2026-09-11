@@ -4,7 +4,6 @@ import HeroSection from '../components/HeroSection';
 import ImpactStats from '../components/ImpactStats';
 import FeaturesSection from '../components/FeaturesSection';
 import CategoriesSection from '../components/CategoriesSection';
-import TestimonialsSection from '../components/TestimonialsSection';
 import { ArrowRight, Store, HeartHandshake } from 'lucide-react';
 
 export default function HomePage() {
@@ -58,9 +57,6 @@ export default function HomePage() {
 
       {/* Food Categories */}
       <CategoriesSection />
-
-      {/* Community Testimonials */}
-      <TestimonialsSection />
     </div>
   );
 }
