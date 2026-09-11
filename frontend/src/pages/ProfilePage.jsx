@@ -17,11 +17,18 @@ import {
   Camera,
   Upload,
   Loader2,
-  RefreshCw
+  RefreshCw,
+  Lock,
+  KeyRound,
+  Eye,
+  EyeOff,
+  ShieldCheck,
+  Check,
+  X
 } from 'lucide-react';
 
 export default function ProfilePage() {
-  const { currentUser, logout, updateProfile, updateProfilePicture, removeProfilePicture, deleteAccount } = useAuth();
+  const { currentUser, logout, updateProfile, updateProfilePicture, removeProfilePicture, changePassword, deleteAccount } = useAuth();
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
 
@@ -48,6 +55,19 @@ export default function ProfilePage() {
   const [picSuccess, setPicSuccess] = useState('');
   const [picError, setPicError] = useState('');
   const [showRemovePicModal, setShowRemovePicModal] = useState(false);
+
+  // Change Password states
+  const [passwordForm, setPasswordForm] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: ''
+  });
+  const [showCurrentPass, setShowCurrentPass] = useState(false);
+  const [showNewPass, setShowNewPass] = useState(false);
+  const [showConfirmPass, setShowConfirmPass] = useState(false);
+  const [isChangingPass, setIsChangingPass] = useState(false);
+  const [passSuccess, setPassSuccess] = useState('');
+  const [passError, setPassError] = useState('');
 
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deletePassword, setDeletePassword] = useState('');
@@ -173,6 +193,61 @@ export default function ProfilePage() {
     }
   };
 
+  const handleChangePassword = async (e) => {
+    e.preventDefault();
+    setPassError('');
+    setPassSuccess('');
+
+    // Scenario 2: Verify current password is provided
+    if (!passwordForm.currentPassword) {
+      setPassError('Please enter your current password.');
+      return;
+    }
+
+    // Scenario 4: Verify confirmation match
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      setPassError('New password and confirmation password do not match.');
+      return;
+    }
+
+    // Scenario 3: Verify new password complexity rules
+    const hasMinLen = passwordForm.newPassword.length >= 8;
+    const hasUpper = /[A-Z]/.test(passwordForm.newPassword);
+    const hasLower = /[a-z]/.test(passwordForm.newPassword);
+    const hasNum = /[0-9]/.test(passwordForm.newPassword);
+    const hasSpecial = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(passwordForm.newPassword);
+
+    if (!hasMinLen || !hasUpper || !hasLower || !hasNum || !hasSpecial) {
+      setPassError('New password must be at least 8 characters and include uppercase, lowercase, number, and special character.');
+      return;
+    }
+
+    if (passwordForm.newPassword === passwordForm.currentPassword) {
+      setPassError('New password cannot be identical to your current password.');
+      return;
+    }
+
+    setIsChangingPass(true);
+    try {
+      const res = await changePassword({
+        currentPassword: passwordForm.currentPassword,
+        newPassword: passwordForm.newPassword,
+        confirmPassword: passwordForm.confirmPassword
+      });
+      setPasswordForm({
+        currentPassword: '',
+        newPassword: '',
+        confirmPassword: ''
+      });
+      setPassSuccess(res.message || 'Password changed successfully! Please use your new password next time you sign in.');
+      setTimeout(() => setPassSuccess(''), 6000);
+    } catch (err) {
+      setPassError(err.message || 'Failed to update password. Please verify your current password.');
+    } finally {
+      setIsChangingPass(false);
+    }
+  };
+
   const handleSaveProfile = async (e) => {
     e.preventDefault();
     setSaveError('');
@@ -218,6 +293,15 @@ export default function ProfilePage() {
     } finally {
       setIsDeleting(false);
     }
+  };
+
+  const passCriteria = {
+    minLen: passwordForm.newPassword.length >= 8,
+    upper: /[A-Z]/.test(passwordForm.newPassword),
+    lower: /[a-z]/.test(passwordForm.newPassword),
+    num: /[0-9]/.test(passwordForm.newPassword),
+    special: /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(passwordForm.newPassword),
+    matches: passwordForm.confirmPassword.length > 0 && passwordForm.newPassword === passwordForm.confirmPassword
   };
 
   return (
@@ -487,6 +571,163 @@ export default function ProfilePage() {
               <span>Delete Account</span>
             </button>
           </div>
+        </div>
+
+        {/* Security & Change Password Card */}
+        <div className="profile-card" style={{ marginTop: '32px' }}>
+          <div className="profile-card-header" style={{ marginBottom: '24px' }}>
+            <div className="profile-icon-square" style={{ background: '#eff6ff', color: '#1d4ed8' }}>
+              <KeyRound size={26} />
+            </div>
+            <div className="profile-header-info">
+              <div className="profile-name-row">
+                <h2>Account Security & Password</h2>
+                <span className="badge badge-primary">
+                  <ShieldCheck size={13} />
+                  <span>BCrypt Protected</span>
+                </span>
+              </div>
+              <p className="profile-contact-text">Update your password and maintain control over your account security.</p>
+            </div>
+          </div>
+
+          {passSuccess && (
+            <div className="auth-success-banner animate-fade-in-up" style={{ marginBottom: '20px' }}>
+              <CheckCircle2 size={20} className="text-emerald" />
+              <span>{passSuccess}</span>
+            </div>
+          )}
+
+          {passError && (
+            <div className="auth-error-banner animate-fade-in-up" style={{ marginBottom: '20px' }}>
+              <AlertCircle size={20} className="text-accent" />
+              <span>{passError}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleChangePassword} className="profile-form">
+            <div className="form-group">
+              <label className="form-label">Current Password *</label>
+              <div className="password-input-wrapper">
+                <input
+                  type={showCurrentPass ? 'text' : 'password'}
+                  className="form-input"
+                  placeholder="Enter your current password"
+                  value={passwordForm.currentPassword}
+                  onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })}
+                  required
+                />
+                <button
+                  type="button"
+                  className="password-toggle-btn"
+                  onClick={() => setShowCurrentPass(!showCurrentPass)}
+                  title={showCurrentPass ? 'Hide password' : 'Show password'}
+                >
+                  {showCurrentPass ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+            </div>
+
+            <div className="form-row">
+              <div className="form-group">
+                <label className="form-label">New Password *</label>
+                <div className="password-input-wrapper">
+                  <input
+                    type={showNewPass ? 'text' : 'password'}
+                    className="form-input"
+                    placeholder="Enter strong new password"
+                    value={passwordForm.newPassword}
+                    onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
+                    required
+                  />
+                  <button
+                    type="button"
+                    className="password-toggle-btn"
+                    onClick={() => setShowNewPass(!showNewPass)}
+                    title={showNewPass ? 'Hide password' : 'Show password'}
+                  >
+                    {showNewPass ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Confirm New Password *</label>
+                <div className="password-input-wrapper">
+                  <input
+                    type={showConfirmPass ? 'text' : 'password'}
+                    className="form-input"
+                    placeholder="Repeat new password"
+                    value={passwordForm.confirmPassword}
+                    onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
+                    required
+                  />
+                  <button
+                    type="button"
+                    className="password-toggle-btn"
+                    onClick={() => setShowConfirmPass(!showConfirmPass)}
+                    title={showConfirmPass ? 'Hide password' : 'Show password'}
+                  >
+                    {showConfirmPass ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Password Requirement Badges */}
+            {passwordForm.newPassword.length > 0 && (
+              <div className="password-requirements-box animate-fade-in-up">
+                <div className="requirements-title">Password Security Requirements:</div>
+                <div className="requirements-grid">
+                  <div className={`req-item ${passCriteria.minLen ? 'req-met' : 'req-unmet'}`}>
+                    {passCriteria.minLen ? <Check size={14} /> : <X size={14} />}
+                    <span>At least 8 characters</span>
+                  </div>
+                  <div className={`req-item ${passCriteria.upper ? 'req-met' : 'req-unmet'}`}>
+                    {passCriteria.upper ? <Check size={14} /> : <X size={14} />}
+                    <span>1 uppercase letter (A-Z)</span>
+                  </div>
+                  <div className={`req-item ${passCriteria.lower ? 'req-met' : 'req-unmet'}`}>
+                    {passCriteria.lower ? <Check size={14} /> : <X size={14} />}
+                    <span>1 lowercase letter (a-z)</span>
+                  </div>
+                  <div className={`req-item ${passCriteria.num ? 'req-met' : 'req-unmet'}`}>
+                    {passCriteria.num ? <Check size={14} /> : <X size={14} />}
+                    <span>1 number (0-9)</span>
+                  </div>
+                  <div className={`req-item ${passCriteria.special ? 'req-met' : 'req-unmet'}`}>
+                    {passCriteria.special ? <Check size={14} /> : <X size={14} />}
+                    <span>1 special character (!@#$...)</span>
+                  </div>
+                  {passwordForm.confirmPassword.length > 0 && (
+                    <div className={`req-item ${passCriteria.matches ? 'req-met' : 'req-unmet'}`}>
+                      {passCriteria.matches ? <Check size={14} /> : <X size={14} />}
+                      <span>Passwords match</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={isChangingPass}
+              className="btn btn-primary"
+              style={{ marginTop: '16px', alignSelf: 'flex-start' }}
+            >
+              {isChangingPass ? (
+                <>
+                  <Loader2 size={16} className="animate-spin" />
+                  <span>Updating Password...</span>
+                </>
+              ) : (
+                <>
+                  <Lock size={16} />
+                  <span>Update Password</span>
+                </>
+              )}
+            </button>
+          </form>
         </div>
       </div>
 
