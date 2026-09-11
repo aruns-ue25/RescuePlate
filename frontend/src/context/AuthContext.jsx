@@ -113,6 +113,16 @@ export function AuthProvider({ children }) {
     }
   };
 
+  const changePassword = async ({ currentPassword, newPassword, confirmPassword }) => {
+    setLoading(true);
+    try {
+      const res = await authApi.changePassword({ currentPassword, newPassword, confirmPassword });
+      return { success: true, message: res.message || 'Password changed successfully!' };
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const deleteAccount = async (password) => {
     setLoading(true);
     try {
@@ -128,7 +138,7 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ currentUser, login, register, logout, updateProfile, updateProfilePicture, removeProfilePicture, deleteAccount, loading }}>
+    <AuthContext.Provider value={{ currentUser, login, register, logout, updateProfile, updateProfilePicture, removeProfilePicture, changePassword, deleteAccount, loading }}>
       {children}
     </AuthContext.Provider>
   );

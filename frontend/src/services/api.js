@@ -96,6 +96,15 @@ export const authApi = {
     }
   },
 
+  changePassword: async (passwordData) => {
+    try {
+      const response = await api.post('/auth/change-password', passwordData);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { message: 'Failed to change password' };
+    }
+  },
+
   deleteAccount: async (password) => {
     try {
       const response = await api.delete('/auth/account', { data: { password } });
