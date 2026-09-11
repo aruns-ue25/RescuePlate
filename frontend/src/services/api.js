@@ -133,6 +133,68 @@ export const authApi = {
   }
 };
 
+const DONATION_API_BASE_URL = import.meta.env.VITE_DONATION_API_BASE_URL || 'http://localhost:5001/api';
+
+const donationClient = axios.create({
+  baseURL: DONATION_API_BASE_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  timeout: 8000,
+});
+
+donationClient.interceptors.request.use((config) => {
+  const token = localStorage.getItem('rescueplate_token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+export const donationApi = {
+  createDonation: async (donationData) => {
+    try {
+      const response = await donationClient.post('/donations', donationData);
+      return response.data;
+    } catch (error) {
+      if (error.response?.data) {
+        throw error.response.data;
+      }
+      throw { message: error.message || 'Network Error', isNetworkError: !error.response };
+    }
+  },
+
+  getMyDonations: async () => {
+    try {
+      const response = await donationClient.get('/donations/my-donations');
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { message: 'Failed to fetch donations' };
+    }
+  },
+
+  getDonationById: async (id) => {
+    try {
+      const response = await donationClient.get(`/donations/${id}`);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { message: 'Failed to fetch donation details' };
+    }
+  },
+
+  getAvailableDonations: async (category, search) => {
+    try {
+      const params = {};
+      if (category && category !== 'ALL') params.category = category;
+      if (search) params.search = search;
+      const response = await donationClient.get('/donations', { params });
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { message: 'Failed to browse donations' };
+    }
+  }
+};
+
 export const getProfileImageUrl = (url) => {
   if (!url) return null;
   if (url.startsWith('http://') || url.startsWith('https://')) return url;

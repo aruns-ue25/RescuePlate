@@ -1,0 +1,127 @@
+using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using DonationService.DTOs;
+using DonationService.Services;
+
+namespace DonationService.Controllers;
+
+[ApiController]
+[Route("api/[controller]")]
+public class DonationsController : ControllerBase
+{
+    private readonly IDonationService _donationService;
+    private readonly ILogger<DonationsController> _logger;
+
+    public DonationsController(IDonationService donationService, ILogger<DonationsController> logger)
+    {
+        _donationService = donationService;
+        _logger = logger;
+    }
+
+    /// <summary>
+    /// Creates a new surplus food donation listing (Donor only).
+    /// </summary>
+    [HttpPost]
+    [Authorize(Roles = "DONOR")]
+    [ProducesResponseType(typeof(ApiResponse<DonationResponseDto>), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ApiResponse<DonationResponseDto>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> CreateDonation([FromBody] CreateDonationDto dto)
+    {
+        if (!ModelState.IsValid)
+        {
+            var errors = ModelState.Values
+                .SelectMany(v => v.Errors)
+                .Select(e => e.ErrorMessage)
+                .ToList();
+
+            return BadRequest(ApiResponse<DonationResponseDto>.Fail("Validation failed.", errors));
+        }
+
+        var (donorId, donorName, donorEmail) = GetCurrentDonorIdentity();
+        if (string.IsNullOrWhiteSpace(donorId))
+        {
+            return Unauthorized(ApiResponse<DonationResponseDto>.Fail("Invalid or missing Donor authentication claims."));
+        }
+
+        var result = await _donationService.CreateDonationAsync(donorId, donorName, donorEmail, dto);
+        if (!result.Success)
+        {
+            return BadRequest(result);
+        }
+
+        return CreatedAtAction(nameof(GetDonationById), new { id = result.Data!.Id }, result);
+    }
+
+    /// <summary>
+    /// Retrieves all donations posted by the authenticated Donor.
+    /// </summary>
+    [HttpGet("my-donations")]
+    [Authorize(Roles = "DONOR")]
+    [ProducesResponseType(typeof(ApiResponse<List<DonationResponseDto>>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetMyDonations()
+    {
+        var (donorId, _, _) = GetCurrentDonorIdentity();
+        if (string.IsNullOrWhiteSpace(donorId))
+        {
+            return Unauthorized(ApiResponse<List<DonationResponseDto>>.Fail("Invalid or missing Donor authentication claims."));
+        }
+
+        var result = await _donationService.GetMyDonationsAsync(donorId);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Retrieves a single donation listing by ID.
+    /// </summary>
+    [HttpGet("{id:int}")]
+    [ProducesResponseType(typeof(ApiResponse<DonationResponseDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetDonationById(int id)
+    {
+        var result = await _donationService.GetDonationByIdAsync(id);
+        if (!result.Success)
+        {
+            return NotFound(result);
+        }
+
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Public browse endpoint for available donations.
+    /// </summary>
+    [HttpGet]
+    [ProducesResponseType(typeof(ApiResponse<List<DonationResponseDto>>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetAllAvailableDonations(
+        [FromQuery] string? category = null, 
+        [FromQuery] string? search = null)
+    {
+        var result = await _donationService.GetAllAvailableDonationsAsync(category, search);
+        return Ok(result);
+    }
+
+    private (string id, string name, string email) GetCurrentDonorIdentity()
+    {
+        var idClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+            ?? User.FindFirst("id")?.Value
+            ?? User.FindFirst("sub")?.Value
+            ?? User.FindFirst("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier")?.Value
+            ?? string.Empty;
+
+        var name = User.FindFirst("BusinessName")?.Value
+            ?? User.FindFirst("businessName")?.Value
+            ?? User.FindFirst("ContactName")?.Value
+            ?? User.FindFirst(ClaimTypes.Name)?.Value
+            ?? "Verified Food Donor";
+
+        var email = User.FindFirst(ClaimTypes.Email)?.Value
+            ?? User.FindFirst("email")?.Value
+            ?? User.FindFirst("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress")?.Value
+            ?? string.Empty;
+
+        return (idClaim, name, email);
+    }
+}
