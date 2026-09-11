@@ -6,6 +6,7 @@ import {
   ShieldCheck, 
   BellRing, 
   FileCheck2, 
+  Sparkles,
   Layers
 } from 'lucide-react';
 
@@ -15,37 +16,37 @@ export default function FeaturesSection() {
       icon: <Split size={26} className="text-emerald" />,
       title: "Smart Partial Fulfilment",
       description: "Large catering or bakery batches can be split among multiple smaller community charities without exceeding total quantity.",
-      tag: "Redistribution"
+      tag: "SRS FR16"
     },
     {
       icon: <Clock size={26} className="text-amber" />,
       title: "Automated Expiry Safeguards",
       description: "Availability windows ensure donations are prioritized before shelf-life closes, preventing expired listings automatically.",
-      tag: "Freshness"
+      tag: "SRS FR12 & FR24"
     },
     {
       icon: <Truck size={26} className="text-emerald" />,
       title: "Flexible Handover Modes",
       description: "Support for both Charity Organization Pickup and Donor Direct Delivery, with full handover tracking.",
-      tag: "Logistics"
+      tag: "SRS FR19"
     },
     {
       icon: <ShieldCheck size={26} className="text-amber" />,
       title: "1-Click Receipt Confirmation",
       description: "A donation is only marked Completed after the receiving organization confirms receipt of safe, intact food.",
-      tag: "Verification"
+      tag: "SRS FR21 & FR22"
     },
     {
       icon: <BellRing size={26} className="text-emerald" />,
       title: "Instant In-App Notifications",
       description: "Real-time alerts for donors and charities on new requests, status changes, delivery milestones, and approvals.",
-      tag: "Real-time"
+      tag: "SRS FR26"
     },
     {
       icon: <FileCheck2 size={26} className="text-amber" />,
       title: "Timestamped Status History",
       description: "Complete transparent audit trail from Posted → Claimed → Collection Arranged → Collected → Completed.",
-      tag: "Audit Trail"
+      tag: "SRS FR25"
     }
   ];
 

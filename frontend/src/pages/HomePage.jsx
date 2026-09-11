@@ -1,28 +1,23 @@
 import React from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import HeroSection from '../components/HeroSection';
 import ImpactStats from '../components/ImpactStats';
 import FeaturesSection from '../components/FeaturesSection';
 import CategoriesSection from '../components/CategoriesSection';
+import TestimonialsSection from '../components/TestimonialsSection';
 import { ArrowRight, Store, HeartHandshake } from 'lucide-react';
 
 export default function HomePage() {
-  const navigate = useNavigate();
-
-  const handleOpenAuth = (mode, role) => {
-    navigate('/register');
-  };
-
   return (
     <div className="home-page animate-fade-in-up">
       {/* Hero Section */}
       <HeroSection />
 
-      {/* Live Impact Telemetry Stats */}
+      {/* Live Impact Statistics */}
       <ImpactStats />
 
-      {/* Quick Action Portals */}
-      <section className="portal-cards-section" style={{ padding: '60px 0 80px 0' }}>
+      {/* Quick Action Portals Banner */}
+      <section className="portal-cards-section">
         <div className="container">
           <div className="portal-cards-grid">
             <div className="portal-card donor-portal-card">
@@ -32,9 +27,9 @@ export default function HomePage() {
               <div className="portal-card-body">
                 <span className="badge badge-primary">For Food Businesses</span>
                 <h3>Are You a Restaurant, Bakery, or Hotel?</h3>
-                <p>Register your food business to create your donor profile and get ready for surplus redistribution.</p>
-                <Link to="/register" className="btn btn-primary btn-lg">
-                  <span>Register as Food Donor</span>
+                <p>Don't throw away end-of-day surplus. List fresh surplus in under 60 seconds and support verified neighborhood shelters.</p>
+                <Link to="/donor-portal" className="btn btn-primary btn-lg">
+                  <span>Open Donor Portal</span>
                   <ArrowRight size={18} />
                 </Link>
               </div>
@@ -47,9 +42,9 @@ export default function HomePage() {
               <div className="portal-card-body">
                 <span className="badge badge-amber">For Charities & Shelters</span>
                 <h3>Need Fresh Surplus Food for Your Community?</h3>
-                <p>Register your certified nonprofit organization or shelter to set your accepted food preferences.</p>
-                <Link to="/register" className="btn btn-amber btn-lg">
-                  <span>Register as Charity</span>
+                <p>Browse live surplus listings near you, claim the exact portion quantities you need, and arrange quick pickup or delivery.</p>
+                <Link to="/browse-food" className="btn btn-amber btn-lg">
+                  <span>Browse Available Food</span>
                   <ArrowRight size={18} />
                 </Link>
               </div>
@@ -58,11 +53,14 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Platform Reliability & Safety Features */}
+      {/* Core Features Grid */}
       <FeaturesSection />
 
-      {/* Accepted Food Categories Grid */}
-      <CategoriesSection onOpenAuth={handleOpenAuth} />
+      {/* Food Categories */}
+      <CategoriesSection />
+
+      {/* Community Testimonials */}
+      <TestimonialsSection />
     </div>
   );
 }
