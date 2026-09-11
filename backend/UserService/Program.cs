@@ -130,6 +130,22 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+var wwwRootPath = Path.Combine(app.Environment.ContentRootPath, "wwwroot");
+if (!Directory.Exists(wwwRootPath))
+{
+    Directory.CreateDirectory(wwwRootPath);
+}
+var profilesPath = Path.Combine(wwwRootPath, "uploads", "profiles");
+if (!Directory.Exists(profilesPath))
+{
+    Directory.CreateDirectory(profilesPath);
+}
+
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(wwwRootPath),
+    RequestPath = ""
+});
 app.UseCors("AllowFrontend");
 app.UseAuthentication();
 app.UseAuthorization();

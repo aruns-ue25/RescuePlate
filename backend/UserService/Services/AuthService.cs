@@ -160,6 +160,7 @@ public class AuthService : IAuthService
             Role = user.Role.ToString(),
             Name = contactName,
             BusinessName = businessName,
+            ProfilePictureUrl = user.ProfilePictureUrl,
             Token = token,
             ExpiresAt = DateTime.UtcNow.AddDays(7)
         };

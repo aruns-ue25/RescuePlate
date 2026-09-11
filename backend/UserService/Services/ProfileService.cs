@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using UserService.Data;
 using UserService.DTOs;
@@ -9,11 +10,22 @@ public interface IProfileService
 {
     Task<UserProfileDto?> GetProfileByUserIdAsync(Guid userId);
     Task<(bool Success, string Message, UserProfileDto? Data)> UpdateProfileAsync(Guid userId, UpdateProfileDto dto);
+    Task<(bool Success, string Message, string? ProfilePictureUrl)> UploadProfilePictureAsync(Guid userId, IFormFile? file, string webRootPath);
+    Task<(bool Success, string Message)> RemoveProfilePictureAsync(Guid userId, string webRootPath);
 }
 
 public class ProfileService : IProfileService
 {
     private readonly RescuePlateDbContext _db;
+    private static readonly HashSet<string> AllowedExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".jpg", ".jpeg", ".png", ".webp"
+    };
+
+    private static readonly HashSet<string> AllowedMimeTypes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "image/jpeg", "image/png", "image/webp"
+    };
 
     public ProfileService(RescuePlateDbContext db)
     {
@@ -35,7 +47,8 @@ public class ProfileService : IProfileService
             Email = user.Email,
             Role = user.Role.ToString(),
             IsActive = user.IsActive,
-            MemberSince = user.CreatedAt
+            MemberSince = user.CreatedAt,
+            ProfilePictureUrl = user.ProfilePictureUrl
         };
 
         if (user.Role == UserRole.DONOR && user.DonorProfile != null)
@@ -116,5 +129,159 @@ public class ProfileService : IProfileService
 
         var updatedProfile = await GetProfileByUserIdAsync(userId);
         return (true, "Profile updated successfully!", updatedProfile);
+    }
+
+    public async Task<(bool Success, string Message, string? ProfilePictureUrl)> UploadProfilePictureAsync(
+        Guid userId, 
+        IFormFile? file, 
+        string webRootPath)
+    {
+        // 1. Scenario 5: Validate file presence & size
+        if (file == null || file.Length == 0)
+        {
+            return (false, "Please select an image file to upload.", null);
+        }
+
+        const long maxSizeBytes = 5 * 1024 * 1024; // 5 MB
+        if (file.Length > maxSizeBytes)
+        {
+            return (false, "Image file size exceeds the 5MB limit. Please choose a smaller image.", null);
+        }
+
+        // 2. Scenario 4: Validate extension & MIME type
+        var extension = Path.GetExtension(file.FileName);
+        if (string.IsNullOrEmpty(extension) || !AllowedExtensions.Contains(extension))
+        {
+            return (false, "Unsupported image format. Allowed formats are JPG, PNG, and WEBP.", null);
+        }
+
+        if (!AllowedMimeTypes.Contains(file.ContentType))
+        {
+            return (false, "Invalid image MIME type. Allowed formats are JPG, PNG, and WEBP.", null);
+        }
+
+        // 3. Scenario 5: Validate image binary magic bytes (prevent disguised malicious files)
+        using (var stream = file.OpenReadStream())
+        {
+            if (!IsValidImageHeader(stream, extension))
+            {
+                return (false, "The uploaded file is not a valid or supported image.", null);
+            }
+        }
+
+        // 4. Scenario 6: Find user in database
+        var user = await _db.Users.FindAsync(userId);
+        if (user == null)
+        {
+            return (false, "User account not found.", null);
+        }
+
+        // 5. Scenario 2: If user already has a profile picture, delete the old physical file
+        if (!string.IsNullOrEmpty(user.ProfilePictureUrl))
+        {
+            DeletePhysicalFile(webRootPath, user.ProfilePictureUrl);
+        }
+
+        // 6. Save new physical file to wwwroot/uploads/profiles/
+        var uploadsFolder = Path.Combine(webRootPath, "uploads", "profiles");
+        if (!Directory.Exists(uploadsFolder))
+        {
+            Directory.CreateDirectory(uploadsFolder);
+        }
+
+        var uniqueFileName = $"profile_{userId}_{Guid.NewGuid():N}{extension.ToLowerInvariant()}";
+        var filePath = Path.Combine(uploadsFolder, uniqueFileName);
+
+        using (var outputStream = new FileStream(filePath, FileMode.Create))
+        {
+            await file.CopyToAsync(outputStream);
+        }
+
+        // 7. Update User ProfilePictureUrl in PostgreSQL
+        var relativeUrl = $"/uploads/profiles/{uniqueFileName}";
+        user.ProfilePictureUrl = relativeUrl;
+        user.UpdatedAt = DateTime.UtcNow;
+
+        await _db.SaveChangesAsync();
+
+        return (true, "Profile picture updated successfully!", relativeUrl);
+    }
+
+    public async Task<(bool Success, string Message)> RemoveProfilePictureAsync(Guid userId, string webRootPath)
+    {
+        var user = await _db.Users.FindAsync(userId);
+        if (user == null)
+        {
+            return (false, "User account not found.");
+        }
+
+        // Scenario 3: Delete physical file if exists and reset DB column
+        if (!string.IsNullOrEmpty(user.ProfilePictureUrl))
+        {
+            DeletePhysicalFile(webRootPath, user.ProfilePictureUrl);
+            user.ProfilePictureUrl = null;
+            user.UpdatedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync();
+        }
+
+        return (true, "Profile picture removed successfully.");
+    }
+
+    private static bool IsValidImageHeader(Stream stream, string extension)
+    {
+        try
+        {
+            stream.Position = 0;
+            var header = new byte[12];
+            var bytesRead = stream.Read(header, 0, header.Length);
+            stream.Position = 0;
+
+            if (bytesRead < 4) return false;
+
+            var ext = extension.ToLowerInvariant();
+
+            // JPEG magic bytes: FF D8 FF
+            if (ext is ".jpg" or ".jpeg")
+            {
+                return header[0] == 0xFF && header[1] == 0xD8 && header[2] == 0xFF;
+            }
+
+            // PNG magic bytes: 89 50 4E 47 (0x89, 'P', 'N', 'G')
+            if (ext is ".png")
+            {
+                return header[0] == 0x89 && header[1] == 0x50 && header[2] == 0x4E && header[3] == 0x47;
+            }
+
+            // WEBP magic bytes: RIFF (bytes 0..3) and WEBP (bytes 8..11)
+            if (ext is ".webp")
+            {
+                return header[0] == (byte)'R' && header[1] == (byte)'I' && header[2] == (byte)'F' && header[3] == (byte)'F' &&
+                       bytesRead >= 12 &&
+                       header[8] == (byte)'W' && header[9] == (byte)'E' && header[10] == (byte)'B' && header[11] == (byte)'P';
+            }
+
+            return false;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static void DeletePhysicalFile(string webRootPath, string relativeUrl)
+    {
+        try
+        {
+            var cleanPath = relativeUrl.TrimStart('/', '\\').Replace('/', Path.DirectorySeparatorChar);
+            var fullPath = Path.Combine(webRootPath, cleanPath);
+            if (File.Exists(fullPath))
+            {
+                File.Delete(fullPath);
+            }
+        }
+        catch
+        {
+            // Ignore file deletion errors to prevent blocking DB operations
+        }
     }
 }
