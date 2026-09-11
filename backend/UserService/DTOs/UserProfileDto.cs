@@ -7,6 +7,7 @@ public class UserProfileDto
     public string Role { get; set; } = string.Empty;
     public bool IsActive { get; set; }
     public DateTime MemberSince { get; set; }
+    public string? ProfilePictureUrl { get; set; }
 
     // Donor & Org Profile fields
     public string BusinessOrOrgName { get; set; } = string.Empty;

@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using UserService.Models;
 
@@ -31,10 +32,19 @@ public static class DbInitializer
                 }
             }
 
-            // 2. Run EF Core EnsureCreated & Seed Admin
+            // 2. Run EF Core EnsureCreated & Schema Updates
             using var scope = serviceProvider.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<RescuePlateDbContext>();
             db.Database.EnsureCreated();
+
+            try
+            {
+                db.Database.ExecuteSqlRaw("ALTER TABLE \"Users\" ADD COLUMN IF NOT EXISTS \"ProfilePictureUrl\" VARCHAR(500);");
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "ProfilePictureUrl column check notice.");
+            }
 
             if (!db.Users.Any(u => u.Email == "admin@rescueplate.org"))
             {
