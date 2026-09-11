@@ -75,6 +75,44 @@ export function AuthProvider({ children }) {
     }
   };
 
+  const updateProfilePicture = async (file) => {
+    setLoading(true);
+    try {
+      const res = await authApi.uploadProfilePicture(file);
+      if (res.success && res.data) {
+        const updatedUser = {
+          ...currentUser,
+          profilePictureUrl: res.data.profilePictureUrl
+        };
+        localStorage.setItem('rescueplate_user', JSON.stringify(updatedUser));
+        setCurrentUser(updatedUser);
+        return { success: true, message: res.message || 'Profile picture updated successfully!', data: res.data };
+      }
+      throw new Error(res.message || 'Failed to upload profile picture.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const removeProfilePicture = async () => {
+    setLoading(true);
+    try {
+      const res = await authApi.removeProfilePicture();
+      if (res.success) {
+        const updatedUser = {
+          ...currentUser,
+          profilePictureUrl: null
+        };
+        localStorage.setItem('rescueplate_user', JSON.stringify(updatedUser));
+        setCurrentUser(updatedUser);
+        return { success: true, message: res.message || 'Profile picture removed successfully!' };
+      }
+      throw new Error(res.message || 'Failed to remove profile picture.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const deleteAccount = async (password) => {
     setLoading(true);
     try {
@@ -90,7 +128,7 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ currentUser, login, register, logout, updateProfile, deleteAccount, loading }}>
+    <AuthContext.Provider value={{ currentUser, login, register, logout, updateProfile, updateProfilePicture, removeProfilePicture, deleteAccount, loading }}>
       {children}
     </AuthContext.Provider>
   );

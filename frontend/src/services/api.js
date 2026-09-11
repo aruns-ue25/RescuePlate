@@ -72,6 +72,30 @@ export const authApi = {
     }
   },
 
+  uploadProfilePicture: async (file) => {
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const response = await api.post('/profile/me/picture', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { message: 'Failed to upload profile picture' };
+    }
+  },
+
+  removeProfilePicture: async () => {
+    try {
+      const response = await api.delete('/profile/me/picture');
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { message: 'Failed to remove profile picture' };
+    }
+  },
+
   deleteAccount: async (password) => {
     try {
       const response = await api.delete('/auth/account', { data: { password } });
@@ -98,6 +122,13 @@ export const authApi = {
       throw error.response?.data || { message: 'Failed to update status' };
     }
   }
+};
+
+export const getProfileImageUrl = (url) => {
+  if (!url) return null;
+  if (url.startsWith('http://') || url.startsWith('https://')) return url;
+  const baseUrl = API_BASE_URL.replace(/\/api\/?$/, '');
+  return `${baseUrl}${url.startsWith('/') ? '' : '/'}${url}`;
 };
 
 export default api;
