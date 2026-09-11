@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Calculator, Utensils, Leaf, Users, DollarSign, Sparkles, ArrowRight } from 'lucide-react';
 
-export default function ImpactCalculator({ onOpenAuth }) {
+export default function ImpactCalculator() {
   const [dailyMeals, setDailyMeals] = useState(25);
   const [businessType, setBusinessType] = useState('restaurant'); // restaurant, bakery, supermarket, hotel
 
@@ -71,13 +72,13 @@ export default function ImpactCalculator({ onOpenAuth }) {
             </div>
 
             <div className="calc-cta-row">
-              <button
-                onClick={() => onOpenAuth('register', 'DONOR')}
+              <Link
+                to="/register"
                 className="btn btn-accent btn-lg"
               >
                 <span>Put This Surplus To Work</span>
                 <ArrowRight size={18} />
-              </button>
+              </Link>
             </div>
           </div>
 
