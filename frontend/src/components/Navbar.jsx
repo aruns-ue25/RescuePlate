@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { getProfileImageUrl } from '../services/api';
 import { 
   Utensils, 
   Menu, 
@@ -79,7 +80,15 @@ export default function Navbar() {
           {currentUser ? (
             <div className="logged-user-strip">
               <Link to="/profile" className="user-profile-badge" title="View Profile">
-                <span className="user-role-dot"></span>
+                {currentUser.profilePictureUrl ? (
+                  <img
+                    src={getProfileImageUrl(currentUser.profilePictureUrl)}
+                    alt="Avatar"
+                    className="nav-avatar-img"
+                  />
+                ) : (
+                  <span className="user-role-dot"></span>
+                )}
                 <span className="user-business-name">{currentUser.businessName || currentUser.name}</span>
                 <span className="user-role-tag">{currentUser.role}</span>
               </Link>
@@ -143,7 +152,16 @@ export default function Navbar() {
             </Link>
             {currentUser && (
               <Link to="/profile" className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>
-                <span>My Profile</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  {currentUser.profilePictureUrl && (
+                    <img
+                      src={getProfileImageUrl(currentUser.profilePictureUrl)}
+                      alt="Avatar"
+                      className="nav-avatar-img"
+                    />
+                  )}
+                  <span>My Profile</span>
+                </div>
                 <ChevronRight size={16} />
               </Link>
             )}
