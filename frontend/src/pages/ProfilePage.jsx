@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
 import { authApi, getProfileImageUrl } from '../services/api';
@@ -109,6 +110,18 @@ export default function ProfilePage() {
       loadProfile();
     }
   }, [currentUser]);
+
+  // Lock background scroll when modals are open
+  useEffect(() => {
+    if (showDeleteModal || showRemovePicModal) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [showDeleteModal, showRemovePicModal]);
 
   if (!currentUser) {
     return (
@@ -732,7 +745,7 @@ export default function ProfilePage() {
       </div>
 
       {/* Remove Picture Confirmation Modal */}
-      {showRemovePicModal && (
+      {showRemovePicModal && createPortal(
         <div className="modal-backdrop" onClick={() => setShowRemovePicModal(false)}>
           <div className="modal-container" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '440px' }}>
             <div className="modal-header">
@@ -773,11 +786,12 @@ export default function ProfilePage() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Delete Account Modal */}
-      {showDeleteModal && (
+      {showDeleteModal && createPortal(
         <div className="modal-backdrop" onClick={() => setShowDeleteModal(false)}>
           <div className="modal-container" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '480px' }}>
             <div className="modal-header">
@@ -807,6 +821,7 @@ export default function ProfilePage() {
                   placeholder="Enter password to confirm deletion"
                   value={deletePassword}
                   onChange={(e) => setDeletePassword(e.target.value)}
+                  autoFocus
                   required
                 />
               </div>
@@ -829,7 +844,8 @@ export default function ProfilePage() {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
