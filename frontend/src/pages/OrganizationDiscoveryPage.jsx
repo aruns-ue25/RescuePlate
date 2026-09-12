@@ -44,6 +44,7 @@ export default function OrganizationDiscoveryPage() {
   const [selectedOrg, setSelectedOrg] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailData, setDetailData] = useState(null);
+  const [detailError, setDetailError] = useState(null);
 
   const foodCategories = [
     'ALL', 
@@ -94,7 +95,8 @@ export default function OrganizationDiscoveryPage() {
   const handleSelectOrg = async (org) => {
     setSelectedOrg(org);
     setDetailLoading(true);
-    setDetailData(null);
+    setDetailData(org);
+    setDetailError(null);
 
     try {
       const res = await donationApi.getOrganizationProfile(org.organizationId);
@@ -105,22 +107,28 @@ export default function OrganizationDiscoveryPage() {
       }
     } catch (err) {
       setDetailData(org);
+      setDetailError(err.message || 'Failed to refresh organization profile.');
     } finally {
       setDetailLoading(false);
     }
   };
 
   const handleSelectOrgById = async (id) => {
+    setSelectedOrg({ organizationId: id, organizationName: 'Organization Profile' });
     setDetailLoading(true);
     setDetailData(null);
+    setDetailError(null);
     try {
       const res = await donationApi.getOrganizationProfile(id);
       if (res.success && res.data) {
         setSelectedOrg(res.data);
         setDetailData(res.data);
+      } else {
+        setDetailError(res.message || 'Organization profile could not be loaded.');
       }
     } catch (err) {
       console.error(err);
+      setDetailError(err.message || 'Failed to retrieve organization profile.');
     } finally {
       setDetailLoading(false);
     }
@@ -128,8 +136,8 @@ export default function OrganizationDiscoveryPage() {
 
   useEffect(() => {
     const orgIdParam = searchParams.get('orgId') || searchParams.get('view');
-    if (orgIdParam && (!selectedOrg || selectedOrg.organizationId !== orgIdParam)) {
-      const found = organizations.find(o => o.organizationId === orgIdParam);
+    if (orgIdParam && (!selectedOrg || selectedOrg.organizationId?.toLowerCase() !== orgIdParam.toLowerCase())) {
+      const found = organizations.find(o => o.organizationId?.toLowerCase() === orgIdParam.toLowerCase());
       if (found) {
         handleSelectOrg(found);
       } else {
@@ -141,6 +149,7 @@ export default function OrganizationDiscoveryPage() {
   const handleCloseModal = () => {
     setSelectedOrg(null);
     setDetailData(null);
+    setDetailError(null);
     if (searchParams.get('orgId') || searchParams.get('view')) {
       const nextParams = new URLSearchParams(searchParams);
       nextParams.delete('orgId');
@@ -449,10 +458,10 @@ export default function OrganizationDiscoveryPage() {
             {/* Modal Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                {selectedOrg.profilePictureUrl ? (
+                {(detailData?.profilePictureUrl || selectedOrg.profilePictureUrl) ? (
                   <img 
-                    src={getProfileImageUrl(selectedOrg.profilePictureUrl)} 
-                    alt={selectedOrg.organizationName}
+                    src={getProfileImageUrl(detailData?.profilePictureUrl || selectedOrg.profilePictureUrl)} 
+                    alt={detailData?.organizationName || selectedOrg.organizationName || 'Organization'}
                     style={{ width: '52px', height: '52px', borderRadius: '50%', objectFit: 'cover', border: '2px solid #a7f3d0' }} 
                   />
                 ) : (
@@ -469,7 +478,7 @@ export default function OrganizationDiscoveryPage() {
                     fontSize: '1.3rem',
                     border: '2px solid #a7f3d0'
                   }}>
-                    {selectedOrg.organizationName ? selectedOrg.organizationName.charAt(0).toUpperCase() : 'O'}
+                    {(detailData?.organizationName || selectedOrg.organizationName)?.charAt(0).toUpperCase() || 'O'}
                   </div>
                 )}
                 <div>
@@ -506,6 +515,12 @@ export default function OrganizationDiscoveryPage() {
             </div>
 
             {/* Modal Body */}
+            {detailError && (
+              <div style={{ background: '#fee2e2', border: '1px solid #fca5a5', color: '#b91c1c', padding: '10px 14px', borderRadius: '8px', marginBottom: '16px', fontSize: '0.85rem' }}>
+                {detailError}
+              </div>
+            )}
+
             {detailLoading ? (
               <div style={{ textAlign: 'center', padding: '40px 0' }}>
                 <div className="loading-spinner" style={{ margin: '0 auto 12px' }} />

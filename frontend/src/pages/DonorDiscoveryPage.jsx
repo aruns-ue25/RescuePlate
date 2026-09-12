@@ -133,8 +133,8 @@ export default function DonorDiscoveryPage() {
 
   useEffect(() => {
     const donorIdParam = searchParams.get('donorId') || searchParams.get('view');
-    if (donorIdParam && (!selectedDonor || selectedDonor.donorId !== donorIdParam)) {
-      const found = donors.find(d => d.donorId === donorIdParam);
+    if (donorIdParam && (!selectedDonor || selectedDonor.donorId?.toLowerCase() !== donorIdParam.toLowerCase())) {
+      const found = donors.find(d => d.donorId?.toLowerCase() === donorIdParam.toLowerCase());
       if (found) {
         handleSelectDonor(found);
       } else {
@@ -435,10 +435,10 @@ export default function DonorDiscoveryPage() {
             {/* Modal Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                {selectedDonor.profilePictureUrl ? (
+                {(detailData?.profilePictureUrl || selectedDonor.profilePictureUrl) ? (
                   <img 
-                    src={getProfileImageUrl(selectedDonor.profilePictureUrl)} 
-                    alt={selectedDonor.businessName}
+                    src={getProfileImageUrl(detailData?.profilePictureUrl || selectedDonor.profilePictureUrl)} 
+                    alt={detailData?.businessName || selectedDonor.businessName || 'Donor'}
                     style={{ width: '52px', height: '52px', borderRadius: '50%', objectFit: 'cover', border: '2px solid #fde68a' }} 
                   />
                 ) : (
@@ -455,7 +455,7 @@ export default function DonorDiscoveryPage() {
                     fontSize: '1.3rem',
                     border: '2px solid #fde68a'
                   }}>
-                    {selectedDonor.businessName ? selectedDonor.businessName.charAt(0).toUpperCase() : 'D'}
+                    {(detailData?.businessName || selectedDonor.businessName)?.charAt(0).toUpperCase() || 'D'}
                   </div>
                 )}
                 <div>
@@ -492,6 +492,12 @@ export default function DonorDiscoveryPage() {
             </div>
 
             {/* Modal Body */}
+            {detailError && (
+              <div style={{ background: '#fee2e2', border: '1px solid #fca5a5', color: '#b91c1c', padding: '10px 14px', borderRadius: '8px', marginBottom: '16px', fontSize: '0.85rem' }}>
+                {detailError}
+              </div>
+            )}
+
             {detailLoading ? (
               <div style={{ textAlign: 'center', padding: '40px 0' }}>
                 <div className="loading-spinner" style={{ margin: '0 auto 12px' }} />

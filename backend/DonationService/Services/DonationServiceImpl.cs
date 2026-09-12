@@ -619,6 +619,24 @@ public class DonationServiceImpl : IDonationService
                 else if (group.Any(d => d.Category == "Cooked Meals")) inferredType = "Restaurant";
                 else if (group.Any(d => d.Category == "Fresh Produce")) inferredType = "Supermarket";
 
+                var businessName = latestDonation.DonorName;
+                var location = latestDonation.Location;
+                var bio = !string.IsNullOrWhiteSpace(latestDonation.Notes) 
+                    ? latestDonation.Notes 
+                    : $"Partnered food donor contributing surplus to combat local food insecurity.";
+                string? profilePic = null;
+
+                // Live sync with UserService if available
+                var profile = await FetchUserProfileFromUserServiceAsync(donorId);
+                if (profile != null)
+                {
+                    if (!string.IsNullOrWhiteSpace(profile.BusinessOrOrgName)) businessName = profile.BusinessOrOrgName;
+                    if (!string.IsNullOrWhiteSpace(profile.Address)) location = profile.Address;
+                    if (!string.IsNullOrWhiteSpace(profile.BioOrDescription)) bio = profile.BioOrDescription;
+                    if (!string.IsNullOrWhiteSpace(profile.DonorType)) inferredType = profile.DonorType;
+                    if (!string.IsNullOrWhiteSpace(profile.ProfilePictureUrl)) profilePic = profile.ProfilePictureUrl;
+                }
+
                 if (!string.IsNullOrWhiteSpace(donorType) && donorType.ToUpper() != "ALL")
                 {
                     if (!inferredType.Equals(donorType, StringComparison.OrdinalIgnoreCase))
@@ -630,13 +648,12 @@ public class DonationServiceImpl : IDonationService
                 list.Add(new DonorDiscoveryDto
                 {
                     DonorId = donorId,
-                    BusinessName = latestDonation.DonorName,
+                    BusinessName = businessName,
                     DonorType = inferredType,
-                    Location = latestDonation.Location,
-                    Bio = !string.IsNullOrWhiteSpace(latestDonation.Notes) 
-                        ? latestDonation.Notes 
-                        : $"Partnered food donor contributing surplus to combat local food insecurity.",
-                    ProfilePictureUrl = null,
+                    Location = location,
+                    Bio = bio,
+                    ContactEmail = latestDonation.DonorEmail,
+                    ProfilePictureUrl = profilePic,
                     ActiveDonationsCount = activeCount,
                     CompletedDonationsCount = completedCount,
                     TotalPortionsContributed = totalPortions,
@@ -662,8 +679,29 @@ public class DonationServiceImpl : IDonationService
                 .OrderByDescending(d => d.CreatedAt)
                 .ToListAsync();
 
+            var userProfile = await FetchUserProfileFromUserServiceAsync(donorId);
+
             if (donorListings.Count == 0)
             {
+                if (userProfile != null && (userProfile.Role == "Donor" || string.Equals(userProfile.Role, "Donor", StringComparison.OrdinalIgnoreCase)))
+                {
+                    var emptyDto = new DonorDiscoveryDto
+                    {
+                        DonorId = donorId,
+                        BusinessName = !string.IsNullOrWhiteSpace(userProfile.BusinessOrOrgName) ? userProfile.BusinessOrOrgName : "Partner Food Donor",
+                        DonorType = !string.IsNullOrWhiteSpace(userProfile.DonorType) ? userProfile.DonorType : "Food Business",
+                        Location = userProfile.Address ?? string.Empty,
+                        Bio = !string.IsNullOrWhiteSpace(userProfile.BioOrDescription) ? userProfile.BioOrDescription : "Partnered food donor contributing surplus food.",
+                        ProfilePictureUrl = userProfile.ProfilePictureUrl,
+                        ActiveDonationsCount = 0,
+                        CompletedDonationsCount = 0,
+                        TotalPortionsContributed = 0,
+                        MemberSince = DateTime.UtcNow,
+                        ActiveListings = new List<DonationResponseDto>()
+                    };
+                    return ApiResponse<DonorDiscoveryDto>.Ok(emptyDto, "Donor profile details retrieved successfully.");
+                }
+
                 return ApiResponse<DonorDiscoveryDto>.Fail("Donor not found or has no public activity.");
             }
 
@@ -692,6 +730,7 @@ public class DonationServiceImpl : IDonationService
                 DonorType = inferredType,
                 Location = latest.Location,
                 Bio = !string.IsNullOrWhiteSpace(latest.Notes) ? latest.Notes : "Verified food rescue contributor.",
+                ContactEmail = latest.DonorEmail,
                 ActiveDonationsCount = activeCount,
                 CompletedDonationsCount = completedCount,
                 TotalPortionsContributed = totalPortions,
@@ -700,7 +739,6 @@ public class DonationServiceImpl : IDonationService
             };
 
             // Scenario 7: Live update from UserService if available
-            var userProfile = await FetchUserProfileFromUserServiceAsync(donorId);
             if (userProfile != null)
             {
                 if (!string.IsNullOrWhiteSpace(userProfile.BusinessOrOrgName))
@@ -738,6 +776,8 @@ public class DonationServiceImpl : IDonationService
                     OrganizationType = "Community Kitchen",
                     Location = "Trinco Road, Batticaloa",
                     Description = "Providing hot cooked meals, fresh bread, and essential nutritional support to vulnerable families and community shelters across the eastern province.",
+                    ContactEmail = "org.srihope@rescueplate.org",
+                    ContactPhone = "+94 65 222 4110",
                     AcceptedFoodTypes = new List<string> { "Cooked Meals", "Bakery", "Fresh Produce" },
                     ProfilePictureUrl = null,
                     ClaimedDonationsCount = 8,
@@ -751,6 +791,8 @@ public class DonationServiceImpl : IDonationService
                     OrganizationType = "Food Bank",
                     Location = "Dharmapala Mawatha, Colombo 07",
                     Description = "Dedicated metropolitan food redistribution hub collecting bulk surplus bakery products, dairy, and packed food for orphanages and senior care centers.",
+                    ContactEmail = "info@colombofoodbank.lk",
+                    ContactPhone = "+94 11 269 8830",
                     AcceptedFoodTypes = new List<string> { "Bakery", "Dairy & Chilled", "Packaged Dry", "Cooked Meals" },
                     ProfilePictureUrl = null,
                     ClaimedDonationsCount = 14,
@@ -764,6 +806,8 @@ public class DonationServiceImpl : IDonationService
                     OrganizationType = "Homeless Shelter",
                     Location = "Peradeniya Road, Kandy",
                     Description = "Operating evening kitchens and shelter care feeding daily-wage workers and underprivileged children with high-protein wholesome meals.",
+                    ContactEmail = "relief@hillcountrycare.org",
+                    ContactPhone = "+94 81 223 5512",
                     AcceptedFoodTypes = new List<string> { "Cooked Meals", "Bakery", "Fresh Produce" },
                     ProfilePictureUrl = null,
                     ClaimedDonationsCount = 5,
@@ -777,6 +821,8 @@ public class DonationServiceImpl : IDonationService
                     OrganizationType = "Charity Foundation",
                     Location = "Main Street, Galle Fort",
                     Description = "Supporting low-income coastal community programs and student nutrition drives with fresh bakery and healthy pantry staples.",
+                    ContactEmail = "care@southernyouth.lk",
+                    ContactPhone = "+94 91 224 8870",
                     AcceptedFoodTypes = new List<string> { "Bakery", "Dairy & Chilled", "Packaged Dry" },
                     ProfilePictureUrl = null,
                     ClaimedDonationsCount = 9,
@@ -784,6 +830,28 @@ public class DonationServiceImpl : IDonationService
                     MemberSince = new DateTime(2026, 8, 25, 9, 15, 0, DateTimeKind.Utc)
                 }
             };
+
+            // Enrich registered organizations with live UserService data
+            foreach (var org in organizations)
+            {
+                if (Guid.TryParse(org.OrganizationId, out _))
+                {
+                    var userProfile = await FetchUserProfileFromUserServiceAsync(org.OrganizationId);
+                    if (userProfile != null)
+                    {
+                        if (!string.IsNullOrWhiteSpace(userProfile.BusinessOrOrgName))
+                            org.OrganizationName = userProfile.BusinessOrOrgName;
+                        if (!string.IsNullOrWhiteSpace(userProfile.Address))
+                            org.Location = userProfile.Address;
+                        if (!string.IsNullOrWhiteSpace(userProfile.BioOrDescription))
+                            org.Description = userProfile.BioOrDescription;
+                        if (userProfile.AcceptedFoodCategories?.Count > 0)
+                            org.AcceptedFoodTypes = userProfile.AcceptedFoodCategories;
+                        if (!string.IsNullOrWhiteSpace(userProfile.ProfilePictureUrl))
+                            org.ProfilePictureUrl = userProfile.ProfilePictureUrl;
+                    }
+                }
+            }
 
             var filtered = organizations.AsQueryable();
 
@@ -881,6 +949,11 @@ public class DonationServiceImpl : IDonationService
 
     private async Task<UserProfilePayload?> FetchUserProfileFromUserServiceAsync(string userId)
     {
+        if (string.IsNullOrWhiteSpace(userId) || !Guid.TryParse(userId, out _))
+        {
+            return null;
+        }
+
         try
         {
             var client = _httpClientFactory.CreateClient();

@@ -404,6 +404,7 @@ export default function OrganizationBrowsePage() {
                       <Building2 size={15} />
                       <Link 
                         to={item.donorId ? `/donors?donorId=${item.donorId}` : "/donors"} 
+                        className="donor-link-hover"
                         style={{ color: '#047857', textDecoration: 'none' }}
                         title="View donor profile in directory"
                       >
@@ -731,6 +732,7 @@ export default function OrganizationBrowsePage() {
                         <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>Food Provider</div>
                         <Link 
                           to={selectedDonation.donorId ? `/donors?donorId=${selectedDonation.donorId}` : "/donors"} 
+                          className="donor-link-hover"
                           style={{ fontWeight: 700, color: '#047857', textDecoration: 'none' }}
                           title="View donor directory profile"
                         >
