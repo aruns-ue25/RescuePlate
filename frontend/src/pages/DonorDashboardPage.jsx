@@ -25,7 +25,10 @@ import {
   FileText,
   Edit2,
   Lock,
-  Save
+  Save,
+  Trash2,
+  XCircle,
+  Ban
 } from 'lucide-react';
 
 export default function DonorDashboardPage() {
@@ -44,12 +47,20 @@ export default function DonorDashboardPage() {
   // Detail Modal State (Task 3)
   const [selectedDonation, setSelectedDonation] = useState(null);
 
-  // Edit Modal State (Task 4: Edit Donation)
+  // Edit Modal State (Task 4)
   const [editDonation, setEditDonation] = useState(null);
   const [editFormData, setEditFormData] = useState({});
   const [editSubmitting, setEditSubmitting] = useState(false);
   const [editError, setEditError] = useState(null);
   const [editSuccess, setEditSuccess] = useState(null);
+
+  // Cancel Modal State (Task 5: Cancel Donation)
+  const [cancelTargetDonation, setCancelTargetDonation] = useState(null);
+  const [cancelReason, setCancelReason] = useState('Surplus food consumed / donated locally');
+  const [customReason, setCustomReason] = useState('');
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState(null);
+  const [cancelSuccess, setCancelSuccess] = useState(null);
 
   // Filter & Search States
   const [searchQuery, setSearchQuery] = useState('');
@@ -154,7 +165,7 @@ export default function DonorDashboardPage() {
     if (editError) setEditError(null);
   };
 
-  // Handle Edit Submission (Task 4 Scenarios)
+  // Handle Edit Submission
   const handleUpdateDonation = async (e) => {
     e.preventDefault();
     if (!editDonation) return;
@@ -162,7 +173,6 @@ export default function DonorDashboardPage() {
     setEditError(null);
     setEditSuccess(null);
 
-    // Scenario 3: Validate updated information
     if (!editFormData.foodTitle?.trim()) {
       setEditError('Food item title cannot be empty.');
       return;
@@ -173,7 +183,6 @@ export default function DonorDashboardPage() {
       return;
     }
 
-    // Scenario 4: Validate Quantity
     if (!editFormData.totalQuantity || editFormData.totalQuantity <= 0) {
       setEditError('Total quantity must be a positive number greater than 0.');
       return;
@@ -184,7 +193,6 @@ export default function DonorDashboardPage() {
       return;
     }
 
-    // Scenario 5: Validate Expiry
     if (!editFormData.expiryHours || editFormData.expiryHours <= 0) {
       setEditError('Availability period / expiry hours must be greater than 0.');
       return;
@@ -207,6 +215,57 @@ export default function DonorDashboardPage() {
       setEditError(err.message || err.errors?.[0] || 'An error occurred while updating the donation.');
     } finally {
       setEditSubmitting(false);
+    }
+  };
+
+  // Open Cancel Confirmation Dialog (Scenario 2: Cancel Confirmation)
+  const handleOpenCancelModal = (item) => {
+    if (item.status === 'Cancelled') {
+      alert('This donation is already cancelled.');
+      return;
+    }
+    if (item.status === 'Completed') {
+      alert('Completed donations cannot be cancelled as they have already been distributed.');
+      return;
+    }
+    if (item.claimedQuantity > 0) {
+      alert(`This donation has ${item.claimedQuantity} portions claimed by a charity and cannot be cancelled directly.`);
+      return;
+    }
+
+    setCancelTargetDonation(item);
+    setCancelReason('Surplus food consumed / donated locally');
+    setCustomReason('');
+    setCancelError(null);
+    setCancelSuccess(null);
+  };
+
+  // Execute Cancellation (Scenario 1 & 3)
+  const handleConfirmCancelDonation = async () => {
+    if (!cancelTargetDonation) return;
+
+    setCancelError(null);
+    setCancelSuccess(null);
+
+    const finalReason = cancelReason === 'Other' ? (customReason.trim() || 'No specific reason provided') : cancelReason;
+
+    try {
+      setCancelling(true);
+      const res = await donationApi.cancelDonation(cancelTargetDonation.id, finalReason);
+      if (res.success) {
+        setCancelSuccess('Donation cancelled successfully.');
+        fetchMyDonations(statusFilter, searchQuery);
+        setTimeout(() => {
+          setCancelTargetDonation(null);
+          setCancelSuccess(null);
+        }, 1200);
+      } else {
+        setCancelError(res.message || 'Failed to cancel donation.');
+      }
+    } catch (err) {
+      setCancelError(err.message || err.errors?.[0] || 'An error occurred while cancelling the donation.');
+    } finally {
+      setCancelling(false);
     }
   };
 
@@ -282,6 +341,18 @@ export default function DonorDashboardPage() {
   };
 
   const getStatusBadgeConfig = (status, expiryTime) => {
+    if (status === 'Cancelled') {
+      return {
+        bg: '#f3f4f6',
+        color: '#6b7280',
+        border: '#d1d5db',
+        label: 'Cancelled',
+        icon: XCircle,
+        editable: false,
+        cancellable: false
+      };
+    }
+
     const timeLeft = calculateTimeLeft(expiryTime);
     if (timeLeft.expired && status !== 'Completed' && status !== 'Cancelled') {
       return {
@@ -290,7 +361,8 @@ export default function DonorDashboardPage() {
         border: '#fca5a5',
         label: 'Expired',
         icon: AlertTriangle,
-        editable: false
+        editable: false,
+        cancellable: false
       };
     }
 
@@ -303,7 +375,8 @@ export default function DonorDashboardPage() {
           border: '#a7f3d0',
           label: 'Available',
           icon: CheckCircle2,
-          editable: true
+          editable: true,
+          cancellable: true
         };
       case 'Partially Claimed':
         return {
@@ -312,7 +385,8 @@ export default function DonorDashboardPage() {
           border: '#fde68a',
           label: 'Partially Claimed',
           icon: Clock,
-          editable: true
+          editable: true,
+          cancellable: false // claimed > 0 cannot cancel directly
         };
       case 'Fully Claimed':
         return {
@@ -321,7 +395,8 @@ export default function DonorDashboardPage() {
           border: '#ddd6fe',
           label: 'Fully Claimed',
           icon: Package,
-          editable: false
+          editable: false,
+          cancellable: false
         };
       case 'Completed':
         return {
@@ -330,7 +405,8 @@ export default function DonorDashboardPage() {
           border: '#bae6fd',
           label: 'Completed',
           icon: CheckCircle,
-          editable: false
+          editable: false,
+          cancellable: false
         };
       case 'Expired':
         return {
@@ -339,7 +415,8 @@ export default function DonorDashboardPage() {
           border: '#fca5a5',
           label: 'Expired',
           icon: AlertTriangle,
-          editable: false
+          editable: false,
+          cancellable: false
         };
       default:
         return {
@@ -348,7 +425,8 @@ export default function DonorDashboardPage() {
           border: '#e5e7eb',
           label: status,
           icon: Info,
-          editable: false
+          editable: false,
+          cancellable: false
         };
     }
   };
@@ -364,7 +442,8 @@ export default function DonorDashboardPage() {
   const totalClaimedPortions = donations.reduce((acc, curr) => acc + (curr.claimedQuantity || 0), 0);
   const activeListingsCount = donations.filter(d => 
     (d.status === 'Posted' || d.status === 'Available' || d.status === 'Partially Claimed') && 
-    !calculateTimeLeft(d.expiryTime).expired
+    !calculateTimeLeft(d.expiryTime).expired &&
+    d.status !== 'Cancelled'
   ).length;
 
   return (
@@ -381,7 +460,7 @@ export default function DonorDashboardPage() {
               {currentUser?.businessName || currentUser?.name || "Food Donor Dashboard"}
             </h1>
             <p className="dashboard-subtitle" style={{ color: '#d1fae5', margin: 0, fontSize: '1rem', maxWidth: '650px' }}>
-              Track and modify your surplus food listings, monitor remaining portions, view live charity claim updates, and manage your contributions.
+              Track, edit, and cancel your surplus food listings, monitor remaining portions, and connect with verified charities.
             </p>
           </div>
 
@@ -428,7 +507,7 @@ export default function DonorDashboardPage() {
               {activeListingsCount}
             </div>
             <div style={{ fontSize: '0.8rem', color: '#9ca3af', marginTop: '4px' }}>
-              Currently available for charities
+              Available for charities right now
             </div>
           </div>
 
@@ -480,7 +559,7 @@ export default function DonorDashboardPage() {
                 My Surplus Food Listings
               </h2>
               <p style={{ color: '#6b7280', fontSize: '0.875rem', margin: '4px 0 0' }}>
-                Manage, edit, and track food donations posted by your establishment.
+                Manage, edit, cancel, and track food donations posted by your establishment.
               </p>
             </div>
 
@@ -508,6 +587,7 @@ export default function DonorDashboardPage() {
                 { id: 'Available', label: 'Active / Available' },
                 { id: 'Partially Claimed', label: 'Partially Claimed' },
                 { id: 'Fully Claimed', label: 'Fully Claimed' },
+                { id: 'Cancelled', label: 'Cancelled' },
                 { id: 'Expired', label: 'Expired' }
               ].map(chip => (
                 <button
@@ -633,6 +713,7 @@ export default function DonorDashboardPage() {
                 ? Math.round((item.remainingQuantity / item.totalQuantity) * 100) 
                 : 0;
               const isEditable = statusConfig.editable && !timeLeft.expired;
+              const isCancellable = statusConfig.cancellable && item.claimedQuantity === 0 && !timeLeft.expired && item.status !== 'Cancelled';
 
               return (
                 <div 
@@ -640,13 +721,15 @@ export default function DonorDashboardPage() {
                   className="profile-card"
                   style={{
                     borderRadius: '14px',
-                    background: '#fff',
-                    border: '1px solid #e5e7eb',
+                    background: item.status === 'Cancelled' ? '#fafafa' : '#fff',
+                    border: '1px solid',
+                    borderColor: item.status === 'Cancelled' ? '#e5e7eb' : '#e5e7eb',
                     padding: '22px',
                     boxShadow: '0 4px 12px rgba(0,0,0,0.03)',
                     display: 'flex',
                     flexDirection: 'column',
                     justifyContent: 'space-between',
+                    opacity: item.status === 'Cancelled' ? 0.85 : 1,
                     transition: 'transform 0.15s ease, box-shadow 0.15s ease'
                   }}
                 >
@@ -688,7 +771,7 @@ export default function DonorDashboardPage() {
                     </div>
 
                     {/* Food Title */}
-                    <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: '#111827', margin: '0 0 12px', lineHeight: 1.3 }}>
+                    <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: item.status === 'Cancelled' ? '#6b7280' : '#111827', margin: '0 0 12px', lineHeight: 1.3 }}>
                       {item.foodTitle}
                     </h3>
 
@@ -699,17 +782,17 @@ export default function DonorDashboardPage() {
                           <Package size={15} style={{ color: '#047857' }} />
                           Portion Availability
                         </span>
-                        <span style={{ fontSize: '0.85rem', fontWeight: 800, color: percentageRemaining === 0 ? '#ef4444' : '#047857' }}>
-                          {item.remainingQuantity} / {item.totalQuantity} {item.unit}
+                        <span style={{ fontSize: '0.85rem', fontWeight: 800, color: item.status === 'Cancelled' || percentageRemaining === 0 ? '#ef4444' : '#047857' }}>
+                          {item.status === 'Cancelled' ? '0' : item.remainingQuantity} / {item.totalQuantity} {item.unit}
                         </span>
                       </div>
 
                       <div style={{ width: '100%', height: '8px', background: '#e5e7eb', borderRadius: '4px', overflow: 'hidden' }}>
                         <div 
                           style={{ 
-                            width: `${percentageRemaining}%`, 
+                            width: `${item.status === 'Cancelled' ? 0 : percentageRemaining}%`, 
                             height: '100%', 
-                            background: percentageRemaining === 0 ? '#ef4444' : percentageRemaining < 25 ? '#f59e0b' : '#10b981',
+                            background: item.status === 'Cancelled' || percentageRemaining === 0 ? '#ef4444' : percentageRemaining < 25 ? '#f59e0b' : '#10b981',
                             borderRadius: '4px',
                             transition: 'width 0.3s ease'
                           }} 
@@ -718,16 +801,18 @@ export default function DonorDashboardPage() {
 
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '6px', fontSize: '0.75rem', color: '#6b7280' }}>
                         <span>Claimed: <strong>{item.claimedQuantity} {item.unit}</strong></span>
-                        <span>{percentageRemaining}% Available</span>
+                        <span>{item.status === 'Cancelled' ? 'Cancelled' : `${percentageRemaining}% Available`}</span>
                       </div>
                     </div>
 
                     {/* Information List */}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', color: '#4b5563', fontSize: '0.875rem' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <Clock size={16} style={{ color: timeLeft.expired ? '#ef4444' : '#f59e0b', flexShrink: 0 }} />
+                        <Clock size={16} style={{ color: timeLeft.expired || item.status === 'Cancelled' ? '#ef4444' : '#f59e0b', flexShrink: 0 }} />
                         <span style={{ fontSize: '0.85rem' }}>
-                          {timeLeft.expired ? (
+                          {item.status === 'Cancelled' ? (
+                            <strong style={{ color: '#6b7280' }}>Listing Cancelled</strong>
+                          ) : timeLeft.expired ? (
                             <strong style={{ color: '#ef4444' }}>Expired ({formatExpiryTime(item.expiryTime)})</strong>
                           ) : (
                             <span>Expires: <strong>{formatExpiryTime(item.expiryTime)}</strong> ({timeLeft.text})</span>
@@ -764,58 +849,106 @@ export default function DonorDashboardPage() {
                     </div>
                   </div>
 
-                  {/* Card Bottom: Metadata & Action Buttons (View Details + Edit) */}
+                  {/* Card Bottom Actions: Details, Edit, Cancel */}
                   <div style={{ borderTop: '1px solid #f3f4f6', marginTop: '18px', paddingTop: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
                     <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>
-                      ID #{item.id} {item.updatedAt ? '• Edited' : `• ${new Date(item.createdAt).toLocaleDateString()}`}
+                      ID #{item.id} {item.updatedAt ? '• Updated' : `• ${new Date(item.createdAt).toLocaleDateString()}`}
                     </span>
                     
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      {/* Scenario 7: Workflow State Guarded Edit Button */}
-                      {isEditable ? (
-                        <button
-                          onClick={() => handleOpenEditModal(item)}
-                          className="btn btn-outline btn-sm"
-                          style={{ 
-                            display: 'flex', 
-                            alignItems: 'center', 
-                            gap: '4px',
-                            borderColor: '#3b82f6',
-                            color: '#2563eb',
-                            fontSize: '0.8rem',
-                            fontWeight: 700,
-                            padding: '4px 10px',
-                            borderRadius: '6px'
-                          }}
-                          title="Edit this donation listing"
-                        >
-                          <Edit2 size={13} />
-                          <span>Edit</span>
-                        </button>
-                      ) : (
-                        <button
-                          disabled
-                          className="btn btn-sm"
-                          style={{ 
-                            display: 'flex', 
-                            alignItems: 'center', 
-                            gap: '4px',
-                            background: '#f3f4f6',
-                            color: '#9ca3af',
-                            border: '1px solid #e5e7eb',
-                            fontSize: '0.8rem',
-                            fontWeight: 600,
-                            padding: '4px 10px',
-                            borderRadius: '6px',
-                            cursor: 'not-allowed'
-                          }}
-                          title={`Editing restricted: donation is ${statusConfig.label}`}
-                        >
-                          <Lock size={12} />
-                          <span>Locked</span>
-                        </button>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      {/* Scenario 1, 2, 3: Cancel Action Button */}
+                      {item.status !== 'Cancelled' && (
+                        isCancellable ? (
+                          <button
+                            onClick={() => handleOpenCancelModal(item)}
+                            className="btn btn-outline btn-sm"
+                            style={{ 
+                              display: 'flex', 
+                              alignItems: 'center', 
+                              gap: '4px',
+                              borderColor: '#ef4444',
+                              color: '#dc2626',
+                              fontSize: '0.75rem',
+                              fontWeight: 700,
+                              padding: '4px 8px',
+                              borderRadius: '6px'
+                            }}
+                            title="Cancel this food donation"
+                          >
+                            <Trash2 size={12} />
+                            <span>Cancel</span>
+                          </button>
+                        ) : (
+                          <button
+                            disabled
+                            className="btn btn-sm"
+                            style={{ 
+                              display: 'flex', 
+                              alignItems: 'center', 
+                              gap: '4px',
+                              background: '#f3f4f6',
+                              color: '#9ca3af',
+                              border: '1px solid #e5e7eb',
+                              fontSize: '0.75rem',
+                              fontWeight: 600,
+                              padding: '4px 8px',
+                              borderRadius: '6px',
+                              cursor: 'not-allowed'
+                            }}
+                            title={item.claimedQuantity > 0 ? "Cannot cancel: portions claimed" : "Cancellation restricted"}
+                          >
+                            <Ban size={12} />
+                            <span>Locked</span>
+                          </button>
+                        )
                       )}
 
+                      {/* Edit Button */}
+                      {item.status !== 'Cancelled' && (
+                        isEditable ? (
+                          <button
+                            onClick={() => handleOpenEditModal(item)}
+                            className="btn btn-outline btn-sm"
+                            style={{ 
+                              display: 'flex', 
+                              alignItems: 'center', 
+                              gap: '4px',
+                              borderColor: '#3b82f6',
+                              color: '#2563eb',
+                              fontSize: '0.75rem',
+                              fontWeight: 700,
+                              padding: '4px 8px',
+                              borderRadius: '6px'
+                            }}
+                          >
+                            <Edit2 size={12} />
+                            <span>Edit</span>
+                          </button>
+                        ) : (
+                          <button
+                            disabled
+                            className="btn btn-sm"
+                            style={{ 
+                              display: 'flex', 
+                              alignItems: 'center', 
+                              gap: '4px',
+                              background: '#f3f4f6',
+                              color: '#9ca3af',
+                              border: '1px solid #e5e7eb',
+                              fontSize: '0.75rem',
+                              fontWeight: 600,
+                              padding: '4px 8px',
+                              borderRadius: '6px',
+                              cursor: 'not-allowed'
+                            }}
+                          >
+                            <Lock size={12} />
+                            <span>Locked</span>
+                          </button>
+                        )
+                      )}
+
+                      {/* Details Button */}
                       <button
                         onClick={() => setSelectedDonation(item)}
                         className="btn btn-outline btn-sm"
@@ -825,13 +958,13 @@ export default function DonorDashboardPage() {
                           gap: '4px',
                           borderColor: '#047857',
                           color: '#047857',
-                          fontSize: '0.8rem',
+                          fontSize: '0.75rem',
                           fontWeight: 700,
-                          padding: '4px 10px',
+                          padding: '4px 8px',
                           borderRadius: '6px'
                         }}
                       >
-                        <Eye size={13} />
+                        <Eye size={12} />
                         <span>Details</span>
                       </button>
                     </div>
@@ -843,7 +976,148 @@ export default function DonorDashboardPage() {
         )}
       </div>
 
-      {/* EDIT DONATION MODAL (Task 4: Edit Donation) */}
+      {/* CANCEL CONFIRMATION MODAL (Task 5 - Scenario 2) */}
+      {cancelTargetDonation && (
+        <div 
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0, 0, 0, 0.65)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            padding: '20px'
+          }}
+        >
+          <div 
+            className="animate-fade-in-up"
+            style={{
+              background: '#fff',
+              borderRadius: '16px',
+              maxWidth: '500px',
+              width: '100%',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.25)',
+              padding: '28px'
+            }}
+          >
+            {/* Modal Header */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+              <div style={{ background: '#fef2f2', color: '#dc2626', width: '42px', height: '42px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <Trash2 size={22} />
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: '#111827' }}>
+                  Cancel Surplus Food Donation?
+                </h3>
+                <span style={{ fontSize: '0.85rem', color: '#6b7280' }}>
+                  Donation ID #{cancelTargetDonation.id}
+                </span>
+              </div>
+            </div>
+
+            {/* Warning Details */}
+            <div style={{ background: '#fffbeb', border: '1px solid #fef3c7', borderRadius: '10px', padding: '14px', marginBottom: '18px' }}>
+              <p style={{ margin: '0 0 6px', fontSize: '0.9rem', color: '#92400e', fontWeight: 700 }}>
+                Are you sure you want to cancel "{cancelTargetDonation.foodTitle}"?
+              </p>
+              <p style={{ margin: 0, fontSize: '0.825rem', color: '#b45309', lineHeight: 1.4 }}>
+                Once cancelled, this listing will be immediately withdrawn. Charity organizations will no longer be able to find, browse, or request this food.
+              </p>
+            </div>
+
+            {/* Error & Success Alerts */}
+            {cancelError && (
+              <div style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', padding: '10px 14px', borderRadius: '8px', marginBottom: '14px', fontSize: '0.85rem' }}>
+                {cancelError}
+              </div>
+            )}
+
+            {cancelSuccess && (
+              <div style={{ background: '#ecfdf5', border: '1px solid #a7f3d0', color: '#065f46', padding: '10px 14px', borderRadius: '8px', marginBottom: '14px', fontSize: '0.85rem' }}>
+                {cancelSuccess}
+              </div>
+            )}
+
+            {/* Cancellation Reason Selector */}
+            <div style={{ marginBottom: '22px' }}>
+              <label style={{ display: 'block', fontWeight: 700, fontSize: '0.875rem', marginBottom: '6px', color: '#374151' }}>
+                Reason for Cancellation (Optional)
+              </label>
+              <select
+                value={cancelReason}
+                onChange={(e) => setCancelReason(e.target.value)}
+                className="form-control"
+                style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '0.9rem', marginBottom: '8px' }}
+              >
+                <option value="Surplus food consumed / donated locally">Surplus food consumed / donated locally</option>
+                <option value="Items spoiled / freshness threshold lapsed">Items spoiled / freshness threshold lapsed</option>
+                <option value="Kitchen schedule change or emergency">Kitchen schedule change or emergency</option>
+                <option value="Entered incorrect details">Entered incorrect details</option>
+                <option value="Other">Other reason...</option>
+              </select>
+
+              {cancelReason === 'Other' && (
+                <input
+                  type="text"
+                  placeholder="Specify cancellation reason..."
+                  value={customReason}
+                  onChange={(e) => setCustomReason(e.target.value)}
+                  style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '0.875rem' }}
+                />
+              )}
+            </div>
+
+            {/* Modal Actions (Scenario 2: Keep Donation vs Confirm Cancellation) */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              {/* Scenario 2: Cancel the confirmation -> donation remains unchanged */}
+              <button
+                type="button"
+                onClick={() => setCancelTargetDonation(null)}
+                className="btn btn-outline"
+                style={{ padding: '9px 18px', borderRadius: '8px', fontWeight: 600, fontSize: '0.9rem' }}
+              >
+                Keep Donation
+              </button>
+
+              {/* Confirm Cancellation */}
+              <button
+                type="button"
+                onClick={handleConfirmCancelDonation}
+                disabled={cancelling}
+                className="btn btn-danger"
+                style={{ 
+                  background: '#dc2626', 
+                  color: '#fff', 
+                  border: 'none', 
+                  padding: '9px 20px', 
+                  borderRadius: '8px', 
+                  fontWeight: 700, 
+                  fontSize: '0.9rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                {cancelling ? (
+                  <>
+                    <RefreshCw size={15} className="animate-spin" />
+                    <span>Cancelling...</span>
+                  </>
+                ) : (
+                  <>
+                    <XCircle size={16} />
+                    <span>Yes, Cancel Listing</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT DONATION MODAL (Task 4) */}
       {editDonation && (
         <div 
           style={{
@@ -871,7 +1145,6 @@ export default function DonorDashboardPage() {
               padding: '28px'
             }}
           >
-            {/* Modal Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '1px solid #e5e7eb', paddingBottom: '14px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <div style={{ background: '#eff6ff', color: '#2563eb', width: '38px', height: '38px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -894,7 +1167,6 @@ export default function DonorDashboardPage() {
               </button>
             </div>
 
-            {/* Error & Success Alerts */}
             {editError && (
               <div style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', padding: '12px 16px', borderRadius: '8px', marginBottom: '18px', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.9rem' }}>
                 <AlertCircle size={18} style={{ flexShrink: 0 }} />
@@ -909,9 +1181,7 @@ export default function DonorDashboardPage() {
               </div>
             )}
 
-            {/* Edit Donation Form */}
             <form onSubmit={handleUpdateDonation} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              {/* Food Title */}
               <div>
                 <label style={{ display: 'block', fontWeight: 700, fontSize: '0.9rem', marginBottom: '6px', color: '#374151' }}>
                   Food Item Title <span style={{ color: '#ef4444' }}>*</span>
@@ -927,7 +1197,6 @@ export default function DonorDashboardPage() {
                 />
               </div>
 
-              {/* Category & Unit */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
                 <div>
                   <label style={{ display: 'block', fontWeight: 700, fontSize: '0.9rem', marginBottom: '6px', color: '#374151' }}>
@@ -969,7 +1238,6 @@ export default function DonorDashboardPage() {
                 </div>
               </div>
 
-              {/* Quantity & Expiry Extension */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
                 <div>
                   <label style={{ display: 'block', fontWeight: 700, fontSize: '0.9rem', marginBottom: '6px', color: '#374151' }}>
@@ -1013,7 +1281,6 @@ export default function DonorDashboardPage() {
                 </div>
               </div>
 
-              {/* Location & Collection Mode */}
               <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: '14px' }}>
                 <div>
                   <label style={{ display: 'block', fontWeight: 700, fontSize: '0.9rem', marginBottom: '6px', color: '#374151' }}>
@@ -1047,7 +1314,6 @@ export default function DonorDashboardPage() {
                 </div>
               </div>
 
-              {/* Dietary Tags */}
               <div>
                 <label style={{ display: 'block', fontWeight: 700, fontSize: '0.9rem', marginBottom: '6px', color: '#374151' }}>
                   Dietary Tags / Allergen Info
@@ -1062,7 +1328,6 @@ export default function DonorDashboardPage() {
                 />
               </div>
 
-              {/* Notes / Handling Instructions */}
               <div>
                 <label style={{ display: 'block', fontWeight: 700, fontSize: '0.9rem', marginBottom: '6px', color: '#374151' }}>
                   Handling & Storage Notes
@@ -1077,7 +1342,6 @@ export default function DonorDashboardPage() {
                 />
               </div>
 
-              {/* Modal Buttons */}
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '12px' }}>
                 <button 
                   type="button"
@@ -1292,7 +1556,7 @@ export default function DonorDashboardPage() {
         </div>
       )}
 
-      {/* CREATE DONATION MODAL (Preserved from Task 2) */}
+      {/* CREATE DONATION MODAL */}
       {isCreateModalOpen && (
         <div 
           style={{

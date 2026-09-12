@@ -176,6 +176,18 @@ export const donationApi = {
     }
   },
 
+  cancelDonation: async (id, reason) => {
+    try {
+      const response = await donationClient.patch(`/donations/${id}/cancel`, { reason });
+      return response.data;
+    } catch (error) {
+      if (error.response?.data) {
+        throw error.response.data;
+      }
+      throw { message: error.message || 'Network Error', isNetworkError: !error.response };
+    }
+  },
+
   getMyDonations: async (params = {}) => {
     try {
       const cleanParams = {};

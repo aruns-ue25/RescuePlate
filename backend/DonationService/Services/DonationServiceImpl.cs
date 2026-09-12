@@ -237,6 +237,61 @@ public class DonationServiceImpl : IDonationService
         }
     }
 
+    public async Task<ApiResponse<DonationResponseDto>> CancelDonationAsync(int id, string donorId, string? reason = null)
+    {
+        try
+        {
+            var donation = await _context.Donations.FindAsync(id);
+            if (donation == null)
+            {
+                return ApiResponse<DonationResponseDto>.Fail("Donation not found.");
+            }
+
+            // Scenario 5: Ownership Check
+            if (donation.DonorId != donorId)
+            {
+                return ApiResponse<DonationResponseDto>.Fail("You do not have permission to cancel this donation.");
+            }
+
+            // Scenario 3: Prevent Invalid Cancellation (Workflow State Restrictions)
+            if (donation.Status == "Cancelled")
+            {
+                return ApiResponse<DonationResponseDto>.Fail("This donation is already cancelled.");
+            }
+
+            if (donation.Status == "Completed")
+            {
+                return ApiResponse<DonationResponseDto>.Fail("Completed donations cannot be cancelled as they have already been distributed.");
+            }
+
+            if (donation.ClaimedQuantity > 0)
+            {
+                return ApiResponse<DonationResponseDto>.Fail($"Donations with active charity claims ({donation.ClaimedQuantity} {donation.Unit} claimed) cannot be cancelled directly. Please coordinate with the charity organization.");
+            }
+
+            // Scenario 1: Cancel Available Donation
+            donation.Status = "Cancelled";
+            donation.RemainingQuantity = 0;
+            if (!string.IsNullOrWhiteSpace(reason))
+            {
+                var noteSuffix = $"[Cancelled by donor: {reason.Trim()}]";
+                donation.Notes = string.IsNullOrWhiteSpace(donation.Notes) ? noteSuffix : $"{donation.Notes} {noteSuffix}";
+            }
+            donation.UpdatedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+
+            _logger.LogInformation("Donation #{Id} successfully cancelled by Donor #{DonorId}. Reason: '{Reason}'", id, donorId, reason ?? "None provided");
+
+            return ApiResponse<DonationResponseDto>.Ok(MapToResponseDto(donation), "Donation cancelled successfully.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error cancelling donation #{Id} for donor #{DonorId}", id, donorId);
+            return ApiResponse<DonationResponseDto>.Fail($"Failed to cancel donation: {ex.Message}");
+        }
+    }
+
     public async Task<ApiResponse<List<DonationResponseDto>>> GetMyDonationsAsync(
         string donorId, 
         string? status = null, 
@@ -312,7 +367,9 @@ public class DonationServiceImpl : IDonationService
     {
         try
         {
-            var query = _context.Donations.AsQueryable();
+            // Scenario 4: Exclude cancelled and completed donations from organization browsing
+            var query = _context.Donations
+                .Where(d => d.Status != "Cancelled" && d.Status != "Completed");
 
             if (!string.IsNullOrWhiteSpace(category) && category.ToUpper() != "ALL")
             {
@@ -333,7 +390,12 @@ public class DonationServiceImpl : IDonationService
                 .OrderByDescending(d => d.CreatedAt)
                 .ToListAsync();
 
-            var dtos = donations.Select(MapToResponseDto).ToList();
+            // Exclude expired and fully claimed from available browse listings
+            var dtos = donations
+                .Select(MapToResponseDto)
+                .Where(d => d.Status != "Cancelled" && d.Status != "Completed" && !d.IsExpired && d.RemainingQuantity > 0)
+                .ToList();
+
             return ApiResponse<List<DonationResponseDto>>.Ok(dtos, "Available food listings retrieved.");
         }
         catch (Exception ex)
@@ -345,7 +407,7 @@ public class DonationServiceImpl : IDonationService
 
     private static DonationResponseDto MapToResponseDto(Donation d)
     {
-        var calculatedRemaining = Math.Max(0, d.TotalQuantity - d.ClaimedQuantity);
+        var calculatedRemaining = d.Status == "Cancelled" ? 0 : Math.Max(0, d.TotalQuantity - d.ClaimedQuantity);
         var effectiveStatus = d.Status;
 
         if (effectiveStatus != "Completed" && effectiveStatus != "Cancelled")

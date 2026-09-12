@@ -99,6 +99,40 @@ public class DonationsController : ControllerBase
     }
 
     /// <summary>
+    /// Cancels an existing surplus food donation listing (Owner Donor only).
+    /// </summary>
+    [HttpPatch("{id:int}/cancel")]
+    [Authorize(Roles = "DONOR")]
+    [ProducesResponseType(typeof(ApiResponse<DonationResponseDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<DonationResponseDto>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResponse<DonationResponseDto>), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ApiResponse<DonationResponseDto>), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> CancelDonation(int id, [FromBody] CancelDonationDto? dto = null)
+    {
+        var (donorId, _, _) = GetCurrentDonorIdentity();
+        if (string.IsNullOrWhiteSpace(donorId))
+        {
+            return Unauthorized(ApiResponse<DonationResponseDto>.Fail("Invalid or missing Donor authentication claims."));
+        }
+
+        var result = await _donationService.CancelDonationAsync(id, donorId, dto?.Reason);
+        if (!result.Success)
+        {
+            if (result.Message.Contains("not found", StringComparison.OrdinalIgnoreCase))
+            {
+                return NotFound(result);
+            }
+            if (result.Message.Contains("permission", StringComparison.OrdinalIgnoreCase))
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, result);
+            }
+            return BadRequest(result);
+        }
+
+        return Ok(result);
+    }
+
+    /// <summary>
     /// Retrieves all donations posted by the authenticated Donor (with optional status & search filtering).
     /// </summary>
     [HttpGet("my-donations")]
