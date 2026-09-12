@@ -98,6 +98,145 @@ public class DonationServiceImpl : IDonationService
         }
     }
 
+    public async Task<ApiResponse<DonationResponseDto>> UpdateDonationAsync(int id, string donorId, UpdateDonationDto dto)
+    {
+        try
+        {
+            var donation = await _context.Donations.FindAsync(id);
+            if (donation == null)
+            {
+                return ApiResponse<DonationResponseDto>.Fail("Donation not found.");
+            }
+
+            // Scenario 6: Donation Ownership Check
+            if (donation.DonorId != donorId)
+            {
+                return ApiResponse<DonationResponseDto>.Fail("You do not have permission to modify this donation.");
+            }
+
+            // Scenario 7: Workflow State Restrictions
+            if (donation.Status == "Completed" || donation.Status == "Cancelled")
+            {
+                return ApiResponse<DonationResponseDto>.Fail($"Donations in '{donation.Status}' state cannot be modified.");
+            }
+
+            if (DateTime.UtcNow > donation.ExpiryTime)
+            {
+                return ApiResponse<DonationResponseDto>.Fail("Expired donations cannot be modified.");
+            }
+
+            if (donation.RemainingQuantity == 0 && donation.TotalQuantity > 0)
+            {
+                return ApiResponse<DonationResponseDto>.Fail("Fully claimed donations cannot be modified.");
+            }
+
+            // Scenario 3: Validate updated information (non-empty if provided)
+            if (dto.FoodTitle != null && string.IsNullOrWhiteSpace(dto.FoodTitle))
+            {
+                return ApiResponse<DonationResponseDto>.Fail("Food item title cannot be empty.");
+            }
+
+            if (dto.Location != null && string.IsNullOrWhiteSpace(dto.Location))
+            {
+                return ApiResponse<DonationResponseDto>.Fail("Pickup or delivery location cannot be empty.");
+            }
+
+            // Scenario 4: Validate Quantity
+            if (dto.TotalQuantity.HasValue)
+            {
+                if (dto.TotalQuantity.Value <= 0)
+                {
+                    return ApiResponse<DonationResponseDto>.Fail("Quantity must be a positive number greater than 0.");
+                }
+
+                if (dto.TotalQuantity.Value < donation.ClaimedQuantity)
+                {
+                    return ApiResponse<DonationResponseDto>.Fail($"Total quantity cannot be reduced below the already claimed portions ({donation.ClaimedQuantity} {donation.Unit}).");
+                }
+            }
+
+            // Scenario 5: Validate Availability Period
+            DateTime? calculatedExpiry = null;
+            if (dto.ExpiryHours.HasValue)
+            {
+                if (dto.ExpiryHours.Value <= 0)
+                {
+                    return ApiResponse<DonationResponseDto>.Fail("Availability period / expiry hours must be greater than 0.");
+                }
+                calculatedExpiry = DateTime.UtcNow.AddHours(dto.ExpiryHours.Value);
+            }
+            else if (dto.ExpiryTime.HasValue)
+            {
+                calculatedExpiry = dto.ExpiryTime.Value.ToUniversalTime();
+            }
+
+            if (calculatedExpiry.HasValue && calculatedExpiry.Value <= DateTime.UtcNow)
+            {
+                return ApiResponse<DonationResponseDto>.Fail("Availability period / expiry time must be in the future.");
+            }
+
+            // Scenario 1 & 2: Apply valid changes to fields and preserve unchanged
+            if (!string.IsNullOrWhiteSpace(dto.FoodTitle))
+            {
+                donation.FoodTitle = dto.FoodTitle.Trim();
+            }
+
+            if (!string.IsNullOrWhiteSpace(dto.Category))
+            {
+                donation.Category = dto.Category.Trim();
+            }
+
+            if (dto.TotalQuantity.HasValue)
+            {
+                donation.TotalQuantity = dto.TotalQuantity.Value;
+                donation.RemainingQuantity = Math.Max(0, donation.TotalQuantity - donation.ClaimedQuantity);
+            }
+
+            if (!string.IsNullOrWhiteSpace(dto.Unit))
+            {
+                donation.Unit = dto.Unit.Trim();
+            }
+
+            if (calculatedExpiry.HasValue)
+            {
+                donation.ExpiryTime = calculatedExpiry.Value;
+            }
+
+            if (!string.IsNullOrWhiteSpace(dto.CollectionMode))
+            {
+                donation.CollectionMode = dto.CollectionMode.Trim();
+            }
+
+            if (!string.IsNullOrWhiteSpace(dto.Location))
+            {
+                donation.Location = dto.Location.Trim();
+            }
+
+            if (dto.Notes != null)
+            {
+                donation.Notes = dto.Notes.Trim();
+            }
+
+            if (dto.DietaryTags != null)
+            {
+                donation.DietaryTags = dto.DietaryTags.Trim();
+            }
+
+            donation.UpdatedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+
+            _logger.LogInformation("Donation #{Id} successfully updated by Donor #{DonorId}.", donation.Id, donorId);
+
+            return ApiResponse<DonationResponseDto>.Ok(MapToResponseDto(donation), "Donation updated successfully.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating donation #{Id} for donor #{DonorId}", id, donorId);
+            return ApiResponse<DonationResponseDto>.Fail($"Failed to update donation: {ex.Message}");
+        }
+    }
+
     public async Task<ApiResponse<List<DonationResponseDto>>> GetMyDonationsAsync(
         string donorId, 
         string? status = null, 

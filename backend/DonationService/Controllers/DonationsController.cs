@@ -55,6 +55,50 @@ public class DonationsController : ControllerBase
     }
 
     /// <summary>
+    /// Updates an existing surplus food donation listing (Owner Donor only).
+    /// </summary>
+    [HttpPut("{id:int}")]
+    [Authorize(Roles = "DONOR")]
+    [ProducesResponseType(typeof(ApiResponse<DonationResponseDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<DonationResponseDto>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResponse<DonationResponseDto>), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ApiResponse<DonationResponseDto>), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> UpdateDonation(int id, [FromBody] UpdateDonationDto dto)
+    {
+        if (!ModelState.IsValid)
+        {
+            var errors = ModelState.Values
+                .SelectMany(v => v.Errors)
+                .Select(e => e.ErrorMessage)
+                .ToList();
+
+            return BadRequest(ApiResponse<DonationResponseDto>.Fail("Validation failed.", errors));
+        }
+
+        var (donorId, _, _) = GetCurrentDonorIdentity();
+        if (string.IsNullOrWhiteSpace(donorId))
+        {
+            return Unauthorized(ApiResponse<DonationResponseDto>.Fail("Invalid or missing Donor authentication claims."));
+        }
+
+        var result = await _donationService.UpdateDonationAsync(id, donorId, dto);
+        if (!result.Success)
+        {
+            if (result.Message.Contains("not found", StringComparison.OrdinalIgnoreCase))
+            {
+                return NotFound(result);
+            }
+            if (result.Message.Contains("permission", StringComparison.OrdinalIgnoreCase))
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, result);
+            }
+            return BadRequest(result);
+        }
+
+        return Ok(result);
+    }
+
+    /// <summary>
     /// Retrieves all donations posted by the authenticated Donor (with optional status & search filtering).
     /// </summary>
     [HttpGet("my-donations")]

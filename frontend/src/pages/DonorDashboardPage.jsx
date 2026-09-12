@@ -22,7 +22,10 @@ import {
   Eye,
   CheckCircle,
   AlertTriangle,
-  FileText
+  FileText,
+  Edit2,
+  Lock,
+  Save
 } from 'lucide-react';
 
 export default function DonorDashboardPage() {
@@ -38,8 +41,15 @@ export default function DonorDashboardPage() {
   const [formError, setFormError] = useState(null);
   const [formSuccess, setFormSuccess] = useState(null);
 
-  // Detail Modal State (Task 3: View Own Donations)
+  // Detail Modal State (Task 3)
   const [selectedDonation, setSelectedDonation] = useState(null);
+
+  // Edit Modal State (Task 4: Edit Donation)
+  const [editDonation, setEditDonation] = useState(null);
+  const [editFormData, setEditFormData] = useState({});
+  const [editSubmitting, setEditSubmitting] = useState(false);
+  const [editError, setEditError] = useState(null);
+  const [editSuccess, setEditSuccess] = useState(null);
 
   // Filter & Search States
   const [searchQuery, setSearchQuery] = useState('');
@@ -109,12 +119,102 @@ export default function DonorDashboardPage() {
     if (formError) setFormError(null);
   };
 
+  // Open Edit Modal with pre-filled fields
+  const handleOpenEditModal = (item) => {
+    const timeLeft = calculateTimeLeft(item.expiryTime);
+    if (item.status === 'Completed' || item.status === 'Cancelled' || item.status === 'Fully Claimed' || timeLeft.expired) {
+      alert(`This donation is in '${item.status}' state and cannot be modified.`);
+      return;
+    }
+
+    setEditDonation(item);
+    setEditFormData({
+      foodTitle: item.foodTitle || '',
+      category: item.category || 'Cooked Meals',
+      totalQuantity: item.totalQuantity || 1,
+      unit: item.unit || 'portions',
+      expiryHours: 4,
+      collectionMode: item.collectionMode || 'Organization Pickup',
+      location: item.location || '',
+      notes: item.notes || '',
+      dietaryTags: item.dietaryTags || ''
+    });
+    setEditError(null);
+    setEditSuccess(null);
+  };
+
+  const handleEditInputChange = (e) => {
+    const { name, value } = e.target;
+    setEditFormData(prev => ({
+      ...prev,
+      [name]: name === 'totalQuantity' || name === 'expiryHours' 
+        ? (value === '' ? '' : Number(value)) 
+        : value
+    }));
+    if (editError) setEditError(null);
+  };
+
+  // Handle Edit Submission (Task 4 Scenarios)
+  const handleUpdateDonation = async (e) => {
+    e.preventDefault();
+    if (!editDonation) return;
+
+    setEditError(null);
+    setEditSuccess(null);
+
+    // Scenario 3: Validate updated information
+    if (!editFormData.foodTitle?.trim()) {
+      setEditError('Food item title cannot be empty.');
+      return;
+    }
+
+    if (!editFormData.location?.trim()) {
+      setEditError('Pickup or delivery location cannot be empty.');
+      return;
+    }
+
+    // Scenario 4: Validate Quantity
+    if (!editFormData.totalQuantity || editFormData.totalQuantity <= 0) {
+      setEditError('Total quantity must be a positive number greater than 0.');
+      return;
+    }
+
+    if (editDonation.claimedQuantity > 0 && editFormData.totalQuantity < editDonation.claimedQuantity) {
+      setEditError(`Quantity cannot be reduced below the ${editDonation.claimedQuantity} already claimed ${editDonation.unit}.`);
+      return;
+    }
+
+    // Scenario 5: Validate Expiry
+    if (!editFormData.expiryHours || editFormData.expiryHours <= 0) {
+      setEditError('Availability period / expiry hours must be greater than 0.');
+      return;
+    }
+
+    try {
+      setEditSubmitting(true);
+      const res = await donationApi.updateDonation(editDonation.id, editFormData);
+      if (res.success) {
+        setEditSuccess('Donation details updated successfully!');
+        fetchMyDonations(statusFilter, searchQuery);
+        setTimeout(() => {
+          setEditDonation(null);
+          setEditSuccess(null);
+        }, 1200);
+      } else {
+        setEditError(res.message || 'Failed to update donation listing.');
+      }
+    } catch (err) {
+      setEditError(err.message || err.errors?.[0] || 'An error occurred while updating the donation.');
+    } finally {
+      setEditSubmitting(false);
+    }
+  };
+
   const handleCreateDonation = async (e) => {
     e.preventDefault();
     setFormError(null);
     setFormSuccess(null);
 
-    // Client validation
     if (!formData.foodTitle.trim()) {
       setFormError('Please provide the food item title.');
       return;
@@ -189,7 +289,8 @@ export default function DonorDashboardPage() {
         color: '#b91c1c',
         border: '#fca5a5',
         label: 'Expired',
-        icon: AlertTriangle
+        icon: AlertTriangle,
+        editable: false
       };
     }
 
@@ -201,7 +302,8 @@ export default function DonorDashboardPage() {
           color: '#065f46',
           border: '#a7f3d0',
           label: 'Available',
-          icon: CheckCircle2
+          icon: CheckCircle2,
+          editable: true
         };
       case 'Partially Claimed':
         return {
@@ -209,7 +311,8 @@ export default function DonorDashboardPage() {
           color: '#92400e',
           border: '#fde68a',
           label: 'Partially Claimed',
-          icon: Clock
+          icon: Clock,
+          editable: true
         };
       case 'Fully Claimed':
         return {
@@ -217,7 +320,8 @@ export default function DonorDashboardPage() {
           color: '#5b21b6',
           border: '#ddd6fe',
           label: 'Fully Claimed',
-          icon: Package
+          icon: Package,
+          editable: false
         };
       case 'Completed':
         return {
@@ -225,7 +329,8 @@ export default function DonorDashboardPage() {
           color: '#0369a1',
           border: '#bae6fd',
           label: 'Completed',
-          icon: CheckCircle
+          icon: CheckCircle,
+          editable: false
         };
       case 'Expired':
         return {
@@ -233,7 +338,8 @@ export default function DonorDashboardPage() {
           color: '#b91c1c',
           border: '#fca5a5',
           label: 'Expired',
-          icon: AlertTriangle
+          icon: AlertTriangle,
+          editable: false
         };
       default:
         return {
@@ -241,12 +347,12 @@ export default function DonorDashboardPage() {
           color: '#374151',
           border: '#e5e7eb',
           label: status,
-          icon: Info
+          icon: Info,
+          editable: false
         };
     }
   };
 
-  // Client category filtering (if categoryFilter selected)
   const displayedDonations = donations.filter(item => {
     if (categoryFilter !== 'ALL' && item.category.toLowerCase() !== categoryFilter.toLowerCase()) {
       return false;
@@ -254,7 +360,6 @@ export default function DonorDashboardPage() {
     return true;
   });
 
-  // Metric aggregates
   const totalMealsRescued = donations.reduce((acc, curr) => acc + (curr.totalQuantity || 0), 0);
   const totalClaimedPortions = donations.reduce((acc, curr) => acc + (curr.claimedQuantity || 0), 0);
   const activeListingsCount = donations.filter(d => 
@@ -276,7 +381,7 @@ export default function DonorDashboardPage() {
               {currentUser?.businessName || currentUser?.name || "Food Donor Dashboard"}
             </h1>
             <p className="dashboard-subtitle" style={{ color: '#d1fae5', margin: 0, fontSize: '1rem', maxWidth: '650px' }}>
-              Track your surplus food listings, monitor remaining portions, view live charity claim updates, and manage your contributions.
+              Track and modify your surplus food listings, monitor remaining portions, view live charity claim updates, and manage your contributions.
             </p>
           </div>
 
@@ -375,7 +480,7 @@ export default function DonorDashboardPage() {
                 My Surplus Food Listings
               </h2>
               <p style={{ color: '#6b7280', fontSize: '0.875rem', margin: '4px 0 0' }}>
-                All surplus food created by your organization with live status and portion tracking.
+                Manage, edit, and track food donations posted by your establishment.
               </p>
             </div>
 
@@ -394,7 +499,6 @@ export default function DonorDashboardPage() {
 
           {/* Search bar & Status Filter Buttons */}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '14px', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid #f3f4f6', paddingTop: '16px' }}>
-            {/* Status Filter Chips */}
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center' }}>
               <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#4b5563', marginRight: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <Filter size={14} /> Status:
@@ -427,7 +531,6 @@ export default function DonorDashboardPage() {
               ))}
             </div>
 
-            {/* Search Input */}
             <form onSubmit={handleSearchSubmit} style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: '260px' }}>
               <div style={{ position: 'relative', width: '100%' }}>
                 <Search size={16} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#9ca3af' }} />
@@ -460,7 +563,7 @@ export default function DonorDashboardPage() {
         {loading ? (
           <div style={{ textAlign: 'center', padding: '60px 20px', color: '#6b7280' }}>
             <RefreshCw size={36} className="animate-spin" style={{ margin: '0 auto 16px', color: '#059669' }} />
-            <p style={{ fontWeight: 600 }}>Loading your surplus food listings...</p>
+            <p style={{ fontWeight: 600 }}>Loading surplus food listings...</p>
           </div>
         ) : error ? (
           <div className="alert alert-error" style={{ padding: '20px', borderRadius: '10px', background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -470,7 +573,6 @@ export default function DonorDashboardPage() {
             </div>
           </div>
         ) : donations.length === 0 ? (
-          /* SCENARIO 4: NO DONATIONS (Appropriate Empty State) */
           <div className="profile-card text-center" style={{ padding: '64px 28px', background: '#fff', borderRadius: '16px', border: '1px solid #e5e7eb', boxShadow: '0 4px 14px rgba(0,0,0,0.03)' }}>
             <div style={{ width: '76px', height: '76px', borderRadius: '50%', background: '#ecfdf5', color: '#059669', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
               <Utensils size={38} />
@@ -522,8 +624,7 @@ export default function DonorDashboardPage() {
             <button onClick={handleResetFilters} className="btn btn-outline btn-sm">Clear Filters</button>
           </div>
         ) : (
-          /* SCENARIO 1, 2, 3: VIEW DONATIONS, STATUS, REMAINING QUANTITY */
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(330px, 1fr))', gap: '24px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '24px' }}>
             {displayedDonations.map((item) => {
               const statusConfig = getStatusBadgeConfig(item.status, item.expiryTime);
               const StatusIcon = statusConfig.icon;
@@ -531,6 +632,7 @@ export default function DonorDashboardPage() {
               const percentageRemaining = item.totalQuantity > 0 
                 ? Math.round((item.remainingQuantity / item.totalQuantity) * 100) 
                 : 0;
+              const isEditable = statusConfig.editable && !timeLeft.expired;
 
               return (
                 <div 
@@ -566,7 +668,6 @@ export default function DonorDashboardPage() {
                         {item.category}
                       </span>
 
-                      {/* Scenario 2: Accurate Status Badge */}
                       <span 
                         style={{ 
                           background: statusConfig.bg, 
@@ -591,7 +692,7 @@ export default function DonorDashboardPage() {
                       {item.foodTitle}
                     </h3>
 
-                    {/* Scenario 3: Remaining Quantity & Progress Bar */}
+                    {/* Remaining Quantity & Progress Bar */}
                     <div style={{ background: '#f9fafb', borderRadius: '10px', padding: '12px', border: '1px solid #f3f4f6', marginBottom: '14px' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
                         <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#4b5563', display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -603,7 +704,6 @@ export default function DonorDashboardPage() {
                         </span>
                       </div>
 
-                      {/* Visual Allocation Progress Bar */}
                       <div style={{ width: '100%', height: '8px', background: '#e5e7eb', borderRadius: '4px', overflow: 'hidden' }}>
                         <div 
                           style={{ 
@@ -622,9 +722,8 @@ export default function DonorDashboardPage() {
                       </div>
                     </div>
 
-                    {/* Scenario 1: Relevant Information List */}
+                    {/* Information List */}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', color: '#4b5563', fontSize: '0.875rem' }}>
-                      {/* Availability / Expiry */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <Clock size={16} style={{ color: timeLeft.expired ? '#ef4444' : '#f59e0b', flexShrink: 0 }} />
                         <span style={{ fontSize: '0.85rem' }}>
@@ -636,7 +735,6 @@ export default function DonorDashboardPage() {
                         </span>
                       </div>
 
-                      {/* Location */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <MapPin size={16} style={{ color: '#6b7280', flexShrink: 0 }} />
                         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.85rem' }}>
@@ -644,13 +742,11 @@ export default function DonorDashboardPage() {
                         </span>
                       </div>
 
-                      {/* Collection Mode */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <Truck size={16} style={{ color: '#3b82f6', flexShrink: 0 }} />
                         <span style={{ fontSize: '0.85rem' }}>{item.collectionMode}</span>
                       </div>
 
-                      {/* Dietary Tags */}
                       {item.dietaryTags && (
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px' }}>
                           <Tag size={16} style={{ color: '#8b5cf6', flexShrink: 0 }} />
@@ -660,7 +756,6 @@ export default function DonorDashboardPage() {
                         </div>
                       )}
 
-                      {/* Notes snippet */}
                       {item.notes && (
                         <div style={{ marginTop: '6px', padding: '8px 10px', background: '#f9fafb', borderRadius: '8px', fontSize: '0.8rem', color: '#6b7280', fontStyle: 'italic', borderLeft: '3px solid #10b981' }}>
                           "{item.notes}"
@@ -669,30 +764,77 @@ export default function DonorDashboardPage() {
                     </div>
                   </div>
 
-                  {/* Card Bottom: Metadata & View Details Action */}
-                  <div style={{ borderTop: '1px solid #f3f4f6', marginTop: '18px', paddingTop: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  {/* Card Bottom: Metadata & Action Buttons (View Details + Edit) */}
+                  <div style={{ borderTop: '1px solid #f3f4f6', marginTop: '18px', paddingTop: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
                     <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>
-                      ID #{item.id} • {new Date(item.createdAt).toLocaleDateString()}
+                      ID #{item.id} {item.updatedAt ? '• Edited' : `• ${new Date(item.createdAt).toLocaleDateString()}`}
                     </span>
                     
-                    <button
-                      onClick={() => setSelectedDonation(item)}
-                      className="btn btn-outline btn-sm"
-                      style={{ 
-                        display: 'flex', 
-                        alignItems: 'center', 
-                        gap: '5px',
-                        borderColor: '#047857',
-                        color: '#047857',
-                        fontSize: '0.8rem',
-                        fontWeight: 700,
-                        padding: '4px 12px',
-                        borderRadius: '6px'
-                      }}
-                    >
-                      <Eye size={14} />
-                      <span>View Details</span>
-                    </button>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      {/* Scenario 7: Workflow State Guarded Edit Button */}
+                      {isEditable ? (
+                        <button
+                          onClick={() => handleOpenEditModal(item)}
+                          className="btn btn-outline btn-sm"
+                          style={{ 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            gap: '4px',
+                            borderColor: '#3b82f6',
+                            color: '#2563eb',
+                            fontSize: '0.8rem',
+                            fontWeight: 700,
+                            padding: '4px 10px',
+                            borderRadius: '6px'
+                          }}
+                          title="Edit this donation listing"
+                        >
+                          <Edit2 size={13} />
+                          <span>Edit</span>
+                        </button>
+                      ) : (
+                        <button
+                          disabled
+                          className="btn btn-sm"
+                          style={{ 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            gap: '4px',
+                            background: '#f3f4f6',
+                            color: '#9ca3af',
+                            border: '1px solid #e5e7eb',
+                            fontSize: '0.8rem',
+                            fontWeight: 600,
+                            padding: '4px 10px',
+                            borderRadius: '6px',
+                            cursor: 'not-allowed'
+                          }}
+                          title={`Editing restricted: donation is ${statusConfig.label}`}
+                        >
+                          <Lock size={12} />
+                          <span>Locked</span>
+                        </button>
+                      )}
+
+                      <button
+                        onClick={() => setSelectedDonation(item)}
+                        className="btn btn-outline btn-sm"
+                        style={{ 
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          gap: '4px',
+                          borderColor: '#047857',
+                          color: '#047857',
+                          fontSize: '0.8rem',
+                          fontWeight: 700,
+                          padding: '4px 10px',
+                          borderRadius: '6px'
+                        }}
+                      >
+                        <Eye size={13} />
+                        <span>Details</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
               );
@@ -701,7 +843,275 @@ export default function DonorDashboardPage() {
         )}
       </div>
 
-      {/* DETAIL MODAL (Task 3: Detailed Personal Donation View) */}
+      {/* EDIT DONATION MODAL (Task 4: Edit Donation) */}
+      {editDonation && (
+        <div 
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0, 0, 0, 0.65)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            padding: '20px'
+          }}
+        >
+          <div 
+            className="animate-fade-in-up"
+            style={{
+              background: '#fff',
+              borderRadius: '16px',
+              maxWidth: '620px',
+              width: '100%',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.2)',
+              padding: '28px'
+            }}
+          >
+            {/* Modal Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '1px solid #e5e7eb', paddingBottom: '14px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ background: '#eff6ff', color: '#2563eb', width: '38px', height: '38px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Edit2 size={20} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: '#111827' }}>
+                    Edit Food Donation #{editDonation.id}
+                  </h3>
+                  <p style={{ margin: 0, fontSize: '0.85rem', color: '#6b7280' }}>
+                    Modify food details, portions, availability, or pickup instructions
+                  </p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setEditDonation(null)}
+                style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#9ca3af', padding: '6px' }}
+              >
+                <X size={22} />
+              </button>
+            </div>
+
+            {/* Error & Success Alerts */}
+            {editError && (
+              <div style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', padding: '12px 16px', borderRadius: '8px', marginBottom: '18px', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.9rem' }}>
+                <AlertCircle size={18} style={{ flexShrink: 0 }} />
+                <span>{editError}</span>
+              </div>
+            )}
+
+            {editSuccess && (
+              <div style={{ background: '#ecfdf5', border: '1px solid #a7f3d0', color: '#065f46', padding: '12px 16px', borderRadius: '8px', marginBottom: '18px', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.9rem' }}>
+                <CheckCircle2 size={18} style={{ flexShrink: 0 }} />
+                <span>{editSuccess}</span>
+              </div>
+            )}
+
+            {/* Edit Donation Form */}
+            <form onSubmit={handleUpdateDonation} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              {/* Food Title */}
+              <div>
+                <label style={{ display: 'block', fontWeight: 700, fontSize: '0.9rem', marginBottom: '6px', color: '#374151' }}>
+                  Food Item Title <span style={{ color: '#ef4444' }}>*</span>
+                </label>
+                <input 
+                  type="text"
+                  name="foodTitle"
+                  value={editFormData.foodTitle}
+                  onChange={handleEditInputChange}
+                  className="form-control"
+                  style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '0.95rem' }}
+                  required
+                />
+              </div>
+
+              {/* Category & Unit */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                <div>
+                  <label style={{ display: 'block', fontWeight: 700, fontSize: '0.9rem', marginBottom: '6px', color: '#374151' }}>
+                    Food Category
+                  </label>
+                  <select
+                    name="category"
+                    value={editFormData.category}
+                    onChange={handleEditInputChange}
+                    className="form-control"
+                    style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '0.95rem' }}
+                  >
+                    <option value="Cooked Meals">Cooked Meals</option>
+                    <option value="Bakery & Pastries">Bakery & Pastries</option>
+                    <option value="Fresh Produce">Fresh Produce</option>
+                    <option value="Packaged Foods">Packaged Foods</option>
+                    <option value="Beverages">Beverages</option>
+                    <option value="Dairy & Eggs">Dairy & Eggs</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontWeight: 700, fontSize: '0.9rem', marginBottom: '6px', color: '#374151' }}>
+                    Quantity Unit
+                  </label>
+                  <select
+                    name="unit"
+                    value={editFormData.unit}
+                    onChange={handleEditInputChange}
+                    className="form-control"
+                    style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '0.95rem' }}
+                  >
+                    <option value="portions">Portions</option>
+                    <option value="kg">Kilograms (kg)</option>
+                    <option value="packets">Packets</option>
+                    <option value="boxes">Boxes</option>
+                    <option value="liters">Liters</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Quantity & Expiry Extension */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                <div>
+                  <label style={{ display: 'block', fontWeight: 700, fontSize: '0.9rem', marginBottom: '6px', color: '#374151' }}>
+                    Total Quantity <span style={{ color: '#ef4444' }}>*</span>
+                  </label>
+                  <input 
+                    type="number"
+                    name="totalQuantity"
+                    min={Math.max(1, editDonation.claimedQuantity)}
+                    value={editFormData.totalQuantity}
+                    onChange={handleEditInputChange}
+                    className="form-control"
+                    style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '0.95rem' }}
+                    required
+                  />
+                  {editDonation.claimedQuantity > 0 && (
+                    <span style={{ fontSize: '0.75rem', color: '#d97706', marginTop: '4px', display: 'block' }}>
+                      * Minimum {editDonation.claimedQuantity} {editDonation.unit} (already claimed)
+                    </span>
+                  )}
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontWeight: 700, fontSize: '0.9rem', marginBottom: '6px', color: '#374151' }}>
+                    Extend Expiry (Hours from Now)
+                  </label>
+                  <select
+                    name="expiryHours"
+                    value={editFormData.expiryHours}
+                    onChange={handleEditInputChange}
+                    className="form-control"
+                    style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '0.95rem' }}
+                  >
+                    <option value="2">2 Hours (Immediate Pick up)</option>
+                    <option value="4">4 Hours (Standard cooked food)</option>
+                    <option value="8">8 Hours (End of day)</option>
+                    <option value="24">24 Hours (Next day fresh)</option>
+                    <option value="48">48 Hours (Bakery / Produce)</option>
+                    <option value="72">72 Hours (Packaged foods)</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Location & Collection Mode */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: '14px' }}>
+                <div>
+                  <label style={{ display: 'block', fontWeight: 700, fontSize: '0.9rem', marginBottom: '6px', color: '#374151' }}>
+                    Pickup Location <span style={{ color: '#ef4444' }}>*</span>
+                  </label>
+                  <input 
+                    type="text"
+                    name="location"
+                    value={editFormData.location}
+                    onChange={handleEditInputChange}
+                    className="form-control"
+                    style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '0.95rem' }}
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontWeight: 700, fontSize: '0.9rem', marginBottom: '6px', color: '#374151' }}>
+                    Collection Mode
+                  </label>
+                  <select
+                    name="collectionMode"
+                    value={editFormData.collectionMode}
+                    onChange={handleEditInputChange}
+                    className="form-control"
+                    style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '0.95rem' }}
+                  >
+                    <option value="Organization Pickup">Organization Pickup</option>
+                    <option value="Donor Drop-off">Donor Drop-off</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Dietary Tags */}
+              <div>
+                <label style={{ display: 'block', fontWeight: 700, fontSize: '0.9rem', marginBottom: '6px', color: '#374151' }}>
+                  Dietary Tags / Allergen Info
+                </label>
+                <input 
+                  type="text"
+                  name="dietaryTags"
+                  value={editFormData.dietaryTags}
+                  onChange={handleEditInputChange}
+                  className="form-control"
+                  style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '0.95rem' }}
+                />
+              </div>
+
+              {/* Notes / Handling Instructions */}
+              <div>
+                <label style={{ display: 'block', fontWeight: 700, fontSize: '0.9rem', marginBottom: '6px', color: '#374151' }}>
+                  Handling & Storage Notes
+                </label>
+                <textarea 
+                  name="notes"
+                  value={editFormData.notes}
+                  onChange={handleEditInputChange}
+                  rows="2"
+                  className="form-control"
+                  style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '0.95rem', resize: 'vertical' }}
+                />
+              </div>
+
+              {/* Modal Buttons */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '12px' }}>
+                <button 
+                  type="button"
+                  onClick={() => setEditDonation(null)}
+                  className="btn btn-outline"
+                  style={{ padding: '10px 20px', borderRadius: '8px' }}
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit"
+                  disabled={editSubmitting}
+                  className="btn btn-primary"
+                  style={{ background: '#2563eb', border: 'none', padding: '10px 24px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700 }}
+                >
+                  {editSubmitting ? (
+                    <>
+                      <RefreshCw size={16} className="animate-spin" />
+                      <span>Saving Changes...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Save size={18} />
+                      <span>Save Changes</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* DETAIL MODAL (Task 3) */}
       {selectedDonation && (
         <div 
           style={{
@@ -756,7 +1166,6 @@ export default function DonorDashboardPage() {
               </button>
             </div>
 
-            {/* Status & Availability Overview */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '20px' }}>
               <div style={{ background: '#f9fafb', padding: '14px', borderRadius: '10px', border: '1px solid #e5e7eb' }}>
                 <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase' }}>Current Status</span>
@@ -793,7 +1202,6 @@ export default function DonorDashboardPage() {
               </div>
             </div>
 
-            {/* Full Quantity Breakdown Bar */}
             <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '10px', padding: '14px', marginBottom: '20px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', fontWeight: 700, marginBottom: '8px' }}>
                 <span style={{ color: '#047857' }}>Remaining: {selectedDonation.remainingQuantity} {selectedDonation.unit}</span>
@@ -812,7 +1220,6 @@ export default function DonorDashboardPage() {
               </div>
             </div>
 
-            {/* Logistics & Safety Details */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '0.9rem', color: '#374151', marginBottom: '20px' }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
                 <Clock size={18} style={{ color: '#f59e0b', marginTop: '2px', flexShrink: 0 }} />
@@ -869,7 +1276,6 @@ export default function DonorDashboardPage() {
               )}
             </div>
 
-            {/* Modal Footer */}
             <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ fontSize: '0.8rem', color: '#9ca3af' }}>
                 Donation Record #{selectedDonation.id}
@@ -914,7 +1320,6 @@ export default function DonorDashboardPage() {
               padding: '28px'
             }}
           >
-            {/* Modal Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '1px solid #e5e7eb', paddingBottom: '14px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <div style={{ background: '#ecfdf5', color: '#059669', width: '38px', height: '38px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -937,7 +1342,6 @@ export default function DonorDashboardPage() {
               </button>
             </div>
 
-            {/* Error & Success Alerts */}
             {formError && (
               <div style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', padding: '12px 16px', borderRadius: '8px', marginBottom: '18px', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.9rem' }}>
                 <AlertCircle size={18} style={{ flexShrink: 0 }} />
@@ -952,9 +1356,7 @@ export default function DonorDashboardPage() {
               </div>
             )}
 
-            {/* Donation Form */}
             <form onSubmit={handleCreateDonation} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              {/* Food Title */}
               <div>
                 <label style={{ display: 'block', fontWeight: 700, fontSize: '0.9rem', marginBottom: '6px', color: '#374151' }}>
                   Food Item Title <span style={{ color: '#ef4444' }}>*</span>
@@ -971,7 +1373,6 @@ export default function DonorDashboardPage() {
                 />
               </div>
 
-              {/* Category & Unit */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
                 <div>
                   <label style={{ display: 'block', fontWeight: 700, fontSize: '0.9rem', marginBottom: '6px', color: '#374151' }}>
@@ -1013,7 +1414,6 @@ export default function DonorDashboardPage() {
                 </div>
               </div>
 
-              {/* Quantity & Expiry Hours */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
                 <div>
                   <label style={{ display: 'block', fontWeight: 700, fontSize: '0.9rem', marginBottom: '6px', color: '#374151' }}>
@@ -1052,7 +1452,6 @@ export default function DonorDashboardPage() {
                 </div>
               </div>
 
-              {/* Location & Collection Mode */}
               <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: '14px' }}>
                 <div>
                   <label style={{ display: 'block', fontWeight: 700, fontSize: '0.9rem', marginBottom: '6px', color: '#374151' }}>
@@ -1087,7 +1486,6 @@ export default function DonorDashboardPage() {
                 </div>
               </div>
 
-              {/* Dietary Tags */}
               <div>
                 <label style={{ display: 'block', fontWeight: 700, fontSize: '0.9rem', marginBottom: '6px', color: '#374151' }}>
                   Dietary Tags / Allergen Info
@@ -1103,7 +1501,6 @@ export default function DonorDashboardPage() {
                 />
               </div>
 
-              {/* Notes / Handling Instructions */}
               <div>
                 <label style={{ display: 'block', fontWeight: 700, fontSize: '0.9rem', marginBottom: '6px', color: '#374151' }}>
                   Handling & Storage Notes
@@ -1119,7 +1516,6 @@ export default function DonorDashboardPage() {
                 />
               </div>
 
-              {/* Modal Buttons */}
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '12px' }}>
                 <button 
                   type="button"

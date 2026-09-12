@@ -164,6 +164,18 @@ export const donationApi = {
     }
   },
 
+  updateDonation: async (id, donationData) => {
+    try {
+      const response = await donationClient.put(`/donations/${id}`, donationData);
+      return response.data;
+    } catch (error) {
+      if (error.response?.data) {
+        throw error.response.data;
+      }
+      throw { message: error.message || 'Network Error', isNetworkError: !error.response };
+    }
+  },
+
   getMyDonations: async (params = {}) => {
     try {
       const cleanParams = {};
