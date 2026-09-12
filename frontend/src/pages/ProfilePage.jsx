@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
-import { authApi } from '../services/api';
+import { authApi, getProfileImageUrl } from '../services/api';
 import { 
   User, 
   Building2, 
@@ -13,12 +14,24 @@ import {
   CheckCircle2, 
   AlertTriangle,
   Save,
-  AlertCircle
+  AlertCircle,
+  Camera,
+  Upload,
+  Loader2,
+  RefreshCw,
+  Lock,
+  KeyRound,
+  Eye,
+  EyeOff,
+  ShieldCheck,
+  Check,
+  X
 } from 'lucide-react';
 
 export default function ProfilePage() {
-  const { currentUser, logout, updateProfile, deleteAccount } = useAuth();
+  const { currentUser, logout, updateProfile, updateProfilePicture, removeProfilePicture, changePassword, deleteAccount } = useAuth();
   const navigate = useNavigate();
+  const fileInputRef = useRef(null);
 
   const [profileData, setProfileData] = useState({
     businessOrOrgName: currentUser?.businessName || '',
@@ -28,13 +41,34 @@ export default function ProfilePage() {
     location: '',
     bio: '',
     donorType: 'Restaurant',
-    acceptedFoodCategories: []
+    acceptedFoodCategories: [],
+    profilePictureUrl: currentUser?.profilePictureUrl || null
   });
 
   const [isEditing, setIsEditing] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState('');
   const [saveError, setSaveError] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+
+  // Profile picture states
+  const [isUploadingPic, setIsUploadingPic] = useState(false);
+  const [isRemovingPic, setIsRemovingPic] = useState(false);
+  const [picSuccess, setPicSuccess] = useState('');
+  const [picError, setPicError] = useState('');
+  const [showRemovePicModal, setShowRemovePicModal] = useState(false);
+
+  // Change Password states
+  const [passwordForm, setPasswordForm] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: ''
+  });
+  const [showCurrentPass, setShowCurrentPass] = useState(false);
+  const [showNewPass, setShowNewPass] = useState(false);
+  const [showConfirmPass, setShowConfirmPass] = useState(false);
+  const [isChangingPass, setIsChangingPass] = useState(false);
+  const [passSuccess, setPassSuccess] = useState('');
+  const [passError, setPassError] = useState('');
 
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deletePassword, setDeletePassword] = useState('');
@@ -55,7 +89,8 @@ export default function ProfilePage() {
             location: res.data.address || '',
             bio: res.data.bioOrDescription || '',
             donorType: res.data.donorType || 'Restaurant',
-            acceptedFoodCategories: res.data.acceptedFoodCategories || []
+            acceptedFoodCategories: res.data.acceptedFoodCategories || [],
+            profilePictureUrl: res.data.profilePictureUrl || null
           });
         }
       } catch (err) {
@@ -65,7 +100,8 @@ export default function ProfilePage() {
             ...prev,
             businessOrOrgName: currentUser.businessName || '',
             contactName: currentUser.name || '',
-            email: currentUser.email || ''
+            email: currentUser.email || '',
+            profilePictureUrl: currentUser.profilePictureUrl || null
           }));
         }
       }
@@ -74,6 +110,18 @@ export default function ProfilePage() {
       loadProfile();
     }
   }, [currentUser]);
+
+  // Lock background scroll when modals are open
+  useEffect(() => {
+    if (showDeleteModal || showRemovePicModal) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [showDeleteModal, showRemovePicModal]);
 
   if (!currentUser) {
     return (
@@ -87,6 +135,131 @@ export default function ProfilePage() {
       </div>
     );
   }
+
+  const handleProfilePictureSelect = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setPicError('');
+    setPicSuccess('');
+
+    // Scenario 5: File size validation
+    const MAX_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
+    if (file.size === 0) {
+      setPicError('The selected image file is empty. Please choose a valid image.');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+    if (file.size > MAX_SIZE_BYTES) {
+      setPicError('File size exceeds the 5MB limit. Please choose an image under 5MB.');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
+    // Scenario 4: File type validation
+    const allowedExtensions = ['.jpg', '.jpeg', '.png', '.webp'];
+    const fileName = file.name.toLowerCase();
+    const hasValidExt = allowedExtensions.some((ext) => fileName.endsWith(ext));
+    const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp'];
+    const hasValidMime = allowedMimeTypes.includes(file.type);
+
+    if (!hasValidExt || !hasValidMime) {
+      setPicError('Unsupported file format. Only JPG, PNG, and WEBP formats are supported.');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
+    setIsUploadingPic(true);
+    try {
+      const res = await updateProfilePicture(file);
+      setProfileData((prev) => ({
+        ...prev,
+        profilePictureUrl: res.data.profilePictureUrl
+      }));
+      setPicSuccess(res.message || 'Profile picture updated successfully!');
+      setTimeout(() => setPicSuccess(''), 5000);
+    } catch (err) {
+      setPicError(err.message || 'Failed to upload profile picture.');
+    } finally {
+      setIsUploadingPic(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleConfirmRemovePic = async () => {
+    setIsRemovingPic(true);
+    setPicError('');
+    setPicSuccess('');
+    try {
+      const res = await removeProfilePicture();
+      setProfileData((prev) => ({
+        ...prev,
+        profilePictureUrl: null
+      }));
+      setShowRemovePicModal(false);
+      setPicSuccess(res.message || 'Profile picture removed successfully.');
+      setTimeout(() => setPicSuccess(''), 5000);
+    } catch (err) {
+      setPicError(err.message || 'Failed to remove profile picture.');
+    } finally {
+      setIsRemovingPic(false);
+    }
+  };
+
+  const handleChangePassword = async (e) => {
+    e.preventDefault();
+    setPassError('');
+    setPassSuccess('');
+
+    // Scenario 2: Verify current password is provided
+    if (!passwordForm.currentPassword) {
+      setPassError('Please enter your current password.');
+      return;
+    }
+
+    // Scenario 4: Verify confirmation match
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      setPassError('New password and confirmation password do not match.');
+      return;
+    }
+
+    // Scenario 3: Verify new password complexity rules
+    const hasMinLen = passwordForm.newPassword.length >= 8;
+    const hasUpper = /[A-Z]/.test(passwordForm.newPassword);
+    const hasLower = /[a-z]/.test(passwordForm.newPassword);
+    const hasNum = /[0-9]/.test(passwordForm.newPassword);
+    const hasSpecial = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(passwordForm.newPassword);
+
+    if (!hasMinLen || !hasUpper || !hasLower || !hasNum || !hasSpecial) {
+      setPassError('New password must be at least 8 characters and include uppercase, lowercase, number, and special character.');
+      return;
+    }
+
+    if (passwordForm.newPassword === passwordForm.currentPassword) {
+      setPassError('New password cannot be identical to your current password.');
+      return;
+    }
+
+    setIsChangingPass(true);
+    try {
+      const res = await changePassword({
+        currentPassword: passwordForm.currentPassword,
+        newPassword: passwordForm.newPassword,
+        confirmPassword: passwordForm.confirmPassword
+      });
+      setPasswordForm({
+        currentPassword: '',
+        newPassword: '',
+        confirmPassword: ''
+      });
+      setPassSuccess(res.message || 'Password changed successfully! Please use your new password next time you sign in.');
+      setTimeout(() => setPassSuccess(''), 6000);
+    } catch (err) {
+      setPassError(err.message || 'Failed to update password. Please verify your current password.');
+    } finally {
+      setIsChangingPass(false);
+    }
+  };
 
   const handleSaveProfile = async (e) => {
     e.preventDefault();
@@ -135,6 +308,15 @@ export default function ProfilePage() {
     }
   };
 
+  const passCriteria = {
+    minLen: passwordForm.newPassword.length >= 8,
+    upper: /[A-Z]/.test(passwordForm.newPassword),
+    lower: /[a-z]/.test(passwordForm.newPassword),
+    num: /[0-9]/.test(passwordForm.newPassword),
+    special: /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(passwordForm.newPassword),
+    matches: passwordForm.confirmPassword.length > 0 && passwordForm.newPassword === passwordForm.confirmPassword
+  };
+
   return (
     <div className="page-view animate-fade-in-up">
       <div className="page-hero-banner">
@@ -145,32 +327,76 @@ export default function ProfilePage() {
           </div>
           <h1 className="page-hero-title">My RescuePlate Profile</h1>
           <p className="page-hero-subtitle">
-            Manage your account credentials, business details, and food rescue preferences in PostgreSQL.
+            Manage your profile picture, account credentials, and food rescue preferences in PostgreSQL.
           </p>
         </div>
       </div>
 
-      <div className="container" style={{ maxWidth: '800px', marginBottom: '80px' }}>
+      <div className="container" style={{ maxWidth: '820px', marginBottom: '80px' }}>
+        {/* Profile Details Notifications */}
         {saveSuccess && (
-          <div className="auth-success-banner animate-fade-in-up" style={{ marginBottom: '24px' }}>
+          <div className="auth-success-banner animate-fade-in-up" style={{ marginBottom: '20px' }}>
             <CheckCircle2 size={20} className="text-emerald" />
             <span>{saveSuccess}</span>
           </div>
         )}
 
         {saveError && (
-          <div className="auth-error-banner animate-fade-in-up" style={{ marginBottom: '24px' }}>
+          <div className="auth-error-banner animate-fade-in-up" style={{ marginBottom: '20px' }}>
             <AlertCircle size={20} className="text-accent" />
             <span>{saveError}</span>
           </div>
         )}
 
+        {/* Profile Picture Notifications */}
+        {picSuccess && (
+          <div className="auth-success-banner animate-fade-in-up" style={{ marginBottom: '20px' }}>
+            <CheckCircle2 size={20} className="text-emerald" />
+            <span>{picSuccess}</span>
+          </div>
+        )}
+
+        {picError && (
+          <div className="auth-error-banner animate-fade-in-up" style={{ marginBottom: '20px' }}>
+            <AlertCircle size={20} className="text-accent" />
+            <span>{picError}</span>
+          </div>
+        )}
+
         <div className="profile-card">
-          {/* Profile Header */}
+          {/* Profile Header with Avatar Management */}
           <div className="profile-card-header">
-            <div className="profile-avatar-circle">
-              {currentUser.role === 'DONOR' ? '🏢' : currentUser.role === 'ORGANIZATION' ? '🤝' : '🛡️'}
+            <div className="profile-avatar-wrapper">
+              <div className="profile-avatar-circle">
+                {profileData.profilePictureUrl ? (
+                  <img
+                    src={getProfileImageUrl(profileData.profilePictureUrl)}
+                    alt="Profile Avatar"
+                    className="profile-avatar-img"
+                  />
+                ) : (
+                  <span className="profile-avatar-emoji">
+                    {currentUser.role === 'DONOR' ? '🏢' : currentUser.role === 'ORGANIZATION' ? '🤝' : '🛡️'}
+                  </span>
+                )}
+                {isUploadingPic && (
+                  <div className="avatar-loading-overlay">
+                    <Loader2 className="animate-spin text-white" size={24} />
+                  </div>
+                )}
+              </div>
+
+              <button
+                type="button"
+                className="avatar-edit-badge"
+                onClick={() => fileInputRef.current?.click()}
+                title="Upload or change photo"
+                disabled={isUploadingPic || isRemovingPic}
+              >
+                <Camera size={14} />
+              </button>
             </div>
+
             <div className="profile-header-info">
               <div className="profile-name-row">
                 <h2>{profileData.businessOrOrgName || currentUser.businessName}</h2>
@@ -179,7 +405,57 @@ export default function ProfilePage() {
                 </span>
               </div>
               <p className="profile-contact-text">{profileData.contactName} • {profileData.email}</p>
+
+              {/* Photo Management Actions */}
+              <div className="profile-photo-actions-row">
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleProfilePictureSelect}
+                  accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+                  style={{ display: 'none' }}
+                />
+
+                <button
+                  type="button"
+                  className="btn btn-outline btn-xs"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isUploadingPic || isRemovingPic}
+                >
+                  {isUploadingPic ? (
+                    <>
+                      <Loader2 size={13} className="animate-spin" />
+                      <span>Uploading...</span>
+                    </>
+                  ) : profileData.profilePictureUrl ? (
+                    <>
+                      <RefreshCw size={13} />
+                      <span>Change Photo</span>
+                    </>
+                  ) : (
+                    <>
+                      <Upload size={13} />
+                      <span>Upload Photo</span>
+                    </>
+                  )}
+                </button>
+
+                {profileData.profilePictureUrl && (
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-xs text-accent"
+                    onClick={() => setShowRemovePicModal(true)}
+                    disabled={isUploadingPic || isRemovingPic}
+                  >
+                    <Trash2 size={13} />
+                    <span>Remove</span>
+                  </button>
+                )}
+
+                <span className="photo-hint-text">JPG, PNG, WEBP (Max 5MB)</span>
+              </div>
             </div>
+
             <button
               onClick={() => {
                 setIsEditing(!isEditing);
@@ -309,10 +585,213 @@ export default function ProfilePage() {
             </button>
           </div>
         </div>
+
+        {/* Security & Change Password Card */}
+        <div className="profile-card" style={{ marginTop: '32px' }}>
+          <div className="profile-card-header" style={{ marginBottom: '24px' }}>
+            <div className="profile-icon-square" style={{ background: '#eff6ff', color: '#1d4ed8' }}>
+              <KeyRound size={26} />
+            </div>
+            <div className="profile-header-info">
+              <div className="profile-name-row">
+                <h2>Account Security & Password</h2>
+                <span className="badge badge-primary">
+                  <ShieldCheck size={13} />
+                  <span>BCrypt Protected</span>
+                </span>
+              </div>
+              <p className="profile-contact-text">Update your password and maintain control over your account security.</p>
+            </div>
+          </div>
+
+          {passSuccess && (
+            <div className="auth-success-banner animate-fade-in-up" style={{ marginBottom: '20px' }}>
+              <CheckCircle2 size={20} className="text-emerald" />
+              <span>{passSuccess}</span>
+            </div>
+          )}
+
+          {passError && (
+            <div className="auth-error-banner animate-fade-in-up" style={{ marginBottom: '20px' }}>
+              <AlertCircle size={20} className="text-accent" />
+              <span>{passError}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleChangePassword} className="profile-form">
+            <div className="form-group">
+              <label className="form-label">Current Password *</label>
+              <div className="password-input-wrapper">
+                <input
+                  type={showCurrentPass ? 'text' : 'password'}
+                  className="form-input"
+                  placeholder="Enter your current password"
+                  value={passwordForm.currentPassword}
+                  onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })}
+                  required
+                />
+                <button
+                  type="button"
+                  className="password-toggle-btn"
+                  onClick={() => setShowCurrentPass(!showCurrentPass)}
+                  title={showCurrentPass ? 'Hide password' : 'Show password'}
+                >
+                  {showCurrentPass ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+            </div>
+
+            <div className="form-row">
+              <div className="form-group">
+                <label className="form-label">New Password *</label>
+                <div className="password-input-wrapper">
+                  <input
+                    type={showNewPass ? 'text' : 'password'}
+                    className="form-input"
+                    placeholder="Enter strong new password"
+                    value={passwordForm.newPassword}
+                    onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
+                    required
+                  />
+                  <button
+                    type="button"
+                    className="password-toggle-btn"
+                    onClick={() => setShowNewPass(!showNewPass)}
+                    title={showNewPass ? 'Hide password' : 'Show password'}
+                  >
+                    {showNewPass ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Confirm New Password *</label>
+                <div className="password-input-wrapper">
+                  <input
+                    type={showConfirmPass ? 'text' : 'password'}
+                    className="form-input"
+                    placeholder="Repeat new password"
+                    value={passwordForm.confirmPassword}
+                    onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
+                    required
+                  />
+                  <button
+                    type="button"
+                    className="password-toggle-btn"
+                    onClick={() => setShowConfirmPass(!showConfirmPass)}
+                    title={showConfirmPass ? 'Hide password' : 'Show password'}
+                  >
+                    {showConfirmPass ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Password Requirement Badges */}
+            {passwordForm.newPassword.length > 0 && (
+              <div className="password-requirements-box animate-fade-in-up">
+                <div className="requirements-title">Password Security Requirements:</div>
+                <div className="requirements-grid">
+                  <div className={`req-item ${passCriteria.minLen ? 'req-met' : 'req-unmet'}`}>
+                    {passCriteria.minLen ? <Check size={14} /> : <X size={14} />}
+                    <span>At least 8 characters</span>
+                  </div>
+                  <div className={`req-item ${passCriteria.upper ? 'req-met' : 'req-unmet'}`}>
+                    {passCriteria.upper ? <Check size={14} /> : <X size={14} />}
+                    <span>1 uppercase letter (A-Z)</span>
+                  </div>
+                  <div className={`req-item ${passCriteria.lower ? 'req-met' : 'req-unmet'}`}>
+                    {passCriteria.lower ? <Check size={14} /> : <X size={14} />}
+                    <span>1 lowercase letter (a-z)</span>
+                  </div>
+                  <div className={`req-item ${passCriteria.num ? 'req-met' : 'req-unmet'}`}>
+                    {passCriteria.num ? <Check size={14} /> : <X size={14} />}
+                    <span>1 number (0-9)</span>
+                  </div>
+                  <div className={`req-item ${passCriteria.special ? 'req-met' : 'req-unmet'}`}>
+                    {passCriteria.special ? <Check size={14} /> : <X size={14} />}
+                    <span>1 special character (!@#$...)</span>
+                  </div>
+                  {passwordForm.confirmPassword.length > 0 && (
+                    <div className={`req-item ${passCriteria.matches ? 'req-met' : 'req-unmet'}`}>
+                      {passCriteria.matches ? <Check size={14} /> : <X size={14} />}
+                      <span>Passwords match</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={isChangingPass}
+              className="btn btn-primary"
+              style={{ marginTop: '16px', alignSelf: 'flex-start' }}
+            >
+              {isChangingPass ? (
+                <>
+                  <Loader2 size={16} className="animate-spin" />
+                  <span>Updating Password...</span>
+                </>
+              ) : (
+                <>
+                  <Lock size={16} />
+                  <span>Update Password</span>
+                </>
+              )}
+            </button>
+          </form>
+        </div>
       </div>
 
+      {/* Remove Picture Confirmation Modal */}
+      {showRemovePicModal && createPortal(
+        <div className="modal-backdrop" onClick={() => setShowRemovePicModal(false)}>
+          <div className="modal-container" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '440px' }}>
+            <div className="modal-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <Trash2 size={22} className="text-accent" />
+                <h3 className="modal-title">Remove Profile Picture?</h3>
+              </div>
+              <button className="modal-close-btn" onClick={() => setShowRemovePicModal(false)}>✕</button>
+            </div>
+
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.92rem', marginBottom: '22px' }}>
+              Are you sure you want to remove your profile photo? Your profile will revert to the default avatar and the image file will be permanently deleted from the server.
+            </p>
+
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button
+                type="button"
+                onClick={() => setShowRemovePicModal(false)}
+                className="btn btn-outline full-width"
+                disabled={isRemovingPic}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmRemovePic}
+                disabled={isRemovingPic}
+                className="btn btn-accent full-width"
+              >
+                {isRemovingPic ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin" />
+                    <span>Removing...</span>
+                  </>
+                ) : (
+                  'Remove Photo'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
       {/* Delete Account Modal */}
-      {showDeleteModal && (
+      {showDeleteModal && createPortal(
         <div className="modal-backdrop" onClick={() => setShowDeleteModal(false)}>
           <div className="modal-container" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '480px' }}>
             <div className="modal-header">
@@ -342,6 +821,7 @@ export default function ProfilePage() {
                   placeholder="Enter password to confirm deletion"
                   value={deletePassword}
                   onChange={(e) => setDeletePassword(e.target.value)}
+                  autoFocus
                   required
                 />
               </div>
@@ -364,7 +844,8 @@ export default function ProfilePage() {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

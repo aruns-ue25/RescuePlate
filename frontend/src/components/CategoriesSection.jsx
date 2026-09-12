@@ -6,8 +6,7 @@ import {
   Milk, 
   Package, 
   Coffee,
-  CheckCircle2,
-  ArrowRight
+  CheckCircle2
 } from 'lucide-react';
 
 export default function CategoriesSection({ onOpenAuth }) {
@@ -117,17 +116,6 @@ export default function CategoriesSection({ onOpenAuth }) {
               </div>
             </div>
           ))}
-        </div>
-
-        {/* Bottom CTA */}
-        <div className="categories-footer text-center">
-          <button
-            onClick={() => onOpenAuth('register', 'DONOR')}
-            className="btn btn-primary btn-lg"
-          >
-            <span>Have Surplus Food to Donate? Post a Listing Now</span>
-            <ArrowRight size={18} />
-          </button>
         </div>
       </div>
     </section>

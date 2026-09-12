@@ -21,6 +21,9 @@ public class User
 
     public bool IsActive { get; set; } = true;
 
+    [MaxLength(500)]
+    public string? ProfilePictureUrl { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;

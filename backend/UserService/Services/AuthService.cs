@@ -9,6 +9,7 @@ public interface IAuthService
 {
     Task<(bool Success, string Message, AuthResponseDto? Data)> RegisterAsync(RegisterDto dto);
     Task<(bool Success, string Message, AuthResponseDto? Data)> LoginAsync(LoginDto dto);
+    Task<(bool Success, string Message)> ChangePasswordAsync(Guid userId, ChangePasswordDto dto);
     Task<(bool Success, string Message)> DeleteAccountAsync(Guid userId, string password);
 }
 
@@ -160,11 +161,48 @@ public class AuthService : IAuthService
             Role = user.Role.ToString(),
             Name = contactName,
             BusinessName = businessName,
+            ProfilePictureUrl = user.ProfilePictureUrl,
             Token = token,
             ExpiresAt = DateTime.UtcNow.AddDays(7)
         };
 
         return (true, "Signed in successfully!", responseData);
+    }
+
+    public async Task<(bool Success, string Message)> ChangePasswordAsync(Guid userId, ChangePasswordDto dto)
+    {
+        var user = await _db.Users.FindAsync(userId);
+        if (user == null)
+        {
+            return (false, "User account not found.");
+        }
+
+        // 1. Verify current password (SRS AC Scenario 2)
+        bool isCurrentPasswordValid = BCrypt.Net.BCrypt.Verify(dto.CurrentPassword, user.PasswordHash);
+        if (!isCurrentPasswordValid)
+        {
+            return (false, "The current password you provided is incorrect.");
+        }
+
+        // 2. Validate confirmation match (SRS AC Scenario 4)
+        if (dto.NewPassword != dto.ConfirmPassword)
+        {
+            return (false, "New password and confirmation password do not match.");
+        }
+
+        // 3. Prevent identical old password reuse
+        if (BCrypt.Net.BCrypt.Verify(dto.NewPassword, user.PasswordHash))
+        {
+            return (false, "New password cannot be the same as your current password.");
+        }
+
+        // 4. Secure Password Storage with BCrypt work factor 11 (SRS AC Scenario 7)
+        user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.NewPassword, workFactor: 11);
+        user.UpdatedAt = DateTime.UtcNow;
+
+        await _db.SaveChangesAsync();
+
+        return (true, "Password has been changed successfully.");
     }
 
     public async Task<(bool Success, string Message)> DeleteAccountAsync(Guid userId, string password)

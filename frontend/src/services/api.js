@@ -72,6 +72,39 @@ export const authApi = {
     }
   },
 
+  uploadProfilePicture: async (file) => {
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const response = await api.post('/profile/me/picture', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { message: 'Failed to upload profile picture' };
+    }
+  },
+
+  removeProfilePicture: async () => {
+    try {
+      const response = await api.delete('/profile/me/picture');
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { message: 'Failed to remove profile picture' };
+    }
+  },
+
+  changePassword: async (passwordData) => {
+    try {
+      const response = await api.post('/auth/change-password', passwordData);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { message: 'Failed to change password' };
+    }
+  },
+
   deleteAccount: async (password) => {
     try {
       const response = await api.delete('/auth/account', { data: { password } });
@@ -98,6 +131,168 @@ export const authApi = {
       throw error.response?.data || { message: 'Failed to update status' };
     }
   }
+};
+
+const DONATION_API_BASE_URL = import.meta.env.VITE_DONATION_API_BASE_URL || 'http://localhost:5001/api';
+
+const donationClient = axios.create({
+  baseURL: DONATION_API_BASE_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  timeout: 8000,
+});
+
+donationClient.interceptors.request.use((config) => {
+  const token = localStorage.getItem('rescueplate_token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+export const donationApi = {
+  createDonation: async (donationData) => {
+    try {
+      const response = await donationClient.post('/donations', donationData);
+      return response.data;
+    } catch (error) {
+      if (error.response?.data) {
+        throw error.response.data;
+      }
+      throw { message: error.message || 'Network Error', isNetworkError: !error.response };
+    }
+  },
+
+  updateDonation: async (id, donationData) => {
+    try {
+      const response = await donationClient.put(`/donations/${id}`, donationData);
+      return response.data;
+    } catch (error) {
+      if (error.response?.data) {
+        throw error.response.data;
+      }
+      throw { message: error.message || 'Network Error', isNetworkError: !error.response };
+    }
+  },
+
+  cancelDonation: async (id, reason) => {
+    try {
+      const response = await donationClient.patch(`/donations/${id}/cancel`, { reason });
+      return response.data;
+    } catch (error) {
+      if (error.response?.data) {
+        throw error.response.data;
+      }
+      throw { message: error.message || 'Network Error', isNetworkError: !error.response };
+    }
+  },
+
+  getMyDonations: async (params = {}) => {
+    try {
+      const cleanParams = {};
+      if (params.status && params.status !== 'ALL') cleanParams.status = params.status;
+      if (params.search && params.search.trim()) cleanParams.search = params.search.trim();
+      const response = await donationClient.get('/donations/my-donations', { params: cleanParams });
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { message: 'Failed to fetch donations' };
+    }
+  },
+
+  getDonationById: async (id) => {
+    try {
+      const response = await donationClient.get(`/donations/${id}`);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { message: 'Failed to fetch donation details' };
+    }
+  },
+
+  getAvailableDonations: async (category, search) => {
+    try {
+      const params = {};
+      if (category && category !== 'ALL') params.category = category;
+      if (search) params.search = search;
+      const response = await donationClient.get('/donations', { params });
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { message: 'Failed to browse donations' };
+    }
+  },
+
+  updateAvailability: async (id, availabilityData) => {
+    try {
+      const response = await donationClient.patch(`/donations/${id}/availability`, availabilityData);
+      return response.data;
+    } catch (error) {
+      if (error.response?.data) {
+        throw error.response.data;
+      }
+      throw { message: error.message || 'Network Error', isNetworkError: !error.response };
+    }
+  },
+
+  requestDonation: async (id, requestData) => {
+    try {
+      const response = await donationClient.post(`/donations/${id}/request`, requestData);
+      return response.data;
+    } catch (error) {
+      if (error.response?.data) {
+        throw error.response.data;
+      }
+      throw { message: error.message || 'Network Error', isNetworkError: !error.response };
+    }
+  },
+
+  getParticipatingDonors: async (params = {}) => {
+    try {
+      const cleanParams = {};
+      if (params.search && params.search.trim()) cleanParams.search = params.search.trim();
+      if (params.donorType && params.donorType !== 'ALL') cleanParams.donorType = params.donorType;
+      const response = await donationClient.get('/donations/donors', { params: cleanParams });
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { message: 'Failed to fetch participating donors' };
+    }
+  },
+
+  getDonorProfile: async (donorId) => {
+    try {
+      const response = await donationClient.get(`/donations/donors/${donorId}`);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { message: 'Failed to fetch donor profile details' };
+    }
+  },
+
+  getParticipatingOrganizations: async (params = {}) => {
+    try {
+      const cleanParams = {};
+      if (params.search && params.search.trim()) cleanParams.search = params.search.trim();
+      if (params.foodCategory && params.foodCategory !== 'ALL') cleanParams.foodCategory = params.foodCategory;
+      const response = await donationClient.get('/donations/organizations', { params: cleanParams });
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { message: 'Failed to fetch participating organizations' };
+    }
+  },
+
+  getOrganizationProfile: async (organizationId) => {
+    try {
+      const response = await donationClient.get(`/donations/organizations/${organizationId}`);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { message: 'Failed to fetch organization profile details' };
+    }
+  }
+};
+
+export const getProfileImageUrl = (url) => {
+  if (!url) return null;
+  if (url.startsWith('http://') || url.startsWith('https://')) return url;
+  const baseUrl = API_BASE_URL.replace(/\/api\/?$/, '');
+  return `${baseUrl}${url.startsWith('/') ? '' : '/'}${url}`;
 };
 
 export default api;

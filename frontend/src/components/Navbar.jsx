@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { getProfileImageUrl } from '../services/api';
 import { 
   Utensils, 
   Menu, 
@@ -58,6 +59,12 @@ export default function Navbar() {
           <NavLink to="/browse-food" className={({ isActive }) => `nav-link ${isActive ? 'nav-link-active' : ''}`}>
             Browse Food
           </NavLink>
+          <NavLink to="/donors" className={({ isActive }) => `nav-link ${isActive ? 'nav-link-active' : ''}`}>
+            Donors
+          </NavLink>
+          <NavLink to="/organizations" className={({ isActive }) => `nav-link ${isActive ? 'nav-link-active' : ''}`}>
+            Charities
+          </NavLink>
           {currentUser?.role !== 'ORGANIZATION' && (
             <NavLink to="/donor-portal" className={({ isActive }) => `nav-link ${isActive ? 'nav-link-active' : ''}`}>
               Post Surplus
@@ -79,7 +86,15 @@ export default function Navbar() {
           {currentUser ? (
             <div className="logged-user-strip">
               <Link to="/profile" className="user-profile-badge" title="View Profile">
-                <span className="user-role-dot"></span>
+                {currentUser.profilePictureUrl ? (
+                  <img
+                    src={getProfileImageUrl(currentUser.profilePictureUrl)}
+                    alt="Avatar"
+                    className="nav-avatar-img"
+                  />
+                ) : (
+                  <span className="user-role-dot"></span>
+                )}
                 <span className="user-business-name">{currentUser.businessName || currentUser.name}</span>
                 <span className="user-role-tag">{currentUser.role}</span>
               </Link>
@@ -123,6 +138,14 @@ export default function Navbar() {
               <span>Browse Surplus Food</span>
               <ChevronRight size={16} />
             </Link>
+            <Link to="/donors" className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>
+              <span>Browse Donors</span>
+              <ChevronRight size={16} />
+            </Link>
+            <Link to="/organizations" className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>
+              <span>Browse Charities</span>
+              <ChevronRight size={16} />
+            </Link>
             {currentUser?.role !== 'ORGANIZATION' && (
               <Link to="/donor-portal" className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>
                 <span>Donor Portal / Post Food</span>
@@ -143,7 +166,16 @@ export default function Navbar() {
             </Link>
             {currentUser && (
               <Link to="/profile" className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>
-                <span>My Profile</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  {currentUser.profilePictureUrl && (
+                    <img
+                      src={getProfileImageUrl(currentUser.profilePictureUrl)}
+                      alt="Avatar"
+                      className="nav-avatar-img"
+                    />
+                  )}
+                  <span>My Profile</span>
+                </div>
                 <ChevronRight size={16} />
               </Link>
             )}
