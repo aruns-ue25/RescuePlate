@@ -183,6 +183,84 @@ public class DonationsController : ControllerBase
         return Ok(result);
     }
 
+    /// <summary>
+    /// Updates the availability period / expiry deadline for a donation.
+    /// Scenario 1: Set Availability Period.
+    /// </summary>
+    [HttpPatch("{id:int}/availability")]
+    [Authorize(Roles = "DONOR")]
+    [ProducesResponseType(typeof(ApiResponse<DonationResponseDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> UpdateAvailability(int id, [FromBody] UpdateAvailabilityDto dto)
+    {
+        var (donorId, _, _) = GetCurrentDonorIdentity();
+        if (string.IsNullOrWhiteSpace(donorId))
+        {
+            return Unauthorized(ApiResponse<DonationResponseDto>.Fail("Invalid or missing Donor authentication claims."));
+        }
+
+        var result = await _donationService.UpdateAvailabilityAsync(id, donorId, dto);
+        if (!result.Success)
+        {
+            if (result.Message.Contains("not found", StringComparison.OrdinalIgnoreCase))
+            {
+                return NotFound(result);
+            }
+            if (result.Message.Contains("permission", StringComparison.OrdinalIgnoreCase))
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, result);
+            }
+            return BadRequest(result);
+        }
+
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Claims/requests portions of an available donation for an Organization.
+    /// Scenario 2 & 4: Prevents requests on expired or unavailable donations.
+    /// </summary>
+    [HttpPost("{id:int}/request")]
+    [Authorize(Roles = "ORGANIZATION,DONOR")]
+    [ProducesResponseType(typeof(ApiResponse<DonationResponseDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> RequestDonation(int id, [FromBody] ClaimRequestDto dto)
+    {
+        var orgId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+            ?? User.FindFirst("id")?.Value
+            ?? User.FindFirst("sub")?.Value
+            ?? string.Empty;
+
+        var orgName = User.FindFirst("OrganizationName")?.Value
+            ?? User.FindFirst("organizationName")?.Value
+            ?? User.FindFirst("BusinessName")?.Value
+            ?? User.FindFirst("businessName")?.Value
+            ?? User.FindFirst(ClaimTypes.Name)?.Value
+            ?? "Partner Organization";
+
+        if (string.IsNullOrWhiteSpace(orgId))
+        {
+            return Unauthorized(ApiResponse<DonationResponseDto>.Fail("Invalid or missing user authentication claims."));
+        }
+
+        var result = await _donationService.RequestDonationAsync(id, orgId, orgName, dto);
+        if (!result.Success)
+        {
+            if (result.Message.Contains("not found", StringComparison.OrdinalIgnoreCase))
+            {
+                return NotFound(result);
+            }
+            return BadRequest(result);
+        }
+
+        return Ok(result);
+    }
+
     private (string id, string name, string email) GetCurrentDonorIdentity()
     {
         var idClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value

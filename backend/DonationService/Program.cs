@@ -65,6 +65,7 @@ builder.Services.AddCors(options =>
 
 // 4. Register Services
 builder.Services.AddScoped<IDonationService, DonationServiceImpl>();
+builder.Services.AddHostedService<DonationExpiryBackgroundService>();
 
 // 5. Controllers & JSON Options
 builder.Services.AddControllers()

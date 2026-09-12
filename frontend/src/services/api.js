@@ -219,6 +219,30 @@ export const donationApi = {
     } catch (error) {
       throw error.response?.data || { message: 'Failed to browse donations' };
     }
+  },
+
+  updateAvailability: async (id, availabilityData) => {
+    try {
+      const response = await donationClient.patch(`/donations/${id}/availability`, availabilityData);
+      return response.data;
+    } catch (error) {
+      if (error.response?.data) {
+        throw error.response.data;
+      }
+      throw { message: error.message || 'Network Error', isNetworkError: !error.response };
+    }
+  },
+
+  requestDonation: async (id, requestData) => {
+    try {
+      const response = await donationClient.post(`/donations/${id}/request`, requestData);
+      return response.data;
+    } catch (error) {
+      if (error.response?.data) {
+        throw error.response.data;
+      }
+      throw { message: error.message || 'Network Error', isNetworkError: !error.response };
+    }
   }
 };
 

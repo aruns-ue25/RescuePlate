@@ -292,6 +292,172 @@ public class DonationServiceImpl : IDonationService
         }
     }
 
+    public async Task<ApiResponse<DonationResponseDto>> UpdateAvailabilityAsync(int id, string donorId, UpdateAvailabilityDto dto)
+    {
+        try
+        {
+            var donation = await _context.Donations.FindAsync(id);
+            if (donation == null)
+            {
+                return ApiResponse<DonationResponseDto>.Fail("Donation not found.");
+            }
+
+            if (donation.DonorId != donorId)
+            {
+                return ApiResponse<DonationResponseDto>.Fail("You do not have permission to manage availability for this donation.");
+            }
+
+            if (donation.Status == "Cancelled")
+            {
+                return ApiResponse<DonationResponseDto>.Fail("Cancelled donations cannot have their availability updated.");
+            }
+
+            if (donation.Status == "Completed")
+            {
+                return ApiResponse<DonationResponseDto>.Fail("Completed donations cannot have their availability updated.");
+            }
+
+            DateTime? calculatedExpiry = null;
+            if (dto.ExpiryHours.HasValue)
+            {
+                if (dto.ExpiryHours.Value <= 0)
+                {
+                    return ApiResponse<DonationResponseDto>.Fail("Availability period / expiry hours must be greater than 0.");
+                }
+                calculatedExpiry = DateTime.UtcNow.AddHours(dto.ExpiryHours.Value);
+            }
+            else if (dto.ExpiryTime.HasValue)
+            {
+                calculatedExpiry = dto.ExpiryTime.Value.ToUniversalTime();
+            }
+            else
+            {
+                return ApiResponse<DonationResponseDto>.Fail("Please specify expiry hours or an explicit availability deadline.");
+            }
+
+            if (calculatedExpiry <= DateTime.UtcNow)
+            {
+                return ApiResponse<DonationResponseDto>.Fail("Availability period / expiry time must be in the future.");
+            }
+
+            donation.ExpiryTime = calculatedExpiry.Value;
+            if (donation.Status == "Expired" && donation.RemainingQuantity > 0)
+            {
+                donation.Status = donation.ClaimedQuantity > 0 ? "Partially Claimed" : "Available";
+            }
+            donation.UpdatedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+            _logger.LogInformation("Availability for Donation #{Id} updated to {ExpiryTime} by Donor #{DonorId}", id, donation.ExpiryTime, donorId);
+
+            return ApiResponse<DonationResponseDto>.Ok(MapToResponseDto(donation), "Donation availability period updated successfully.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating availability for donation #{Id}", id);
+            return ApiResponse<DonationResponseDto>.Fail($"Failed to update availability: {ex.Message}");
+        }
+    }
+
+    public async Task<ApiResponse<DonationResponseDto>> RequestDonationAsync(int id, string organizationId, string organizationName, ClaimRequestDto dto)
+    {
+        try
+        {
+            var donation = await _context.Donations.FindAsync(id);
+            if (donation == null)
+            {
+                return ApiResponse<DonationResponseDto>.Fail("Donation not found.");
+            }
+
+            // Scenario 3 & 4: Prevent request on expired donation
+            if (DateTime.UtcNow > donation.ExpiryTime || donation.Status == "Expired")
+            {
+                return ApiResponse<DonationResponseDto>.Fail("This food donation has reached the end of its availability period (expired) and cannot receive new requests.");
+            }
+
+            if (donation.Status == "Cancelled")
+            {
+                return ApiResponse<DonationResponseDto>.Fail("This food donation has been cancelled by the donor and is no longer available.");
+            }
+
+            if (donation.Status == "Completed")
+            {
+                return ApiResponse<DonationResponseDto>.Fail("This food donation has already been completed and distributed.");
+            }
+
+            if (donation.RemainingQuantity <= 0)
+            {
+                return ApiResponse<DonationResponseDto>.Fail("All available portions for this food donation have already been claimed.");
+            }
+
+            if (dto.Quantity <= 0)
+            {
+                return ApiResponse<DonationResponseDto>.Fail("Requested portion quantity must be greater than 0.");
+            }
+
+            if (dto.Quantity > donation.RemainingQuantity)
+            {
+                return ApiResponse<DonationResponseDto>.Fail($"Requested quantity ({dto.Quantity}) exceeds remaining available portions ({donation.RemainingQuantity} {donation.Unit}).");
+            }
+
+            donation.ClaimedQuantity += dto.Quantity;
+            donation.RemainingQuantity = Math.Max(0, donation.TotalQuantity - donation.ClaimedQuantity);
+
+            if (donation.RemainingQuantity == 0)
+            {
+                donation.Status = "Fully Claimed";
+            }
+            else
+            {
+                donation.Status = "Partially Claimed";
+            }
+
+            donation.UpdatedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+            _logger.LogInformation("Organization '{OrgName}' (#{OrgId}) claimed {Quantity} portions of Donation #{DonationId}. Remaining: {Remaining}",
+                organizationName, organizationId, dto.Quantity, donation.Id, donation.RemainingQuantity);
+
+            return ApiResponse<DonationResponseDto>.Ok(MapToResponseDto(donation), $"Successfully requested {dto.Quantity} {donation.Unit} for {organizationName}.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error processing food request for donation #{Id}", id);
+            return ApiResponse<DonationResponseDto>.Fail($"Failed to process food request: {ex.Message}");
+        }
+    }
+
+    public async Task<int> ProcessExpiredDonationsAsync()
+    {
+        try
+        {
+            var now = DateTime.UtcNow;
+            var expiredDonations = await _context.Donations
+                .Where(d => d.Status != "Completed" && 
+                            d.Status != "Cancelled" && 
+                            d.Status != "Expired" && 
+                            now > d.ExpiryTime)
+                .ToListAsync();
+
+            if (expiredDonations.Count == 0) return 0;
+
+            foreach (var d in expiredDonations)
+            {
+                d.Status = "Expired";
+                d.UpdatedAt = now;
+            }
+
+            await _context.SaveChangesAsync();
+            _logger.LogInformation("System workflow: {Count} past-deadline donations automatically marked as Expired.", expiredDonations.Count);
+            return expiredDonations.Count;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error processing expired donations workflow.");
+            return 0;
+        }
+    }
+
     public async Task<ApiResponse<List<DonationResponseDto>>> GetMyDonationsAsync(
         string donorId, 
         string? status = null, 
