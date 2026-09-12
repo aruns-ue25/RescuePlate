@@ -261,6 +261,38 @@ public class DonationsController : ControllerBase
         return Ok(result);
     }
 
+    /// <summary>
+    /// Scenario 1, 2, 3: Dedicated discovery endpoint for participating Donors.
+    /// Returns public profile information (name, type, location, bio, stats).
+    /// </summary>
+    [HttpGet("donors")]
+    [Authorize]
+    [ProducesResponseType(typeof(ApiResponse<List<DonorDiscoveryDto>>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetParticipatingDonors(
+        [FromQuery] string? search = null,
+        [FromQuery] string? donorType = null)
+    {
+        var result = await _donationService.GetParticipatingDonorsAsync(search, donorType);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Scenario 4: Select and view a Donor's detailed profile and active listings.
+    /// </summary>
+    [HttpGet("donors/{donorId}")]
+    [Authorize]
+    [ProducesResponseType(typeof(ApiResponse<DonorDiscoveryDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetDonorProfileDetails(string donorId)
+    {
+        var result = await _donationService.GetDonorProfileDetailsAsync(donorId);
+        if (!result.Success)
+        {
+            return NotFound(result);
+        }
+        return Ok(result);
+    }
+
     private (string id, string name, string email) GetCurrentDonorIdentity()
     {
         var idClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value

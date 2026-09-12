@@ -59,6 +59,9 @@ export default function Navbar() {
           <NavLink to="/browse-food" className={({ isActive }) => `nav-link ${isActive ? 'nav-link-active' : ''}`}>
             Browse Food
           </NavLink>
+          <NavLink to="/donors" className={({ isActive }) => `nav-link ${isActive ? 'nav-link-active' : ''}`}>
+            Donors
+          </NavLink>
           {currentUser?.role !== 'ORGANIZATION' && (
             <NavLink to="/donor-portal" className={({ isActive }) => `nav-link ${isActive ? 'nav-link-active' : ''}`}>
               Post Surplus
@@ -130,6 +133,10 @@ export default function Navbar() {
             </Link>
             <Link to="/browse-food" className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>
               <span>Browse Surplus Food</span>
+              <ChevronRight size={16} />
+            </Link>
+            <Link to="/donors" className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>
+              <span>Browse Donors</span>
               <ChevronRight size={16} />
             </Link>
             {currentUser?.role !== 'ORGANIZATION' && (

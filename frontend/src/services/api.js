@@ -243,6 +243,27 @@ export const donationApi = {
       }
       throw { message: error.message || 'Network Error', isNetworkError: !error.response };
     }
+  },
+
+  getParticipatingDonors: async (params = {}) => {
+    try {
+      const cleanParams = {};
+      if (params.search && params.search.trim()) cleanParams.search = params.search.trim();
+      if (params.donorType && params.donorType !== 'ALL') cleanParams.donorType = params.donorType;
+      const response = await donationClient.get('/donations/donors', { params: cleanParams });
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { message: 'Failed to fetch participating donors' };
+    }
+  },
+
+  getDonorProfile: async (donorId) => {
+    try {
+      const response = await donationClient.get(`/donations/donors/${donorId}`);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { message: 'Failed to fetch donor profile details' };
+    }
   }
 };
 

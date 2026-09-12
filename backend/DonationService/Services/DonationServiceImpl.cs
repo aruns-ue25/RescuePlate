@@ -571,6 +571,132 @@ public class DonationServiceImpl : IDonationService
         }
     }
 
+    public async Task<ApiResponse<List<DonorDiscoveryDto>>> GetParticipatingDonorsAsync(string? search = null, string? donorType = null)
+    {
+        try
+        {
+            var query = _context.Donations.AsQueryable();
+
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var s = search.Trim().ToLower();
+                query = query.Where(d =>
+                    d.DonorName.ToLower().Contains(s) ||
+                    d.Location.ToLower().Contains(s) ||
+                    d.Notes.ToLower().Contains(s));
+            }
+
+            var allDonations = await query.ToListAsync();
+            var grouped = allDonations.GroupBy(d => d.DonorId).ToList();
+
+            var list = new List<DonorDiscoveryDto>();
+            var now = DateTime.UtcNow;
+
+            foreach (var group in grouped)
+            {
+                var donorId = group.Key;
+                var latestDonation = group.OrderByDescending(d => d.CreatedAt).First();
+                var earliestDonation = group.OrderBy(d => d.CreatedAt).First();
+
+                var activeCount = group.Count(d => d.Status != "Cancelled" && d.Status != "Completed" && d.Status != "Expired" && d.ExpiryTime > now && (d.TotalQuantity - d.ClaimedQuantity) > 0);
+                var completedCount = group.Count(d => d.Status == "Completed" || d.Status == "Fully Claimed");
+                var totalPortions = group.Sum(d => d.TotalQuantity);
+
+                // Guess or infer donor type from category/notes or default to verified business
+                var inferredType = "Food Business";
+                if (group.Any(d => d.Category == "Bakery")) inferredType = "Bakery";
+                else if (group.Any(d => d.Category == "Cooked Meals")) inferredType = "Restaurant";
+                else if (group.Any(d => d.Category == "Fresh Produce")) inferredType = "Supermarket";
+
+                if (!string.IsNullOrWhiteSpace(donorType) && donorType.ToUpper() != "ALL")
+                {
+                    if (!inferredType.Equals(donorType, StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+                }
+
+                list.Add(new DonorDiscoveryDto
+                {
+                    DonorId = donorId,
+                    BusinessName = latestDonation.DonorName,
+                    DonorType = inferredType,
+                    Location = latestDonation.Location,
+                    Bio = !string.IsNullOrWhiteSpace(latestDonation.Notes) 
+                        ? latestDonation.Notes 
+                        : $"Partnered food donor contributing surplus to combat local food insecurity.",
+                    ProfilePictureUrl = null,
+                    ActiveDonationsCount = activeCount,
+                    CompletedDonationsCount = completedCount,
+                    TotalPortionsContributed = totalPortions,
+                    MemberSince = earliestDonation.CreatedAt
+                });
+            }
+
+            return ApiResponse<List<DonorDiscoveryDto>>.Ok(list, "Participating donors retrieved successfully.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving participating donors.");
+            return ApiResponse<List<DonorDiscoveryDto>>.Fail($"Failed to retrieve donors: {ex.Message}");
+        }
+    }
+
+    public async Task<ApiResponse<DonorDiscoveryDto>> GetDonorProfileDetailsAsync(string donorId)
+    {
+        try
+        {
+            var donorListings = await _context.Donations
+                .Where(d => d.DonorId == donorId)
+                .OrderByDescending(d => d.CreatedAt)
+                .ToListAsync();
+
+            if (donorListings.Count == 0)
+            {
+                return ApiResponse<DonorDiscoveryDto>.Fail("Donor not found or has no public activity.");
+            }
+
+            var latest = donorListings.First();
+            var earliest = donorListings.Last();
+            var now = DateTime.UtcNow;
+
+            var activeCount = donorListings.Count(d => d.Status != "Cancelled" && d.Status != "Completed" && d.Status != "Expired" && d.ExpiryTime > now && (d.TotalQuantity - d.ClaimedQuantity) > 0);
+            var completedCount = donorListings.Count(d => d.Status == "Completed" || d.Status == "Fully Claimed");
+            var totalPortions = donorListings.Sum(d => d.TotalQuantity);
+
+            var activeDtos = donorListings
+                .Where(d => d.Status != "Cancelled" && d.Status != "Completed" && d.ExpiryTime > now && (d.TotalQuantity - d.ClaimedQuantity) > 0)
+                .Select(MapToResponseDto)
+                .ToList();
+
+            var inferredType = "Food Business";
+            if (donorListings.Any(d => d.Category == "Bakery")) inferredType = "Bakery";
+            else if (donorListings.Any(d => d.Category == "Cooked Meals")) inferredType = "Restaurant";
+            else if (donorListings.Any(d => d.Category == "Fresh Produce")) inferredType = "Supermarket";
+
+            var dto = new DonorDiscoveryDto
+            {
+                DonorId = donorId,
+                BusinessName = latest.DonorName,
+                DonorType = inferredType,
+                Location = latest.Location,
+                Bio = !string.IsNullOrWhiteSpace(latest.Notes) ? latest.Notes : "Verified food rescue contributor.",
+                ActiveDonationsCount = activeCount,
+                CompletedDonationsCount = completedCount,
+                TotalPortionsContributed = totalPortions,
+                MemberSince = earliest.CreatedAt,
+                ActiveListings = activeDtos
+            };
+
+            return ApiResponse<DonorDiscoveryDto>.Ok(dto, "Donor profile details retrieved successfully.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving donor profile details for {DonorId}", donorId);
+            return ApiResponse<DonorDiscoveryDto>.Fail($"Failed to retrieve donor profile: {ex.Message}");
+        }
+    }
+
     private static DonationResponseDto MapToResponseDto(Donation d)
     {
         var calculatedRemaining = d.Status == "Cancelled" ? 0 : Math.Max(0, d.TotalQuantity - d.ClaimedQuantity);

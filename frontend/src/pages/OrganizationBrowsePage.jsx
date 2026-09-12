@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { donationApi } from '../services/api';
@@ -19,7 +19,8 @@ import {
   Send,
   X,
   ShieldCheck,
-  Tag
+  Tag,
+  Users
 } from 'lucide-react';
 
 export default function OrganizationBrowsePage() {
@@ -157,6 +158,23 @@ export default function OrganizationBrowsePage() {
           <p className="dashboard-subtitle">
             Connect directly with verified local restaurants, hotels, and bakeries to claim fresh surplus food within active availability periods.
           </p>
+
+          <div style={{ display: 'flex', gap: '12px', marginTop: '20px' }}>
+            <div 
+              style={{ background: '#fff', color: '#111827', fontWeight: 700, borderRadius: '24px', padding: '8px 18px', fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '6px' }}
+            >
+              <HeartHandshake size={15} color="#d97706" />
+              <span>Browse Surplus Food</span>
+            </div>
+            <Link 
+              to="/donors" 
+              className="btn btn-outline"
+              style={{ background: 'rgba(255,255,255,0.15)', color: '#fff', borderColor: 'rgba(255,255,255,0.4)', borderRadius: '24px', padding: '8px 18px', fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '6px' }}
+            >
+              <Users size={14} />
+              <span>Browse Donors Directory</span>
+            </Link>
+          </div>
         </div>
       </div>
 
@@ -299,7 +317,13 @@ export default function OrganizationBrowsePage() {
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#047857', fontSize: '0.85rem', fontWeight: 600, marginBottom: '12px' }}>
                       <Building2 size={15} />
-                      <span>{item.donorName || "Verified Food Donor"}</span>
+                      <Link 
+                        to="/donors" 
+                        style={{ color: '#047857', textDecoration: 'none', hover: { textDecoration: 'underline' } }}
+                        title="View donor profile in directory"
+                      >
+                        {item.donorName || "Verified Food Donor"}
+                      </Link>
                     </div>
 
                     <div style={{ background: '#f9fafb', borderRadius: '8px', padding: '12px', marginBottom: '16px' }}>
