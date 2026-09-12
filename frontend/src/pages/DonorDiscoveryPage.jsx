@@ -1,5 +1,5 @@
-﻿import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { donationApi, getProfileImageUrl } from '../services/api';
 import { 
@@ -20,7 +20,10 @@ import {
   HeartHandshake,
   Users,
   Store,
-  Send
+  Send,
+  Eye,
+  Mail,
+  Phone
 } from 'lucide-react';
 
 export default function DonorDiscoveryPage() {
@@ -29,6 +32,8 @@ export default function DonorDiscoveryPage() {
   const [donors, setDonors] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  const [searchParams, setSearchParams] = useSearchParams();
 
   // Search and Filter state
   const [searchQuery, setSearchQuery] = useState('');
@@ -86,7 +91,7 @@ export default function DonorDiscoveryPage() {
     fetchDonors('', 'ALL');
   };
 
-  // Scenario 4: Select a Donor
+  // Scenario 1 & 3: Select a Donor
   const handleSelectDonor = async (donor) => {
     setSelectedDonor(donor);
     setDetailLoading(true);
@@ -105,6 +110,48 @@ export default function DonorDiscoveryPage() {
       setDetailData(donor);
     } finally {
       setDetailLoading(false);
+    }
+  };
+
+  const handleSelectDonorById = async (id) => {
+    setDetailLoading(true);
+    setDetailError(null);
+    try {
+      const res = await donationApi.getDonorProfile(id);
+      if (res.success && res.data) {
+        setSelectedDonor(res.data);
+        setDetailData(res.data);
+      } else {
+        setDetailError('Donor profile could not be loaded.');
+      }
+    } catch (err) {
+      setDetailError(err.message || 'Failed to retrieve donor profile.');
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    const donorIdParam = searchParams.get('donorId') || searchParams.get('view');
+    if (donorIdParam && (!selectedDonor || selectedDonor.donorId !== donorIdParam)) {
+      const found = donors.find(d => d.donorId === donorIdParam);
+      if (found) {
+        handleSelectDonor(found);
+      } else {
+        handleSelectDonorById(donorIdParam);
+      }
+    }
+  }, [searchParams, donors]);
+
+  const handleCloseModal = () => {
+    setSelectedDonor(null);
+    setDetailData(null);
+    setDetailError(null);
+    if (searchParams.get('donorId') || searchParams.get('view')) {
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.delete('donorId');
+      nextParams.delete('view');
+      setSearchParams(nextParams);
     }
   };
 
@@ -386,35 +433,43 @@ export default function DonorDiscoveryPage() {
             }}
           >
             {/* Modal Header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <div style={{ 
-                  width: '52px', 
-                  height: '52px', 
-                  borderRadius: '50%', 
-                  background: '#fef3c7', 
-                  color: '#b45309', 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  justifyContent: 'center',
-                  fontWeight: 800,
-                  fontSize: '1.3rem',
-                  border: '2px solid #fde68a'
-                }}>
-                  {selectedDonor.businessName ? selectedDonor.businessName.charAt(0).toUpperCase() : 'D'}
-                </div>
+                {selectedDonor.profilePictureUrl ? (
+                  <img 
+                    src={getProfileImageUrl(selectedDonor.profilePictureUrl)} 
+                    alt={selectedDonor.businessName}
+                    style={{ width: '52px', height: '52px', borderRadius: '50%', objectFit: 'cover', border: '2px solid #fde68a' }} 
+                  />
+                ) : (
+                  <div style={{ 
+                    width: '52px', 
+                    height: '52px', 
+                    borderRadius: '50%', 
+                    background: '#fef3c7', 
+                    color: '#b45309', 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'center',
+                    fontWeight: 800,
+                    fontSize: '1.3rem',
+                    border: '2px solid #fde68a'
+                  }}>
+                    {selectedDonor.businessName ? selectedDonor.businessName.charAt(0).toUpperCase() : 'D'}
+                  </div>
+                )}
                 <div>
                   <h3 style={{ margin: 0, fontSize: '1.3rem', fontWeight: 800, color: '#111827', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span>{selectedDonor.businessName}</span>
+                    <span>{detailData?.businessName || selectedDonor.businessName}</span>
                     <ShieldCheck size={18} color="#059669" />
                   </h3>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px' }}>
                     <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#b45309', background: '#fffbeb', padding: '2px 8px', borderRadius: '8px' }}>
-                      {selectedDonor.donorType || 'Food Business'}
+                      {detailData?.donorType || selectedDonor.donorType || 'Food Business'}
                     </span>
-                    {selectedDonor.memberSince && (
+                    {(detailData?.memberSince || selectedDonor.memberSince) && (
                       <span style={{ fontSize: '0.78rem', color: '#6b7280' }}>
-                        Partner since {new Date(selectedDonor.memberSince).getFullYear()}
+                        Partner since {new Date(detailData?.memberSince || selectedDonor.memberSince).getFullYear()}
                       </span>
                     )}
                   </div>
@@ -422,11 +477,18 @@ export default function DonorDiscoveryPage() {
               </div>
 
               <button 
-                onClick={() => setSelectedDonor(null)}
+                onClick={handleCloseModal}
                 style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', padding: '4px' }}
+                title="Close profile"
               >
                 <X size={20} />
               </button>
+            </div>
+
+            {/* Read-Only Status Indicator (Scenario 5) */}
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: '#f3f4f6', padding: '4px 12px', borderRadius: '16px', fontSize: '0.75rem', fontWeight: 600, color: '#4b5563', marginBottom: '16px', border: '1px solid #e5e7eb' }}>
+              <Eye size={13} color="#6b7280" />
+              <span>Verified Partner Profile &bull; Read-Only Directory View</span>
             </div>
 
             {/* Modal Body */}
@@ -438,10 +500,28 @@ export default function DonorDiscoveryPage() {
             ) : (
               <div>
                 {/* Location */}
-                {selectedDonor.location && (
+                {(detailData?.location || selectedDonor.location) && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#374151', fontSize: '0.9rem', marginBottom: '14px', background: '#f9fafb', padding: '10px 14px', borderRadius: '8px' }}>
                     <MapPin size={16} color="#d97706" style={{ flexShrink: 0 }} />
-                    <strong>{selectedDonor.location}</strong>
+                    <strong>{detailData?.location || selectedDonor.location}</strong>
+                  </div>
+                )}
+
+                {/* Contact Information (Scenario 3) */}
+                {(detailData?.contactEmail || selectedDonor.contactEmail || detailData?.contactPhone || selectedDonor.contactPhone) && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', fontSize: '0.85rem', color: '#4b5563', marginBottom: '16px', background: '#f9fafb', padding: '10px 14px', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
+                    {(detailData?.contactEmail || selectedDonor.contactEmail) && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <Mail size={14} color="#6b7280" />
+                        <span>{detailData?.contactEmail || selectedDonor.contactEmail}</span>
+                      </div>
+                    )}
+                    {(detailData?.contactPhone || selectedDonor.contactPhone) && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <Phone size={14} color="#6b7280" />
+                        <span>{detailData?.contactPhone || selectedDonor.contactPhone}</span>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -451,7 +531,7 @@ export default function DonorDiscoveryPage() {
                     About This Donor
                   </label>
                   <p style={{ color: '#4b5563', fontSize: '0.925rem', lineHeight: '1.5', margin: '6px 0 0' }}>
-                    {selectedDonor.bio || 'Verified food donor actively providing fresh portions to charitable partners through RescuePlate.'}
+                    {detailData?.bio || selectedDonor.bio || 'Verified food donor actively providing fresh portions to charitable partners through RescuePlate.'}
                   </p>
                 </div>
 
@@ -527,7 +607,7 @@ export default function DonorDiscoveryPage() {
             {/* Modal Footer */}
             <div style={{ borderTop: '1px solid #f3f4f6', paddingTop: '18px', marginTop: '24px', display: 'flex', justifyContent: 'flex-end' }}>
               <button 
-                onClick={() => setSelectedDonor(null)}
+                onClick={handleCloseModal}
                 className="btn btn-outline btn-md"
               >
                 Close Profile

@@ -1,5 +1,5 @@
-﻿import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { donationApi, getProfileImageUrl } from '../services/api';
 import { 
@@ -22,11 +22,15 @@ import {
   Store,
   Send,
   Award,
-  HelpingHand
+  HelpingHand,
+  Eye,
+  Mail,
+  Phone
 } from 'lucide-react';
 
 export default function OrganizationDiscoveryPage() {
   const { currentUser } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [organizations, setOrganizations] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -86,7 +90,7 @@ export default function OrganizationDiscoveryPage() {
     fetchOrganizations('', 'ALL');
   };
 
-  // Scenario 4: Select Organization
+  // Scenario 2 & 4: Select Organization
   const handleSelectOrg = async (org) => {
     setSelectedOrg(org);
     setDetailLoading(true);
@@ -103,6 +107,45 @@ export default function OrganizationDiscoveryPage() {
       setDetailData(org);
     } finally {
       setDetailLoading(false);
+    }
+  };
+
+  const handleSelectOrgById = async (id) => {
+    setDetailLoading(true);
+    setDetailData(null);
+    try {
+      const res = await donationApi.getOrganizationProfile(id);
+      if (res.success && res.data) {
+        setSelectedOrg(res.data);
+        setDetailData(res.data);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    const orgIdParam = searchParams.get('orgId') || searchParams.get('view');
+    if (orgIdParam && (!selectedOrg || selectedOrg.organizationId !== orgIdParam)) {
+      const found = organizations.find(o => o.organizationId === orgIdParam);
+      if (found) {
+        handleSelectOrg(found);
+      } else {
+        handleSelectOrgById(orgIdParam);
+      }
+    }
+  }, [searchParams, organizations]);
+
+  const handleCloseModal = () => {
+    setSelectedOrg(null);
+    setDetailData(null);
+    if (searchParams.get('orgId') || searchParams.get('view')) {
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.delete('orgId');
+      nextParams.delete('view');
+      setSearchParams(nextParams);
     }
   };
 
@@ -404,35 +447,43 @@ export default function OrganizationDiscoveryPage() {
             }}
           >
             {/* Modal Header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <div style={{ 
-                  width: '52px', 
-                  height: '52px', 
-                  borderRadius: '50%', 
-                  background: '#ecfdf5', 
-                  color: '#065f46', 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  justifyContent: 'center',
-                  fontWeight: 800,
-                  fontSize: '1.3rem',
-                  border: '2px solid #a7f3d0'
-                }}>
-                  {selectedOrg.organizationName ? selectedOrg.organizationName.charAt(0).toUpperCase() : 'O'}
-                </div>
+                {selectedOrg.profilePictureUrl ? (
+                  <img 
+                    src={getProfileImageUrl(selectedOrg.profilePictureUrl)} 
+                    alt={selectedOrg.organizationName}
+                    style={{ width: '52px', height: '52px', borderRadius: '50%', objectFit: 'cover', border: '2px solid #a7f3d0' }} 
+                  />
+                ) : (
+                  <div style={{ 
+                    width: '52px', 
+                    height: '52px', 
+                    borderRadius: '50%', 
+                    background: '#ecfdf5', 
+                    color: '#065f46', 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'center',
+                    fontWeight: 800,
+                    fontSize: '1.3rem',
+                    border: '2px solid #a7f3d0'
+                  }}>
+                    {selectedOrg.organizationName ? selectedOrg.organizationName.charAt(0).toUpperCase() : 'O'}
+                  </div>
+                )}
                 <div>
                   <h3 style={{ margin: 0, fontSize: '1.3rem', fontWeight: 800, color: '#111827', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span>{selectedOrg.organizationName}</span>
+                    <span>{detailData?.organizationName || selectedOrg.organizationName}</span>
                     <ShieldCheck size={18} color="#059669" />
                   </h3>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px' }}>
                     <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#065f46', background: '#ecfdf5', padding: '2px 8px', borderRadius: '8px' }}>
-                      {selectedOrg.organizationType}
+                      {detailData?.organizationType || selectedOrg.organizationType}
                     </span>
-                    {selectedOrg.memberSince && (
+                    {(detailData?.memberSince || selectedOrg.memberSince) && (
                       <span style={{ fontSize: '0.78rem', color: '#6b7280' }}>
-                        Partner since {new Date(selectedOrg.memberSince).getFullYear()}
+                        Partner since {new Date(detailData?.memberSince || selectedOrg.memberSince).getFullYear()}
                       </span>
                     )}
                   </div>
@@ -440,11 +491,18 @@ export default function OrganizationDiscoveryPage() {
               </div>
 
               <button 
-                onClick={() => setSelectedOrg(null)}
+                onClick={handleCloseModal}
                 style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', padding: '4px' }}
+                title="Close profile"
               >
                 <X size={20} />
               </button>
+            </div>
+
+            {/* Read-Only Status Indicator (Scenario 5) */}
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: '#f3f4f6', padding: '4px 12px', borderRadius: '16px', fontSize: '0.75rem', fontWeight: 600, color: '#4b5563', marginBottom: '16px', border: '1px solid #e5e7eb' }}>
+              <Eye size={13} color="#6b7280" />
+              <span>Verified Community Partner &bull; Read-Only Directory View</span>
             </div>
 
             {/* Modal Body */}
@@ -456,10 +514,28 @@ export default function OrganizationDiscoveryPage() {
             ) : (
               <div>
                 {/* Location */}
-                {selectedOrg.location && (
+                {(detailData?.location || selectedOrg.location) && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#374151', fontSize: '0.9rem', marginBottom: '14px', background: '#f9fafb', padding: '10px 14px', borderRadius: '8px' }}>
                     <MapPin size={16} color="#047857" style={{ flexShrink: 0 }} />
-                    <strong>{selectedOrg.location}</strong>
+                    <strong>{detailData?.location || selectedOrg.location}</strong>
+                  </div>
+                )}
+
+                {/* Contact Information (Scenario 3) */}
+                {(detailData?.contactEmail || selectedOrg.contactEmail || detailData?.contactPhone || selectedOrg.contactPhone) && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', fontSize: '0.85rem', color: '#4b5563', marginBottom: '16px', background: '#f9fafb', padding: '10px 14px', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
+                    {(detailData?.contactEmail || selectedOrg.contactEmail) && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <Mail size={14} color="#6b7280" />
+                        <span>{detailData?.contactEmail || selectedOrg.contactEmail}</span>
+                      </div>
+                    )}
+                    {(detailData?.contactPhone || selectedOrg.contactPhone) && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <Phone size={14} color="#6b7280" />
+                        <span>{detailData?.contactPhone || selectedOrg.contactPhone}</span>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -469,17 +545,17 @@ export default function OrganizationDiscoveryPage() {
                     About This Organization & Mission
                   </label>
                   <p style={{ color: '#4b5563', fontSize: '0.925rem', lineHeight: '1.5', margin: '6px 0 0' }}>
-                    {selectedOrg.description || 'Dedicated non-profit entity providing emergency meals and community hunger relief.'}
+                    {detailData?.description || selectedOrg.description || 'Dedicated non-profit entity providing emergency meals and community hunger relief.'}
                   </p>
                 </div>
 
-                {/* Accepted Food Types */}
+                {/* Accepted Food Types (Scenario 4) */}
                 <div style={{ marginBottom: '20px' }}>
                   <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: '8px' }}>
                     Food Categories Accepted For Donation
                   </label>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                    {selectedOrg.acceptedFoodTypes?.map(cat => (
+                    {(detailData?.acceptedFoodTypes || selectedOrg.acceptedFoodTypes)?.map(cat => (
                       <span 
                         key={cat}
                         style={{
@@ -534,7 +610,7 @@ export default function OrganizationDiscoveryPage() {
             {/* Modal Footer */}
             <div style={{ borderTop: '1px solid #f3f4f6', paddingTop: '18px', marginTop: '24px', display: 'flex', justifyContent: 'flex-end' }}>
               <button 
-                onClick={() => setSelectedOrg(null)}
+                onClick={handleCloseModal}
                 className="btn btn-outline btn-md"
               >
                 Close Profile

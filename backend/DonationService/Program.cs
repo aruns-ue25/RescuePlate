@@ -64,6 +64,7 @@ builder.Services.AddCors(options =>
 });
 
 // 4. Register Services
+builder.Services.AddHttpClient();
 builder.Services.AddScoped<IDonationService, DonationServiceImpl>();
 builder.Services.AddHostedService<DonationExpiryBackgroundService>();
 

@@ -1,4 +1,7 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using System.Net.Http;
+using System.Text.Json;
 using DonationService.Data;
 using DonationService.DTOs;
 using DonationService.Models;
@@ -9,11 +12,19 @@ public class DonationServiceImpl : IDonationService
 {
     private readonly DonationDbContext _context;
     private readonly ILogger<DonationServiceImpl> _logger;
+    private readonly IHttpClientFactory _httpClientFactory;
+    private readonly IConfiguration _configuration;
 
-    public DonationServiceImpl(DonationDbContext context, ILogger<DonationServiceImpl> logger)
+    public DonationServiceImpl(
+        DonationDbContext context, 
+        ILogger<DonationServiceImpl> logger,
+        IHttpClientFactory httpClientFactory,
+        IConfiguration configuration)
     {
         _context = context;
         _logger = logger;
+        _httpClientFactory = httpClientFactory;
+        _configuration = configuration;
     }
 
     public async Task<ApiResponse<DonationResponseDto>> CreateDonationAsync(
@@ -688,6 +699,22 @@ public class DonationServiceImpl : IDonationService
                 ActiveListings = activeDtos
             };
 
+            // Scenario 7: Live update from UserService if available
+            var userProfile = await FetchUserProfileFromUserServiceAsync(donorId);
+            if (userProfile != null)
+            {
+                if (!string.IsNullOrWhiteSpace(userProfile.BusinessOrOrgName))
+                    dto.BusinessName = userProfile.BusinessOrOrgName;
+                if (!string.IsNullOrWhiteSpace(userProfile.Address))
+                    dto.Location = userProfile.Address;
+                if (!string.IsNullOrWhiteSpace(userProfile.BioOrDescription))
+                    dto.Bio = userProfile.BioOrDescription;
+                if (!string.IsNullOrWhiteSpace(userProfile.DonorType))
+                    dto.DonorType = userProfile.DonorType;
+                if (!string.IsNullOrWhiteSpace(userProfile.ProfilePictureUrl))
+                    dto.ProfilePictureUrl = userProfile.ProfilePictureUrl;
+            }
+
             return ApiResponse<DonorDiscoveryDto>.Ok(dto, "Donor profile details retrieved successfully.");
         }
         catch (Exception ex)
@@ -792,6 +819,41 @@ public class DonationServiceImpl : IDonationService
             var listResult = await GetParticipatingOrganizationsAsync();
             var org = listResult.Data?.FirstOrDefault(o => o.OrganizationId.Equals(organizationId, StringComparison.OrdinalIgnoreCase));
 
+            // Scenario 7: Live update from UserService if available
+            var userProfile = await FetchUserProfileFromUserServiceAsync(organizationId);
+            if (userProfile != null)
+            {
+                if (org == null)
+                {
+                    org = new OrganizationDiscoveryDto
+                    {
+                        OrganizationId = organizationId,
+                        OrganizationName = !string.IsNullOrWhiteSpace(userProfile.BusinessOrOrgName) ? userProfile.BusinessOrOrgName : "Verified Community Partner",
+                        OrganizationType = "Community Relief Partner",
+                        Location = userProfile.Address ?? "",
+                        Description = userProfile.BioOrDescription ?? "Registered community organization.",
+                        AcceptedFoodTypes = userProfile.AcceptedFoodCategories?.Count > 0 ? userProfile.AcceptedFoodCategories : new List<string> { "Cooked Meals", "Bakery" },
+                        ProfilePictureUrl = userProfile.ProfilePictureUrl,
+                        ClaimedDonationsCount = 0,
+                        TotalPortionsReceived = 0,
+                        MemberSince = DateTime.UtcNow
+                    };
+                }
+                else
+                {
+                    if (!string.IsNullOrWhiteSpace(userProfile.BusinessOrOrgName))
+                        org.OrganizationName = userProfile.BusinessOrOrgName;
+                    if (!string.IsNullOrWhiteSpace(userProfile.Address))
+                        org.Location = userProfile.Address;
+                    if (!string.IsNullOrWhiteSpace(userProfile.BioOrDescription))
+                        org.Description = userProfile.BioOrDescription;
+                    if (userProfile.AcceptedFoodCategories?.Count > 0)
+                        org.AcceptedFoodTypes = userProfile.AcceptedFoodCategories;
+                    if (!string.IsNullOrWhiteSpace(userProfile.ProfilePictureUrl))
+                        org.ProfilePictureUrl = userProfile.ProfilePictureUrl;
+                }
+            }
+
             if (org == null)
             {
                 return ApiResponse<OrganizationDiscoveryDto>.Fail("Organization not found.");
@@ -804,6 +866,61 @@ public class DonationServiceImpl : IDonationService
             _logger.LogError(ex, "Error retrieving organization details for {OrgId}", organizationId);
             return ApiResponse<OrganizationDiscoveryDto>.Fail($"Failed to retrieve organization profile: {ex.Message}");
         }
+    }
+
+    private record UserProfilePayload(
+        string? UserId,
+        string? Role,
+        string? BusinessOrOrgName,
+        string? Address,
+        string? BioOrDescription,
+        string? DonorType,
+        string? ProfilePictureUrl,
+        List<string>? AcceptedFoodCategories
+    );
+
+    private async Task<UserProfilePayload?> FetchUserProfileFromUserServiceAsync(string userId)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient();
+            client.Timeout = TimeSpan.FromSeconds(3);
+            var baseUrl = _configuration["UserService:BaseUrl"] ?? "http://localhost:5000";
+            var response = await client.GetAsync($"{baseUrl.TrimEnd('/')}/api/profile/{userId}");
+            if (response.IsSuccessStatusCode)
+            {
+                var content = await response.Content.ReadAsStringAsync();
+                using var doc = JsonDocument.Parse(content);
+                if (doc.RootElement.TryGetProperty("data", out var dataEl))
+                {
+                    var accepted = new List<string>();
+                    if (dataEl.TryGetProperty("acceptedFoodCategories", out var ac) && ac.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var item in ac.EnumerateArray())
+                        {
+                            var s = item.GetString();
+                            if (!string.IsNullOrWhiteSpace(s)) accepted.Add(s);
+                        }
+                    }
+
+                    return new UserProfilePayload(
+                        dataEl.TryGetProperty("userId", out var u) ? u.GetString() : null,
+                        dataEl.TryGetProperty("role", out var r) ? r.GetString() : null,
+                        dataEl.TryGetProperty("businessOrOrgName", out var b) ? b.GetString() : null,
+                        dataEl.TryGetProperty("address", out var a) ? a.GetString() : null,
+                        dataEl.TryGetProperty("bioOrDescription", out var bd) ? bd.GetString() : null,
+                        dataEl.TryGetProperty("donorType", out var dt) ? dt.GetString() : null,
+                        dataEl.TryGetProperty("profilePictureUrl", out var p) ? p.GetString() : null,
+                        accepted
+                    );
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Could not fetch user profile from UserService for {UserId}", userId);
+        }
+        return null;
     }
 
     private static DonationResponseDto MapToResponseDto(Donation d)

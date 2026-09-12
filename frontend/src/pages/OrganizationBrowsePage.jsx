@@ -403,8 +403,8 @@ export default function OrganizationBrowsePage() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#047857', fontSize: '0.85rem', fontWeight: 600, marginBottom: '12px' }}>
                       <Building2 size={15} />
                       <Link 
-                        to="/donors" 
-                        style={{ color: '#047857', textDecoration: 'none', hover: { textDecoration: 'underline' } }}
+                        to={item.donorId ? `/donors?donorId=${item.donorId}` : "/donors"} 
+                        style={{ color: '#047857', textDecoration: 'none' }}
                         title="View donor profile in directory"
                       >
                         {item.donorName || "Verified Food Donor"}
@@ -730,7 +730,7 @@ export default function OrganizationBrowsePage() {
                       <div>
                         <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>Food Provider</div>
                         <Link 
-                          to="/donors" 
+                          to={selectedDonation.donorId ? `/donors?donorId=${selectedDonation.donorId}` : "/donors"} 
                           style={{ fontWeight: 700, color: '#047857', textDecoration: 'none' }}
                           title="View donor directory profile"
                         >

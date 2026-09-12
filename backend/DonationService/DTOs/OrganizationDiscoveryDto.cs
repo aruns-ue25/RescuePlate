@@ -1,4 +1,4 @@
-﻿namespace DonationService.DTOs;
+namespace DonationService.DTOs;
 
 public class OrganizationDiscoveryDto
 {
@@ -7,6 +7,8 @@ public class OrganizationDiscoveryDto
     public string OrganizationType { get; set; } = "Community Food Bank";
     public string Location { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
+    public string? ContactPhone { get; set; }
+    public string? ContactEmail { get; set; }
     public List<string> AcceptedFoodTypes { get; set; } = new();
     public string? ProfilePictureUrl { get; set; }
     public int ClaimedDonationsCount { get; set; }
