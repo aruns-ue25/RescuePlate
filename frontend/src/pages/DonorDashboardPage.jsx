@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { donationApi } from '../services/api';
 import { 
+  Users,
   Store, 
   Sparkles, 
   PlusCircle, 
@@ -464,7 +466,27 @@ export default function DonorDashboardPage() {
             </p>
           </div>
 
-          <div>
+          <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+            <Link 
+              to="/organizations"
+              className="btn btn-outline"
+              style={{
+                background: 'rgba(255,255,255,0.15)',
+                color: '#fff',
+                borderColor: 'rgba(255,255,255,0.4)',
+                fontWeight: 600,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '12px 20px',
+                fontSize: '0.95rem',
+                borderRadius: '10px',
+                textDecoration: 'none'
+              }}
+            >
+              <Users size={18} />
+              <span>Browse Charities</span>
+            </Link>
             <button 
               onClick={() => {
                 setFormError(null);

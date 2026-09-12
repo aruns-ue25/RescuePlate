@@ -62,6 +62,9 @@ export default function Navbar() {
           <NavLink to="/donors" className={({ isActive }) => `nav-link ${isActive ? 'nav-link-active' : ''}`}>
             Donors
           </NavLink>
+          <NavLink to="/organizations" className={({ isActive }) => `nav-link ${isActive ? 'nav-link-active' : ''}`}>
+            Charities
+          </NavLink>
           {currentUser?.role !== 'ORGANIZATION' && (
             <NavLink to="/donor-portal" className={({ isActive }) => `nav-link ${isActive ? 'nav-link-active' : ''}`}>
               Post Surplus
@@ -137,6 +140,10 @@ export default function Navbar() {
             </Link>
             <Link to="/donors" className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>
               <span>Browse Donors</span>
+              <ChevronRight size={16} />
+            </Link>
+            <Link to="/organizations" className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>
+              <span>Browse Charities</span>
               <ChevronRight size={16} />
             </Link>
             {currentUser?.role !== 'ORGANIZATION' && (

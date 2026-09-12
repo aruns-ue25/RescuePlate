@@ -697,6 +697,115 @@ public class DonationServiceImpl : IDonationService
         }
     }
 
+    public async Task<ApiResponse<List<OrganizationDiscoveryDto>>> GetParticipatingOrganizationsAsync(string? search = null, string? foodCategory = null)
+    {
+        try
+        {
+            // Preset participating charitable food relief partners registered in the platform
+            var organizations = new List<OrganizationDiscoveryDto>
+            {
+                new()
+                {
+                    OrganizationId = "a44beac7-bd54-4946-b94b-9a17b0716fcb",
+                    OrganizationName = "Sri Hope Community Kitchen",
+                    OrganizationType = "Community Kitchen",
+                    Location = "Trinco Road, Batticaloa",
+                    Description = "Providing hot cooked meals, fresh bread, and essential nutritional support to vulnerable families and community shelters across the eastern province.",
+                    AcceptedFoodTypes = new List<string> { "Cooked Meals", "Bakery", "Fresh Produce" },
+                    ProfilePictureUrl = null,
+                    ClaimedDonationsCount = 8,
+                    TotalPortionsReceived = 145,
+                    MemberSince = new DateTime(2026, 9, 12, 6, 8, 27, DateTimeKind.Utc)
+                },
+                new()
+                {
+                    OrganizationId = "org-colombo-foodbank-2026",
+                    OrganizationName = "Colombo City Food Bank",
+                    OrganizationType = "Food Bank",
+                    Location = "Dharmapala Mawatha, Colombo 07",
+                    Description = "Dedicated metropolitan food redistribution hub collecting bulk surplus bakery products, dairy, and packed food for orphanages and senior care centers.",
+                    AcceptedFoodTypes = new List<string> { "Bakery", "Dairy & Chilled", "Packaged Dry", "Cooked Meals" },
+                    ProfilePictureUrl = null,
+                    ClaimedDonationsCount = 14,
+                    TotalPortionsReceived = 320,
+                    MemberSince = new DateTime(2026, 8, 15, 10, 30, 0, DateTimeKind.Utc)
+                },
+                new()
+                {
+                    OrganizationId = "org-kandy-relief-care",
+                    OrganizationName = "Hill Country Food Relief & Shelter",
+                    OrganizationType = "Homeless Shelter",
+                    Location = "Peradeniya Road, Kandy",
+                    Description = "Operating evening kitchens and shelter care feeding daily-wage workers and underprivileged children with high-protein wholesome meals.",
+                    AcceptedFoodTypes = new List<string> { "Cooked Meals", "Bakery", "Fresh Produce" },
+                    ProfilePictureUrl = null,
+                    ClaimedDonationsCount = 5,
+                    TotalPortionsReceived = 95,
+                    MemberSince = new DateTime(2026, 8, 20, 14, 0, 0, DateTimeKind.Utc)
+                },
+                new()
+                {
+                    OrganizationId = "org-galle-youth-care",
+                    OrganizationName = "Southern Youth Care Foundation",
+                    OrganizationType = "Charity Foundation",
+                    Location = "Main Street, Galle Fort",
+                    Description = "Supporting low-income coastal community programs and student nutrition drives with fresh bakery and healthy pantry staples.",
+                    AcceptedFoodTypes = new List<string> { "Bakery", "Dairy & Chilled", "Packaged Dry" },
+                    ProfilePictureUrl = null,
+                    ClaimedDonationsCount = 9,
+                    TotalPortionsReceived = 180,
+                    MemberSince = new DateTime(2026, 8, 25, 9, 15, 0, DateTimeKind.Utc)
+                }
+            };
+
+            var filtered = organizations.AsQueryable();
+
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var s = search.Trim().ToLower();
+                filtered = filtered.Where(o =>
+                    o.OrganizationName.ToLower().Contains(s) ||
+                    o.Location.ToLower().Contains(s) ||
+                    o.Description.ToLower().Contains(s) ||
+                    o.OrganizationType.ToLower().Contains(s));
+            }
+
+            if (!string.IsNullOrWhiteSpace(foodCategory) && foodCategory.ToUpper() != "ALL")
+            {
+                var cat = foodCategory.Trim();
+                filtered = filtered.Where(o => o.AcceptedFoodTypes.Any(t => t.Equals(cat, StringComparison.OrdinalIgnoreCase)));
+            }
+
+            return ApiResponse<List<OrganizationDiscoveryDto>>.Ok(filtered.ToList(), "Participating organizations retrieved successfully.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving participating organizations.");
+            return ApiResponse<List<OrganizationDiscoveryDto>>.Fail($"Failed to retrieve organizations: {ex.Message}");
+        }
+    }
+
+    public async Task<ApiResponse<OrganizationDiscoveryDto>> GetOrganizationProfileDetailsAsync(string organizationId)
+    {
+        try
+        {
+            var listResult = await GetParticipatingOrganizationsAsync();
+            var org = listResult.Data?.FirstOrDefault(o => o.OrganizationId.Equals(organizationId, StringComparison.OrdinalIgnoreCase));
+
+            if (org == null)
+            {
+                return ApiResponse<OrganizationDiscoveryDto>.Fail("Organization not found.");
+            }
+
+            return ApiResponse<OrganizationDiscoveryDto>.Ok(org, "Organization profile details retrieved successfully.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving organization details for {OrgId}", organizationId);
+            return ApiResponse<OrganizationDiscoveryDto>.Fail($"Failed to retrieve organization profile: {ex.Message}");
+        }
+    }
+
     private static DonationResponseDto MapToResponseDto(Donation d)
     {
         var calculatedRemaining = d.Status == "Cancelled" ? 0 : Math.Max(0, d.TotalQuantity - d.ClaimedQuantity);

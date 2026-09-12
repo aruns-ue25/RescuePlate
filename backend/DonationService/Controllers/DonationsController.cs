@@ -293,6 +293,38 @@ public class DonationsController : ControllerBase
         return Ok(result);
     }
 
+    /// <summary>
+    /// Scenario 1, 2, 3: Dedicated discovery endpoint for participating Organizations.
+    /// Allows Donors to view registered charities, accepted food types, and location/description.
+    /// </summary>
+    [HttpGet("organizations")]
+    [Authorize]
+    [ProducesResponseType(typeof(ApiResponse<List<OrganizationDiscoveryDto>>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetParticipatingOrganizations(
+        [FromQuery] string? search = null,
+        [FromQuery] string? foodCategory = null)
+    {
+        var result = await _donationService.GetParticipatingOrganizationsAsync(search, foodCategory);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Scenario 4: Select and view an Organization's relevant profile information.
+    /// </summary>
+    [HttpGet("organizations/{organizationId}")]
+    [Authorize]
+    [ProducesResponseType(typeof(ApiResponse<OrganizationDiscoveryDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetOrganizationProfileDetails(string organizationId)
+    {
+        var result = await _donationService.GetOrganizationProfileDetailsAsync(organizationId);
+        if (!result.Success)
+        {
+            return NotFound(result);
+        }
+        return Ok(result);
+    }
+
     private (string id, string name, string email) GetCurrentDonorIdentity()
     {
         var idClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value

@@ -264,6 +264,27 @@ export const donationApi = {
     } catch (error) {
       throw error.response?.data || { message: 'Failed to fetch donor profile details' };
     }
+  },
+
+  getParticipatingOrganizations: async (params = {}) => {
+    try {
+      const cleanParams = {};
+      if (params.search && params.search.trim()) cleanParams.search = params.search.trim();
+      if (params.foodCategory && params.foodCategory !== 'ALL') cleanParams.foodCategory = params.foodCategory;
+      const response = await donationClient.get('/donations/organizations', { params: cleanParams });
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { message: 'Failed to fetch participating organizations' };
+    }
+  },
+
+  getOrganizationProfile: async (organizationId) => {
+    try {
+      const response = await donationClient.get(`/donations/organizations/${organizationId}`);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { message: 'Failed to fetch organization profile details' };
+    }
   }
 };
 

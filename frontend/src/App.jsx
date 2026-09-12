@@ -15,6 +15,7 @@ import ContactPage from './pages/ContactPage';
 import DonorDashboardPage from './pages/DonorDashboardPage';
 import OrganizationBrowsePage from './pages/OrganizationBrowsePage';
 import DonorDiscoveryPage from './pages/DonorDiscoveryPage';
+import OrganizationDiscoveryPage from './pages/OrganizationDiscoveryPage';
 import ProfilePage from './pages/ProfilePage';
 
 import './App.css';
@@ -39,6 +40,7 @@ export default function App() {
               <Route path="/contact" element={<ContactPage />} />
               <Route path="/browse-food" element={<OrganizationBrowsePage />} />
               <Route path="/donors" element={<DonorDiscoveryPage />} />
+              <Route path="/organizations" element={<OrganizationDiscoveryPage />} />
 
               {/* Protected Donor Portal (Only authenticated DONOR can access) */}
               <Route
