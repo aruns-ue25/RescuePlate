@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { donationApi } from '../services/api';
 import { 
@@ -23,11 +23,14 @@ import {
   Users,
   Eye,
   Info,
-  Check
+  Check,
+  Ban,
+  ShoppingBag
 } from 'lucide-react';
 
 export default function OrganizationBrowsePage() {
   const { currentUser } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [donations, setDonations] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -37,8 +40,10 @@ export default function OrganizationBrowsePage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
 
-  // Selected Donation Details Modal State (Scenario 5)
+  // Selected Donation Details Modal State (Scenario 1, 2, 3, 4, 5)
   const [selectedDonation, setSelectedDonation] = useState(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState(null);
 
   // Request/Claim Modal State
   const [claimDonation, setClaimDonation] = useState(null);
@@ -71,16 +76,74 @@ export default function OrganizationBrowsePage() {
     fetchAvailableDonations(categoryFilter, searchQuery);
   }, [categoryFilter]);
 
+  // Scenario 1: Support direct URL navigation to donation details via query param ?donationId={id} or ?view={id}
+  useEffect(() => {
+    const donationIdParam = searchParams.get('donationId') || searchParams.get('view');
+    if (donationIdParam) {
+      handleSelectDonationById(donationIdParam);
+    }
+  }, [searchParams]);
+
+  const handleSelectDonation = async (item) => {
+    setSelectedDonation(item);
+    setDetailLoading(true);
+    setDetailError(null);
+    try {
+      const res = await donationApi.getDonationById(item.id);
+      if (res.success && res.data) {
+        setSelectedDonation(res.data);
+      }
+    } catch (err) {
+      // Keep existing item data on network error
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
+  const handleSelectDonationById = async (id) => {
+    setDetailLoading(true);
+    setDetailError(null);
+    try {
+      const res = await donationApi.getDonationById(id);
+      if (res.success && res.data) {
+        setSelectedDonation(res.data);
+      } else {
+        setDetailError('Donation details could not be found or loaded.');
+      }
+    } catch (err) {
+      setDetailError(err.message || 'Failed to retrieve donation details.');
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
+  const handleCloseDetailsModal = () => {
+    setSelectedDonation(null);
+    setDetailError(null);
+    if (searchParams.get('donationId') || searchParams.get('view')) {
+      const newParams = new URLSearchParams(searchParams);
+      newParams.delete('donationId');
+      newParams.delete('view');
+      setSearchParams(newParams);
+    }
+  };
+
   const handleSearchSubmit = (e) => {
     e.preventDefault();
     fetchAvailableDonations(categoryFilter, searchQuery);
   };
 
   const handleOpenClaimModal = (item) => {
-    // Check client-side expiry check
-    const isExpired = new Date(item.expiryTime) <= new Date();
-    if (isExpired || item.status === 'Expired') {
+    // Check client-side expiry check (Scenario 4)
+    const isExpired = new Date(item.expiryTime) <= new Date() || item.status === 'Expired';
+    if (isExpired) {
       alert('This food donation has reached the end of its availability period and cannot be requested.');
+      return;
+    }
+
+    // Check availability (Scenario 5)
+    if (item.remainingQuantity <= 0 || item.status === 'Fully Claimed' || item.status === 'Cancelled' || item.status === 'Completed') {
+      alert('This donation is no longer available for requesting.');
       return;
     }
 
@@ -380,7 +443,7 @@ export default function OrganizationBrowsePage() {
                   <div style={{ borderTop: '1px solid #f3f4f6', paddingTop: '16px', marginTop: '12px', display: 'flex', gap: '10px' }}>
                     <button
                       type="button"
-                      onClick={() => setSelectedDonation(item)}
+                      onClick={() => handleSelectDonation(item)}
                       className="btn btn-outline btn-md"
                       style={{ flex: '1', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontSize: '0.875rem' }}
                     >
@@ -522,8 +585,8 @@ export default function OrganizationBrowsePage() {
         </div>
       )}
 
-      {/* Donation Details Modal (Scenario 5) */}
-      {selectedDonation && (
+      {/* Donation Details Modal (Scenario 1, 2, 3, 4, 5, 6) */}
+      {(selectedDonation || detailLoading || detailError) && (
         <div 
           style={{
             position: 'fixed',
@@ -531,7 +594,7 @@ export default function OrganizationBrowsePage() {
             left: 0,
             right: 0,
             bottom: 0,
-            background: 'rgba(0,0,0,0.5)',
+            background: 'rgba(0,0,0,0.55)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -543,7 +606,7 @@ export default function OrganizationBrowsePage() {
             style={{
               background: '#fff',
               borderRadius: '16px',
-              maxWidth: '560px',
+              maxWidth: '580px',
               width: '100%',
               padding: '28px',
               boxShadow: '0 20px 25px -5px rgba(0,0,0,0.2)',
@@ -551,135 +614,256 @@ export default function OrganizationBrowsePage() {
               overflowY: 'auto'
             }}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
+            {detailLoading && !selectedDonation ? (
+              <div style={{ textAlign: 'center', padding: '40px 0' }}>
+                <div className="loading-spinner" style={{ margin: '0 auto 16px' }} />
+                <p style={{ color: '#6b7280' }}>Loading donation details...</p>
+              </div>
+            ) : detailError ? (
               <div>
-                <span 
-                  style={{
-                    fontSize: '0.75rem',
-                    fontWeight: 700,
-                    padding: '3px 10px',
-                    borderRadius: '12px',
-                    background: '#ecfdf5',
-                    color: '#065f46',
-                    border: '1px solid #a7f3d0',
-                    display: 'inline-block',
-                    marginBottom: '8px'
-                  }}
-                >
-                  {selectedDonation.category}
-                </span>
-                <h2 style={{ margin: 0, fontSize: '1.4rem', fontWeight: 800, color: '#111827' }}>
-                  {selectedDonation.foodTitle}
-                </h2>
-              </div>
-              <button 
-                onClick={() => setSelectedDonation(null)}
-                style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', padding: '4px' }}
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            {/* Donor Info Bar */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', background: '#f9fafb', borderRadius: '10px', marginBottom: '20px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Building2 size={18} color="#047857" />
-                <div>
-                  <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>Offered by Donor</div>
-                  <Link 
-                    to="/donors" 
-                    style={{ fontWeight: 700, color: '#047857', textDecoration: 'none' }}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                  <h3 style={{ margin: 0, color: '#991b1b', fontSize: '1.2rem', fontWeight: 700 }}>Unable to Load Donation</h3>
+                  <button 
+                    onClick={handleCloseDetailsModal}
+                    style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', padding: '4px' }}
                   >
-                    {selectedDonation.donorName || "Verified Food Donor"}
-                  </Link>
+                    <X size={20} />
+                  </button>
+                </div>
+                <div style={{ padding: '16px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', color: '#991b1b', fontSize: '0.9rem', marginBottom: '20px' }}>
+                  {detailError}
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <button onClick={handleCloseDetailsModal} className="btn btn-outline btn-md">
+                    Close
+                  </button>
                 </div>
               </div>
-              <div style={{ textAlign: 'right' }}>
-                <span 
-                  style={{
-                    fontSize: '0.75rem',
-                    fontWeight: 700,
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    color: calculateHoursLeft(selectedDonation.expiryTime).expired ? '#dc2626' : '#d97706'
-                  }}
-                >
-                  <Clock size={13} />
-                  {calculateHoursLeft(selectedDonation.expiryTime).text}
-                </span>
-              </div>
-            </div>
+            ) : selectedDonation && (() => {
+              const isExpired = new Date(selectedDonation.expiryTime) <= new Date() || selectedDonation.status === 'Expired';
+              const isFullyClaimed = selectedDonation.remainingQuantity <= 0 || selectedDonation.status === 'Fully Claimed';
+              const isCancelled = selectedDonation.status === 'Cancelled';
+              const isCompleted = selectedDonation.status === 'Completed';
+              const isUnavailable = isExpired || isFullyClaimed || isCancelled || isCompleted || selectedDonation.remainingQuantity <= 0;
 
-            {/* Description / Notes */}
-            {(selectedDonation.notes || selectedDonation.description) && (
-              <div style={{ marginBottom: '18px' }}>
-                <h4 style={{ fontSize: '0.85rem', fontWeight: 700, color: '#374151', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' }}>
-                  Preparation Notes & Instructions
-                </h4>
-                <p style={{ margin: 0, color: '#4b5563', fontSize: '0.925rem', lineHeight: 1.5, background: '#fdfdfd', border: '1px solid #f3f4f6', padding: '12px', borderRadius: '8px' }}>
-                  {selectedDonation.notes || selectedDonation.description}
-                </p>
-              </div>
-            )}
+              let statusBadgeBg = '#ecfdf5';
+              let statusBadgeColor = '#065f46';
+              let statusBadgeBorder = '#a7f3d0';
+              let statusText = selectedDonation.status || 'Available';
 
-            {/* Quantity Metrics */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '18px' }}>
-              <div style={{ background: '#ecfdf5', padding: '12px', borderRadius: '10px', border: '1px solid #a7f3d0' }}>
-                <div style={{ fontSize: '0.75rem', color: '#065f46', fontWeight: 600 }}>Remaining Quantity</div>
-                <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#065f46', marginTop: '2px' }}>
-                  {selectedDonation.remainingQuantity} <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>{selectedDonation.unit}</span>
+              if (isExpired) {
+                statusBadgeBg = '#fef2f2';
+                statusBadgeColor = '#991b1b';
+                statusBadgeBorder = '#fecaca';
+                statusText = 'Expired';
+              } else if (isCancelled) {
+                statusBadgeBg = '#fef2f2';
+                statusBadgeColor = '#991b1b';
+                statusBadgeBorder = '#fecaca';
+                statusText = 'Cancelled by Donor';
+              } else if (isFullyClaimed) {
+                statusBadgeBg = '#fef3c7';
+                statusBadgeColor = '#92400e';
+                statusBadgeBorder = '#fde68a';
+                statusText = 'Fully Claimed';
+              } else if (isCompleted) {
+                statusBadgeBg = '#f3f4f6';
+                statusBadgeColor = '#374151';
+                statusBadgeBorder = '#e5e7eb';
+                statusText = 'Completed & Distributed';
+              }
+
+              return (
+                <div>
+                  {/* Top Bar: Category, Status Badge & Close Button */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center' }}>
+                      <span 
+                        style={{
+                          fontSize: '0.75rem',
+                          fontWeight: 700,
+                          padding: '3px 10px',
+                          borderRadius: '12px',
+                          background: '#f3f4f6',
+                          color: '#374151',
+                          border: '1px solid #e5e7eb'
+                        }}
+                      >
+                        {selectedDonation.category}
+                      </span>
+                      <span 
+                        style={{
+                          fontSize: '0.75rem',
+                          fontWeight: 700,
+                          padding: '3px 10px',
+                          borderRadius: '12px',
+                          background: statusBadgeBg,
+                          color: statusBadgeColor,
+                          border: `1px solid ${statusBadgeBorder}`,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}
+                      >
+                        {isExpired ? <Ban size={12} /> : <CheckCircle2 size={12} />}
+                        <span>Status: {statusText}</span>
+                      </span>
+                    </div>
+                    <button 
+                      onClick={handleCloseDetailsModal}
+                      style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', padding: '4px' }}
+                      title="Close details"
+                    >
+                      <X size={20} />
+                    </button>
+                  </div>
+
+                  {/* Food Title */}
+                  <h2 style={{ margin: '0 0 16px', fontSize: '1.4rem', fontWeight: 800, color: '#111827' }}>
+                    {selectedDonation.foodTitle}
+                  </h2>
+
+                  {/* Donor Info Bar */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', background: '#f9fafb', borderRadius: '10px', marginBottom: '18px', border: '1px solid #f3f4f6' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <Building2 size={18} color="#047857" />
+                      <div>
+                        <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>Food Provider</div>
+                        <Link 
+                          to="/donors" 
+                          style={{ fontWeight: 700, color: '#047857', textDecoration: 'none' }}
+                          title="View donor directory profile"
+                        >
+                          {selectedDonation.donorName || "Verified Food Donor"}
+                        </Link>
+                      </div>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <span 
+                        style={{
+                          fontSize: '0.75rem',
+                          fontWeight: 700,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          color: isExpired ? '#dc2626' : '#d97706'
+                        }}
+                      >
+                        <Clock size={13} />
+                        {calculateHoursLeft(selectedDonation.expiryTime).text}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Status Warning Banner for Expired / Unavailable */}
+                  {isExpired && (
+                    <div style={{ padding: '12px 14px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', color: '#991b1b', fontSize: '0.85rem', marginBottom: '18px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <AlertCircle size={16} style={{ flexShrink: 0 }} />
+                      <span><strong>Donation Expired:</strong> This food donation has reached the end of its availability period and can no longer accept requests.</span>
+                    </div>
+                  )}
+
+                  {!isExpired && isUnavailable && (
+                    <div style={{ padding: '12px 14px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '8px', color: '#92400e', fontSize: '0.85rem', marginBottom: '18px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <AlertCircle size={16} style={{ flexShrink: 0 }} />
+                      <span><strong>Donation Unavailable:</strong> This donation is no longer available for requesting ({statusText}).</span>
+                    </div>
+                  )}
+
+                  {/* Description / Preparation Notes (Scenario 2) */}
+                  {(selectedDonation.notes || selectedDonation.description) && (
+                    <div style={{ marginBottom: '18px' }}>
+                      <h4 style={{ fontSize: '0.82rem', fontWeight: 700, color: '#374151', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' }}>
+                        Preparation Notes & Instructions
+                      </h4>
+                      <p style={{ margin: 0, color: '#4b5563', fontSize: '0.925rem', lineHeight: 1.5, background: '#fdfdfd', border: '1px solid #f3f4f6', padding: '12px', borderRadius: '8px' }}>
+                        {selectedDonation.notes || selectedDonation.description}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Scenario 3: Accurate Current Remaining Quantity vs Total Quantity */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '18px' }}>
+                    <div style={{ background: isUnavailable ? '#f9fafb' : '#ecfdf5', padding: '12px', borderRadius: '10px', border: `1px solid ${isUnavailable ? '#e5e7eb' : '#a7f3d0'}` }}>
+                      <div style={{ fontSize: '0.75rem', color: isUnavailable ? '#6b7280' : '#065f46', fontWeight: 600 }}>Current Remaining Quantity</div>
+                      <div style={{ fontSize: '1.3rem', fontWeight: 800, color: isUnavailable ? '#6b7280' : '#065f46', marginTop: '2px' }}>
+                        {selectedDonation.remainingQuantity} <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>{selectedDonation.unit}</span>
+                      </div>
+                    </div>
+                    <div style={{ background: '#f9fafb', padding: '12px', borderRadius: '10px', border: '1px solid #e5e7eb' }}>
+                      <div style={{ fontSize: '0.75rem', color: '#6b7280', fontWeight: 600 }}>Total Prepared / Claimed</div>
+                      <div style={{ fontSize: '1.3rem', fontWeight: 800, color: '#374151', marginTop: '2px' }}>
+                        {selectedDonation.totalQuantity ?? selectedDonation.quantity} <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>{selectedDonation.unit}</span>
+                      </div>
+                      <div style={{ fontSize: '0.72rem', color: '#9ca3af', marginTop: '2px' }}>
+                        {selectedDonation.claimedQuantity || 0} {selectedDonation.unit} claimed to date
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Details List (Location, Availability Deadline, Dietary Tags, Collection Mode) */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '24px', fontSize: '0.875rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#4b5563' }}>
+                      <MapPin size={16} color="#9ca3af" style={{ flexShrink: 0 }} />
+                      <span><strong>Pickup Location:</strong> {selectedDonation.location || 'Location provided upon request confirmation'}</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#4b5563' }}>
+                      <Calendar size={16} color="#9ca3af" style={{ flexShrink: 0 }} />
+                      <span><strong>Availability Deadline:</strong> {formatExpiryTime(selectedDonation.expiryTime)}</span>
+                    </div>
+                    {selectedDonation.collectionMode && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#4b5563' }}>
+                        <ShoppingBag size={16} color="#9ca3af" style={{ flexShrink: 0 }} />
+                        <span><strong>Collection Mode:</strong> {selectedDonation.collectionMode}</span>
+                      </div>
+                    )}
+                    {selectedDonation.dietaryTags && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#4b5563' }}>
+                        <Tag size={16} color="#9ca3af" style={{ flexShrink: 0 }} />
+                        <span><strong>Dietary & Allergen Notes:</strong> {selectedDonation.dietaryTags}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Modal Actions: Scenario 4, 5, 6 */}
+                  <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', borderTop: '1px solid #f3f4f6', paddingTop: '16px' }}>
+                    <button
+                      type="button"
+                      onClick={handleCloseDetailsModal}
+                      className="btn btn-outline btn-md"
+                    >
+                      Close
+                    </button>
+                    {isUnavailable ? (
+                      <button
+                        type="button"
+                        disabled
+                        className="btn btn-outline btn-md"
+                        style={{ background: '#f3f4f6', color: '#9ca3af', borderColor: '#e5e7eb', cursor: 'not-allowed', display: 'flex', alignItems: 'center', gap: '8px' }}
+                        title="Donation is no longer available for requesting"
+                      >
+                        <Ban size={16} />
+                        <span>{isExpired ? 'Donation Expired' : 'Request Unavailable'}</span>
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const target = selectedDonation;
+                          handleCloseDetailsModal();
+                          handleOpenClaimModal(target);
+                        }}
+                        className="btn btn-amber btn-md"
+                        style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+                      >
+                        <Send size={16} />
+                        <span>Request Food Portion</span>
+                      </button>
+                    )}
+                  </div>
                 </div>
-              </div>
-              <div style={{ background: '#f9fafb', padding: '12px', borderRadius: '10px', border: '1px solid #e5e7eb' }}>
-                <div style={{ fontSize: '0.75rem', color: '#6b7280', fontWeight: 600 }}>Total Prepared</div>
-                <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#374151', marginTop: '2px' }}>
-                  {selectedDonation.totalQuantity ?? selectedDonation.quantity} <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>{selectedDonation.unit}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Details List */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '24px', fontSize: '0.875rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#4b5563' }}>
-                <MapPin size={16} color="#9ca3af" style={{ flexShrink: 0 }} />
-                <span><strong>Pickup Location:</strong> {selectedDonation.location || 'Location provided upon request confirmation'}</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#4b5563' }}>
-                <Calendar size={16} color="#9ca3af" style={{ flexShrink: 0 }} />
-                <span><strong>Availability Deadline:</strong> {formatExpiryTime(selectedDonation.expiryTime)}</span>
-              </div>
-              {selectedDonation.dietaryTags && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#4b5563' }}>
-                  <Tag size={16} color="#9ca3af" style={{ flexShrink: 0 }} />
-                  <span><strong>Dietary & Allergen Notes:</strong> {selectedDonation.dietaryTags}</span>
-                </div>
-              )}
-            </div>
-
-            {/* Modal Actions */}
-            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', borderTop: '1px solid #f3f4f6', paddingTop: '16px' }}>
-              <button
-                type="button"
-                onClick={() => setSelectedDonation(null)}
-                className="btn btn-outline btn-md"
-              >
-                Close
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const target = selectedDonation;
-                  setSelectedDonation(null);
-                  handleOpenClaimModal(target);
-                }}
-                className="btn btn-amber btn-md"
-                style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
-              >
-                <Send size={16} />
-                <span>Request Food Portion</span>
-              </button>
-            </div>
+              );
+            })()}
           </div>
         </div>
       )}
