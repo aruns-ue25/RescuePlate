@@ -20,7 +20,10 @@ import {
   X,
   ShieldCheck,
   Tag,
-  Users
+  Users,
+  Eye,
+  Info,
+  Check
 } from 'lucide-react';
 
 export default function OrganizationBrowsePage() {
@@ -33,6 +36,9 @@ export default function OrganizationBrowsePage() {
   // Filter States
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
+
+  // Selected Donation Details Modal State (Scenario 5)
+  const [selectedDonation, setSelectedDonation] = useState(null);
 
   // Request/Claim Modal State
   const [claimDonation, setClaimDonation] = useState(null);
@@ -260,8 +266,24 @@ export default function OrganizationBrowsePage() {
               No Available Surplus Food At This Moment
             </h3>
             <p style={{ color: '#6b7280', maxWidth: '460px', margin: '0 auto 20px', fontSize: '0.925rem' }}>
-              Donations may have already reached their availability period or have been fully claimed. Please check back shortly!
+              {categoryFilter !== 'ALL' || searchQuery
+                ? 'No food donations match your current search or category filter. Try clearing your filters or searching with different keywords.'
+                : 'Donations may have already reached their availability period or have been fully claimed. Please check back shortly!'}
             </p>
+            {(categoryFilter !== 'ALL' || searchQuery) && (
+              <button
+                onClick={() => {
+                  setCategoryFilter('ALL');
+                  setSearchQuery('');
+                  fetchAvailableDonations('ALL', '');
+                }}
+                className="btn btn-outline btn-sm"
+                style={{ margin: '0 auto', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+              >
+                <RefreshCw size={14} />
+                <span>Clear Filters</span>
+              </button>
+            )}
           </div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '24px' }}>
@@ -354,15 +376,24 @@ export default function OrganizationBrowsePage() {
                     )}
                   </div>
 
-                  {/* Request Button */}
-                  <div style={{ borderTop: '1px solid #f3f4f6', paddingTop: '16px', marginTop: '12px' }}>
+                  {/* Actions: View Details & Request Portion */}
+                  <div style={{ borderTop: '1px solid #f3f4f6', paddingTop: '16px', marginTop: '12px', display: 'flex', gap: '10px' }}>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedDonation(item)}
+                      className="btn btn-outline btn-md"
+                      style={{ flex: '1', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontSize: '0.875rem' }}
+                    >
+                      <Eye size={15} />
+                      <span>Details</span>
+                    </button>
                     <button
                       onClick={() => handleOpenClaimModal(item)}
                       className="btn btn-amber btn-md"
-                      style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+                      style={{ flex: '2', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontSize: '0.875rem' }}
                     >
-                      <Send size={16} />
-                      <span>Request Food Portion</span>
+                      <Send size={15} />
+                      <span>Request</span>
                     </button>
                   </div>
                 </div>
@@ -487,6 +518,168 @@ export default function OrganizationBrowsePage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Donation Details Modal (Scenario 5) */}
+      {selectedDonation && (
+        <div 
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0,0,0,0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: '20px'
+          }}
+        >
+          <div 
+            style={{
+              background: '#fff',
+              borderRadius: '16px',
+              maxWidth: '560px',
+              width: '100%',
+              padding: '28px',
+              boxShadow: '0 20px 25px -5px rgba(0,0,0,0.2)',
+              maxHeight: '90vh',
+              overflowY: 'auto'
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
+              <div>
+                <span 
+                  style={{
+                    fontSize: '0.75rem',
+                    fontWeight: 700,
+                    padding: '3px 10px',
+                    borderRadius: '12px',
+                    background: '#ecfdf5',
+                    color: '#065f46',
+                    border: '1px solid #a7f3d0',
+                    display: 'inline-block',
+                    marginBottom: '8px'
+                  }}
+                >
+                  {selectedDonation.category}
+                </span>
+                <h2 style={{ margin: 0, fontSize: '1.4rem', fontWeight: 800, color: '#111827' }}>
+                  {selectedDonation.foodTitle}
+                </h2>
+              </div>
+              <button 
+                onClick={() => setSelectedDonation(null)}
+                style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', padding: '4px' }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Donor Info Bar */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', background: '#f9fafb', borderRadius: '10px', marginBottom: '20px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Building2 size={18} color="#047857" />
+                <div>
+                  <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>Offered by Donor</div>
+                  <Link 
+                    to="/donors" 
+                    style={{ fontWeight: 700, color: '#047857', textDecoration: 'none' }}
+                  >
+                    {selectedDonation.donorName || "Verified Food Donor"}
+                  </Link>
+                </div>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <span 
+                  style={{
+                    fontSize: '0.75rem',
+                    fontWeight: 700,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    color: calculateHoursLeft(selectedDonation.expiryTime).expired ? '#dc2626' : '#d97706'
+                  }}
+                >
+                  <Clock size={13} />
+                  {calculateHoursLeft(selectedDonation.expiryTime).text}
+                </span>
+              </div>
+            </div>
+
+            {/* Description / Notes */}
+            {(selectedDonation.notes || selectedDonation.description) && (
+              <div style={{ marginBottom: '18px' }}>
+                <h4 style={{ fontSize: '0.85rem', fontWeight: 700, color: '#374151', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' }}>
+                  Preparation Notes & Instructions
+                </h4>
+                <p style={{ margin: 0, color: '#4b5563', fontSize: '0.925rem', lineHeight: 1.5, background: '#fdfdfd', border: '1px solid #f3f4f6', padding: '12px', borderRadius: '8px' }}>
+                  {selectedDonation.notes || selectedDonation.description}
+                </p>
+              </div>
+            )}
+
+            {/* Quantity Metrics */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '18px' }}>
+              <div style={{ background: '#ecfdf5', padding: '12px', borderRadius: '10px', border: '1px solid #a7f3d0' }}>
+                <div style={{ fontSize: '0.75rem', color: '#065f46', fontWeight: 600 }}>Remaining Quantity</div>
+                <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#065f46', marginTop: '2px' }}>
+                  {selectedDonation.remainingQuantity} <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>{selectedDonation.unit}</span>
+                </div>
+              </div>
+              <div style={{ background: '#f9fafb', padding: '12px', borderRadius: '10px', border: '1px solid #e5e7eb' }}>
+                <div style={{ fontSize: '0.75rem', color: '#6b7280', fontWeight: 600 }}>Total Prepared</div>
+                <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#374151', marginTop: '2px' }}>
+                  {selectedDonation.totalQuantity ?? selectedDonation.quantity} <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>{selectedDonation.unit}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Details List */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '24px', fontSize: '0.875rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#4b5563' }}>
+                <MapPin size={16} color="#9ca3af" style={{ flexShrink: 0 }} />
+                <span><strong>Pickup Location:</strong> {selectedDonation.location || 'Location provided upon request confirmation'}</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#4b5563' }}>
+                <Calendar size={16} color="#9ca3af" style={{ flexShrink: 0 }} />
+                <span><strong>Availability Deadline:</strong> {formatExpiryTime(selectedDonation.expiryTime)}</span>
+              </div>
+              {selectedDonation.dietaryTags && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#4b5563' }}>
+                  <Tag size={16} color="#9ca3af" style={{ flexShrink: 0 }} />
+                  <span><strong>Dietary & Allergen Notes:</strong> {selectedDonation.dietaryTags}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Actions */}
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', borderTop: '1px solid #f3f4f6', paddingTop: '16px' }}>
+              <button
+                type="button"
+                onClick={() => setSelectedDonation(null)}
+                className="btn btn-outline btn-md"
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const target = selectedDonation;
+                  setSelectedDonation(null);
+                  handleOpenClaimModal(target);
+                }}
+                className="btn btn-amber btn-md"
+                style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+              >
+                <Send size={16} />
+                <span>Request Food Portion</span>
+              </button>
+            </div>
           </div>
         </div>
       )}
