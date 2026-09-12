@@ -98,16 +98,49 @@ public class DonationServiceImpl : IDonationService
         }
     }
 
-    public async Task<ApiResponse<List<DonationResponseDto>>> GetMyDonationsAsync(string donorId)
+    public async Task<ApiResponse<List<DonationResponseDto>>> GetMyDonationsAsync(
+        string donorId, 
+        string? status = null, 
+        string? search = null)
     {
         try
         {
-            var donations = await _context.Donations
-                .Where(d => d.DonorId == donorId)
+            var query = _context.Donations
+                .Where(d => d.DonorId == donorId);
+
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var s = search.Trim().ToLower();
+                query = query.Where(d => 
+                    d.FoodTitle.ToLower().Contains(s) || 
+                    d.Location.ToLower().Contains(s) || 
+                    d.Category.ToLower().Contains(s) ||
+                    d.Notes.ToLower().Contains(s));
+            }
+
+            var donations = await query
                 .OrderByDescending(d => d.CreatedAt)
                 .ToListAsync();
 
             var dtos = donations.Select(MapToResponseDto).ToList();
+
+            if (!string.IsNullOrWhiteSpace(status) && status.ToUpper() != "ALL")
+            {
+                var sFilter = status.Trim().ToLower();
+                if (sFilter == "active" || sFilter == "available")
+                {
+                    dtos = dtos.Where(d => (d.Status == "Posted" || d.Status == "Available" || d.Status == "Partially Claimed") && !d.IsExpired).ToList();
+                }
+                else if (sFilter == "expired")
+                {
+                    dtos = dtos.Where(d => d.IsExpired || d.Status == "Expired").ToList();
+                }
+                else
+                {
+                    dtos = dtos.Where(d => d.Status.ToLower() == sFilter).ToList();
+                }
+            }
+
             return ApiResponse<List<DonationResponseDto>>.Ok(dtos, "My surplus listings retrieved.");
         }
         catch (Exception ex)
@@ -173,6 +206,29 @@ public class DonationServiceImpl : IDonationService
 
     private static DonationResponseDto MapToResponseDto(Donation d)
     {
+        var calculatedRemaining = Math.Max(0, d.TotalQuantity - d.ClaimedQuantity);
+        var effectiveStatus = d.Status;
+
+        if (effectiveStatus != "Completed" && effectiveStatus != "Cancelled")
+        {
+            if (DateTime.UtcNow > d.ExpiryTime)
+            {
+                effectiveStatus = "Expired";
+            }
+            else if (calculatedRemaining == 0 && d.TotalQuantity > 0)
+            {
+                effectiveStatus = "Fully Claimed";
+            }
+            else if (d.ClaimedQuantity > 0 && calculatedRemaining > 0)
+            {
+                effectiveStatus = "Partially Claimed";
+            }
+            else if (string.IsNullOrWhiteSpace(effectiveStatus) || effectiveStatus == "Posted")
+            {
+                effectiveStatus = "Available";
+            }
+        }
+
         return new DonationResponseDto
         {
             Id = d.Id,
@@ -183,11 +239,11 @@ public class DonationServiceImpl : IDonationService
             Category = d.Category,
             TotalQuantity = d.TotalQuantity,
             ClaimedQuantity = d.ClaimedQuantity,
-            RemainingQuantity = d.RemainingQuantity,
+            RemainingQuantity = calculatedRemaining,
             Unit = d.Unit,
             ExpiryTime = d.ExpiryTime,
             CollectionMode = d.CollectionMode,
-            Status = d.Status,
+            Status = effectiveStatus,
             Location = d.Location,
             Notes = d.Notes,
             DietaryTags = d.DietaryTags,

@@ -164,9 +164,12 @@ export const donationApi = {
     }
   },
 
-  getMyDonations: async () => {
+  getMyDonations: async (params = {}) => {
     try {
-      const response = await donationClient.get('/donations/my-donations');
+      const cleanParams = {};
+      if (params.status && params.status !== 'ALL') cleanParams.status = params.status;
+      if (params.search && params.search.trim()) cleanParams.search = params.search.trim();
+      const response = await donationClient.get('/donations/my-donations', { params: cleanParams });
       return response.data;
     } catch (error) {
       throw error.response?.data || { message: 'Failed to fetch donations' };

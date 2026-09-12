@@ -55,13 +55,15 @@ public class DonationsController : ControllerBase
     }
 
     /// <summary>
-    /// Retrieves all donations posted by the authenticated Donor.
+    /// Retrieves all donations posted by the authenticated Donor (with optional status & search filtering).
     /// </summary>
     [HttpGet("my-donations")]
     [Authorize(Roles = "DONOR")]
     [ProducesResponseType(typeof(ApiResponse<List<DonationResponseDto>>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public async Task<IActionResult> GetMyDonations()
+    public async Task<IActionResult> GetMyDonations(
+        [FromQuery] string? status = null,
+        [FromQuery] string? search = null)
     {
         var (donorId, _, _) = GetCurrentDonorIdentity();
         if (string.IsNullOrWhiteSpace(donorId))
@@ -69,7 +71,7 @@ public class DonationsController : ControllerBase
             return Unauthorized(ApiResponse<List<DonationResponseDto>>.Fail("Invalid or missing Donor authentication claims."));
         }
 
-        var result = await _donationService.GetMyDonationsAsync(donorId);
+        var result = await _donationService.GetMyDonationsAsync(donorId, status, search);
         return Ok(result);
     }
 
