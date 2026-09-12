@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using FluentAssertions;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
@@ -13,12 +14,14 @@ namespace UserService.UnitTests.Controllers;
 public class ProfileControllerTests
 {
     private readonly Mock<IProfileService> _profileServiceMock;
+    private readonly Mock<IWebHostEnvironment> _envMock;
     private readonly ProfileController _controller;
 
     public ProfileControllerTests()
     {
         _profileServiceMock = new Mock<IProfileService>();
-        _controller = new ProfileController(_profileServiceMock.Object);
+        _envMock = new Mock<IWebHostEnvironment>();
+        _controller = new ProfileController(_profileServiceMock.Object, _envMock.Object);
     }
 
     private void SetUserContext(Guid userId)
