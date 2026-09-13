@@ -23,6 +23,7 @@ env:
   FRONTEND_APP: rescueplate-frontend
 
   BACKEND_API_URL: https://rescueplate-userservice.wittyrock-ff20867a.southeastasia.azurecontainerapps.io/api
+  DONATION_API_URL: https://rescueplate-donationservice.wittyrock-ff20867a.southeastasia.azurecontainerapps.io/api
 
 jobs:
   deploy:
@@ -92,6 +93,7 @@ jobs:
           push: true
           build-args: |
             VITE_API_BASE_URL=${{ env.BACKEND_API_URL }}
+            VITE_DONATION_API_BASE_URL=${{ env.DONATION_API_URL }}
           tags: |
             ${{ env.ACR_LOGIN_SERVER }}/rescueplate-frontend:${{ github.event.workflow_run.head_sha }}
             ${{ env.ACR_LOGIN_SERVER }}/rescueplate-frontend:latest
