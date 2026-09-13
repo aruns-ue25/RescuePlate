@@ -19,6 +19,7 @@ env:
   ACR_LOGIN_SERVER: rescueplateacr26-d6c8a0e0g7d6ajby.azurecr.io
 
   BACKEND_APP: rescueplate-userservice
+  DONATION_APP: rescueplate-donationservice
   FRONTEND_APP: rescueplate-frontend
 
   BACKEND_API_URL: https://rescueplate-userservice.wittyrock-ff20867a.southeastasia.azurecontainerapps.io/api
@@ -70,6 +71,16 @@ jobs:
             ${{ env.ACR_LOGIN_SERVER }}/rescueplate-userservice:${{ github.event.workflow_run.head_sha }}
             ${{ env.ACR_LOGIN_SERVER }}/rescueplate-userservice:latest
 
+      - name: Build and push DonationService image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend/DonationService
+          file: ./backend/DonationService/Dockerfile
+          push: true
+          tags: |
+            ${{ env.ACR_LOGIN_SERVER }}/rescueplate-donationservice:${{ github.event.workflow_run.head_sha }}
+            ${{ env.ACR_LOGIN_SERVER }}/rescueplate-donationservice:latest
+
       # --------------------------------------------------
       # 5. Build and push frontend image
       # --------------------------------------------------
@@ -94,6 +105,14 @@ jobs:
             --name ${{ env.BACKEND_APP }} \
             --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
             --image ${{ env.ACR_LOGIN_SERVER }}/rescueplate-userservice:${{ github.event.workflow_run.head_sha }}
+
+
+      - name: Deploy DonationService
+        run: |
+          az containerapp update \
+            --name ${{ env.DONATION_APP }} \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --image ${{ env.ACR_LOGIN_SERVER }}/rescueplate-donationservice:${{ github.event.workflow_run.head_sha }}
 
       # --------------------------------------------------
       # 7. Deploy frontend Container App
