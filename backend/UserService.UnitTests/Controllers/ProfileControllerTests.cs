@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using FluentAssertions;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
@@ -13,12 +14,23 @@ namespace UserService.UnitTests.Controllers;
 public class ProfileControllerTests
 {
     private readonly Mock<IProfileService> _profileServiceMock;
+    private readonly Mock<IWebHostEnvironment> _environmentMock;
     private readonly ProfileController _controller;
 
     public ProfileControllerTests()
     {
         _profileServiceMock = new Mock<IProfileService>();
-        _controller = new ProfileController(_profileServiceMock.Object);
+
+        _environmentMock = new Mock<IWebHostEnvironment>();
+
+        _environmentMock
+            .Setup(e => e.WebRootPath)
+            .Returns(Path.Combine(Path.GetTempPath(), "RescuePlateTest"));
+
+        _controller = new ProfileController(
+            _profileServiceMock.Object,
+            _environmentMock.Object
+        );
     }
 
     private void SetUserContext(Guid userId)
@@ -28,12 +40,17 @@ public class ProfileControllerTests
             new(ClaimTypes.NameIdentifier, userId.ToString()),
             new(ClaimTypes.Role, "DONOR")
         };
+
         var identity = new ClaimsIdentity(claims, "TestAuth");
+
         var claimsPrincipal = new ClaimsPrincipal(identity);
 
         _controller.ControllerContext = new ControllerContext
         {
-            HttpContext = new DefaultHttpContext { User = claimsPrincipal }
+            HttpContext = new DefaultHttpContext
+            {
+                User = claimsPrincipal
+            }
         };
     }
 
@@ -42,6 +59,7 @@ public class ProfileControllerTests
     {
         // Arrange (TC-PROF-01)
         var userId = Guid.NewGuid();
+
         SetUserContext(userId);
 
         var profileDto = new UserProfileDto
@@ -61,6 +79,7 @@ public class ProfileControllerTests
 
         // Assert
         var okResult = result as OkObjectResult;
+
         okResult.Should().NotBeNull();
         okResult!.StatusCode.Should().Be(200);
     }
@@ -70,6 +89,7 @@ public class ProfileControllerTests
     {
         // Arrange (TC-PROF-04)
         var userId = Guid.NewGuid();
+
         SetUserContext(userId);
 
         _profileServiceMock
@@ -81,6 +101,7 @@ public class ProfileControllerTests
 
         // Assert
         var notFoundResult = result as NotFoundObjectResult;
+
         notFoundResult.Should().NotBeNull();
         notFoundResult!.StatusCode.Should().Be(404);
     }
@@ -90,20 +111,34 @@ public class ProfileControllerTests
     {
         // Arrange (TC-PROF-05)
         var userId = Guid.NewGuid();
+
         SetUserContext(userId);
 
-        var updateDto = new UpdateProfileDto { BusinessOrOrgName = "Updated Name" };
-        var updatedProfile = new UserProfileDto { UserId = userId, BusinessOrOrgName = "Updated Name" };
+        var updateDto = new UpdateProfileDto
+        {
+            BusinessOrOrgName = "Updated Name"
+        };
+
+        var updatedProfile = new UserProfileDto
+        {
+            UserId = userId,
+            BusinessOrOrgName = "Updated Name"
+        };
 
         _profileServiceMock
             .Setup(s => s.UpdateProfileAsync(userId, updateDto))
-            .ReturnsAsync((true, "Profile updated successfully!", updatedProfile));
+            .ReturnsAsync((
+                true,
+                "Profile updated successfully!",
+                updatedProfile
+            ));
 
         // Act
         var result = await _controller.UpdateMyProfile(updateDto);
 
         // Assert
         var okResult = result as OkObjectResult;
+
         okResult.Should().NotBeNull();
         okResult!.StatusCode.Should().Be(200);
     }
@@ -113,19 +148,28 @@ public class ProfileControllerTests
     {
         // Arrange (TC-PROF-07)
         var userId = Guid.NewGuid();
+
         SetUserContext(userId);
 
-        var updateDto = new UpdateProfileDto { BusinessOrOrgName = "Updated Name" };
+        var updateDto = new UpdateProfileDto
+        {
+            BusinessOrOrgName = "Updated Name"
+        };
 
         _profileServiceMock
             .Setup(s => s.UpdateProfileAsync(userId, updateDto))
-            .ReturnsAsync((false, "User not found.", null));
+            .ReturnsAsync((
+                false,
+                "User not found.",
+                null
+            ));
 
         // Act
         var result = await _controller.UpdateMyProfile(updateDto);
 
         // Assert
         var badRequestResult = result as BadRequestObjectResult;
+
         badRequestResult.Should().NotBeNull();
         badRequestResult!.StatusCode.Should().Be(400);
     }
@@ -135,6 +179,7 @@ public class ProfileControllerTests
     {
         // Arrange (TC-PROF-08)
         var userId = Guid.NewGuid();
+
         var profileDto = new UserProfileDto
         {
             UserId = userId,
@@ -153,6 +198,7 @@ public class ProfileControllerTests
 
         // Assert
         var okResult = result as OkObjectResult;
+
         okResult.Should().NotBeNull();
         okResult!.StatusCode.Should().Be(200);
     }
@@ -172,6 +218,7 @@ public class ProfileControllerTests
 
         // Assert
         var notFoundResult = result as NotFoundObjectResult;
+
         notFoundResult.Should().NotBeNull();
         notFoundResult!.StatusCode.Should().Be(404);
     }
