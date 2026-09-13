@@ -12,9 +12,12 @@ RUN npm ci
 # Copy frontend source
 COPY . .
 
-# API URL is baked into the Vite build
+# API URLs are baked into the Vite build
 ARG VITE_API_BASE_URL=http://localhost:5000/api
+ARG VITE_DONATION_API_BASE_URL=http://localhost:5001/api
+
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
+ENV VITE_DONATION_API_BASE_URL=$VITE_DONATION_API_BASE_URL
 
 # Build React application
 RUN npm run build
