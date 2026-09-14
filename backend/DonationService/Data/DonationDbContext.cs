@@ -21,7 +21,8 @@ public class DonationDbContext : DbContext
             entity.Property(e => e.FoodTitle).IsRequired().HasMaxLength(200);
             entity.Property(e => e.Category).IsRequired().HasMaxLength(50);
             entity.Property(e => e.Unit).IsRequired().HasMaxLength(50);
-            entity.Property(e => e.CollectionMode).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.CollectionMode).HasMaxLength(50);
+            entity.Property(e => e.PickupOrganization).HasMaxLength(150);
             entity.Property(e => e.Status).IsRequired().HasMaxLength(50);
             entity.Property(e => e.DonorName).IsRequired().HasMaxLength(150);
             entity.Property(e => e.DonorEmail).HasMaxLength(150);

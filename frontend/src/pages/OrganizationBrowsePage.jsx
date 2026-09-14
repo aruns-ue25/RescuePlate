@@ -452,9 +452,11 @@ export default function OrganizationBrowsePage() {
                       <span>Details</span>
                     </button>
                     <button
-                      onClick={() => handleOpenClaimModal(item)}
-                      className="btn btn-amber btn-md"
-                      style={{ flex: '2', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontSize: '0.875rem' }}
+                      type="button"
+                      disabled
+                      className="btn btn-outline btn-md"
+                      style={{ flex: '2', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontSize: '0.875rem', background: '#f3f4f6', color: '#9ca3af', borderColor: '#e5e7eb', cursor: 'not-allowed' }}
+                      title="Food donation requesting is disabled in this version"
                     >
                       <Send size={15} />
                       <span>Request</span>
@@ -813,10 +815,10 @@ export default function OrganizationBrowsePage() {
                       <Calendar size={16} color="#9ca3af" style={{ flexShrink: 0 }} />
                       <span><strong>Availability Deadline:</strong> {formatExpiryTime(selectedDonation.expiryTime)}</span>
                     </div>
-                    {selectedDonation.collectionMode && (
+                    {selectedDonation.pickupOrganization && (
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#4b5563' }}>
                         <ShoppingBag size={16} color="#9ca3af" style={{ flexShrink: 0 }} />
-                        <span><strong>Collection Mode:</strong> {selectedDonation.collectionMode}</span>
+                        <span><strong>Pickup Organization:</strong> {selectedDonation.pickupOrganization}</span>
                       </div>
                     )}
                     {selectedDonation.dietaryTags && (
@@ -850,13 +852,10 @@ export default function OrganizationBrowsePage() {
                     ) : (
                       <button
                         type="button"
-                        onClick={() => {
-                          const target = selectedDonation;
-                          handleCloseDetailsModal();
-                          handleOpenClaimModal(target);
-                        }}
-                        className="btn btn-amber btn-md"
-                        style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+                        disabled
+                        className="btn btn-outline btn-md"
+                        style={{ background: '#f3f4f6', color: '#9ca3af', borderColor: '#e5e7eb', cursor: 'not-allowed', display: 'flex', alignItems: 'center', gap: '8px' }}
+                        title="Food donation requesting is disabled in this version"
                       >
                         <Send size={16} />
                         <span>Request Food Portion</span>

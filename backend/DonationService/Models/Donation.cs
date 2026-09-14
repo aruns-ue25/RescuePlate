@@ -44,9 +44,11 @@ public class Donation
     [Required]
     public DateTime ExpiryTime { get; set; }
 
-    [Required]
     [MaxLength(50)]
     public string CollectionMode { get; set; } = "Organization Pickup"; // Organization Pickup, Donor Delivery
+
+    [MaxLength(150)]
+    public string? PickupOrganization { get; set; } = "All Registered Organizations";
 
     [Required]
     [MaxLength(50)]

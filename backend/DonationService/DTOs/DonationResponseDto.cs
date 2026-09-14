@@ -15,6 +15,7 @@ public class DonationResponseDto
     public DateTime ExpiryTime { get; set; }
     public string CollectionMode { get; set; } = string.Empty;
     public string Status { get; set; } = string.Empty;
+    public string? PickupOrganization { get; set; } = "All Registered Organizations";
     public string Location { get; set; } = string.Empty;
     public string? Notes { get; set; }
     public string? DietaryTags { get; set; }

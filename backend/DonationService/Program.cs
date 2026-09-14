@@ -143,6 +143,8 @@ using (var scope = app.Services.CreateScope())
             CREATE INDEX IF NOT EXISTS ""IX_Donations_Category"" ON ""Donations"" (""Category"");
             CREATE INDEX IF NOT EXISTS ""IX_Donations_Status"" ON ""Donations"" (""Status"");
             CREATE INDEX IF NOT EXISTS ""IX_Donations_DonorId"" ON ""Donations"" (""DonorId"");
+            ALTER TABLE ""Donations"" ADD COLUMN IF NOT EXISTS ""PickupOrganization"" character varying(150);
+            ALTER TABLE ""Donations"" ALTER COLUMN ""CollectionMode"" DROP NOT NULL;
         ");
     }
     catch (Exception ex)

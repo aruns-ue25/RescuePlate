@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { donationApi } from '../services/api';
+import { donationApi, authApi } from '../services/api';
 import { 
   Users,
   Store, 
@@ -69,20 +69,43 @@ export default function DonorDashboardPage() {
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
 
-  // Form State for creating donation
+  // Form State for creating donation (Sprint 2 scope)
   const initialFormState = {
     foodTitle: '',
     category: 'Cooked Meals',
     totalQuantity: 20,
     unit: 'portions',
     expiryHours: 4,
-    collectionMode: 'Organization Pickup',
-    location: currentUser?.location || '',
+    pickupOrganization: 'All Registered Organizations',
+    location: '',
     notes: '',
     dietaryTags: 'Vegetarian'
   };
 
   const [formData, setFormData] = useState(initialFormState);
+  const [donorProfileAddress, setDonorProfileAddress] = useState(currentUser?.location || currentUser?.address || '');
+  const [participatingOrgs, setParticipatingOrgs] = useState([]);
+
+  // Fetch registered donor address and participating charity organizations
+  useEffect(() => {
+    async function loadInitialData() {
+      try {
+        const [profileRes, orgsRes] = await Promise.allSettled([
+          authApi.getMyProfile(),
+          donationApi.getParticipatingOrganizations()
+        ]);
+        if (profileRes.status === 'fulfilled' && profileRes.value?.success && profileRes.value.data?.address) {
+          setDonorProfileAddress(profileRes.value.data.address);
+        }
+        if (orgsRes.status === 'fulfilled' && orgsRes.value?.success && orgsRes.value.data) {
+          setParticipatingOrgs(orgsRes.value.data);
+        }
+      } catch {
+        // Fallback to existing session address
+      }
+    }
+    loadInitialData();
+  }, []);
 
   const fetchMyDonations = async (status = statusFilter, search = searchQuery) => {
     try {
@@ -281,10 +304,6 @@ export default function DonorDashboardPage() {
       return;
     }
 
-    if (!formData.location.trim()) {
-      setFormError('Pickup or delivery location is required.');
-      return;
-    }
 
     if (formData.totalQuantity <= 0) {
       setFormError('Quantity must be a positive number greater than 0.');
@@ -440,10 +459,8 @@ export default function DonorDashboardPage() {
     return true;
   });
 
-  const totalMealsRescued = donations.reduce((acc, curr) => acc + (curr.totalQuantity || 0), 0);
-  const totalClaimedPortions = donations.reduce((acc, curr) => acc + (curr.claimedQuantity || 0), 0);
   const activeListingsCount = donations.filter(d => 
-    (d.status === 'Posted' || d.status === 'Available' || d.status === 'Partially Claimed') && 
+    (d.status === 'Posted' || d.status === 'Available') && 
     !calculateTimeLeft(d.expiryTime).expired &&
     d.status !== 'Cancelled'
   ).length;
@@ -535,27 +552,14 @@ export default function DonorDashboardPage() {
 
           <div className="profile-card" style={{ padding: '20px', borderRadius: '12px', background: '#fff', border: '1px solid #e5e7eb', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
             <div style={{ color: '#6b7280', fontSize: '0.875rem', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span>Total Meals Rescued</span>
+              <span>Total Listings Posted</span>
               <Package size={18} style={{ color: '#059669' }} />
             </div>
             <div style={{ fontSize: '1.85rem', fontWeight: 800, color: '#059669', marginTop: '6px' }}>
-              {totalMealsRescued}
+              {donations.length}
             </div>
             <div style={{ fontSize: '0.8rem', color: '#9ca3af', marginTop: '4px' }}>
-              Portions donated through RescuePlate
-            </div>
-          </div>
-
-          <div className="profile-card" style={{ padding: '20px', borderRadius: '12px', background: '#fff', border: '1px solid #e5e7eb', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
-            <div style={{ color: '#6b7280', fontSize: '0.875rem', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span>Portions Claimed</span>
-              <CheckCircle2 size={18} style={{ color: '#3b82f6' }} />
-            </div>
-            <div style={{ fontSize: '1.85rem', fontWeight: 800, color: '#2563eb', marginTop: '6px' }}>
-              {totalClaimedPortions}
-            </div>
-            <div style={{ fontSize: '0.8rem', color: '#9ca3af', marginTop: '4px' }}>
-              Portions distributed or in progress
+              Total surplus listings created
             </div>
           </div>
 
@@ -607,8 +611,6 @@ export default function DonorDashboardPage() {
               {[
                 { id: 'ALL', label: 'All Listings' },
                 { id: 'Available', label: 'Active / Available' },
-                { id: 'Partially Claimed', label: 'Partially Claimed' },
-                { id: 'Fully Claimed', label: 'Fully Claimed' },
                 { id: 'Cancelled', label: 'Cancelled' },
                 { id: 'Expired', label: 'Expired' }
               ].map(chip => (
@@ -849,10 +851,12 @@ export default function DonorDashboardPage() {
                         </span>
                       </div>
 
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <Truck size={16} style={{ color: '#3b82f6', flexShrink: 0 }} />
-                        <span style={{ fontSize: '0.85rem' }}>{item.collectionMode}</span>
-                      </div>
+                      {item.pickupOrganization && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <Users size={16} style={{ color: '#3b82f6', flexShrink: 0 }} />
+                          <span style={{ fontSize: '0.85rem' }}>{item.pickupOrganization}</span>
+                        </div>
+                      )}
 
                       {item.dietaryTags && (
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px' }}>
@@ -1303,37 +1307,18 @@ export default function DonorDashboardPage() {
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: '14px' }}>
-                <div>
-                  <label style={{ display: 'block', fontWeight: 700, fontSize: '0.9rem', marginBottom: '6px', color: '#374151' }}>
-                    Pickup Location <span style={{ color: '#ef4444' }}>*</span>
-                  </label>
-                  <input 
-                    type="text"
-                    name="location"
-                    value={editFormData.location}
-                    onChange={handleEditInputChange}
-                    className="form-control"
-                    style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '0.95rem' }}
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label style={{ display: 'block', fontWeight: 700, fontSize: '0.9rem', marginBottom: '6px', color: '#374151' }}>
-                    Collection Mode
-                  </label>
-                  <select
-                    name="collectionMode"
-                    value={editFormData.collectionMode}
-                    onChange={handleEditInputChange}
-                    className="form-control"
-                    style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '0.95rem' }}
-                  >
-                    <option value="Organization Pickup">Organization Pickup</option>
-                    <option value="Donor Drop-off">Donor Drop-off</option>
-                  </select>
-                </div>
+              <div>
+                <label style={{ display: 'block', fontWeight: 700, fontSize: '0.9rem', marginBottom: '6px', color: '#374151' }}>
+                  Pickup Location <span style={{ fontSize: '0.8rem', color: '#059669', fontWeight: 600 }}>— registered address</span>
+                </label>
+                <input 
+                  type="text"
+                  name="location"
+                  value={editFormData.location}
+                  readOnly
+                  className="form-control"
+                  style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '0.95rem', background: '#f9fafb' }}
+                />
               </div>
 
               <div>
@@ -1527,15 +1512,17 @@ export default function DonorDashboardPage() {
                 </div>
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
-                <Truck size={18} style={{ color: '#3b82f6', marginTop: '2px', flexShrink: 0 }} />
-                <div>
-                  <strong>Collection Protocol:</strong>
-                  <div style={{ color: '#6b7280', fontSize: '0.85rem', marginTop: '2px' }}>
-                    {selectedDonation.collectionMode}
+              {selectedDonation.pickupOrganization && (
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+                  <Users size={18} style={{ color: '#3b82f6', marginTop: '2px', flexShrink: 0 }} />
+                  <div>
+                    <strong>Pickup Organization:</strong>
+                    <div style={{ color: '#6b7280', fontSize: '0.85rem', marginTop: '2px' }}>
+                      {selectedDonation.pickupOrganization}
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
 
               {selectedDonation.dietaryTags && (
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
@@ -1738,37 +1725,48 @@ export default function DonorDashboardPage() {
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: '14px' }}>
-                <div>
-                  <label style={{ display: 'block', fontWeight: 700, fontSize: '0.9rem', marginBottom: '6px', color: '#374151' }}>
-                    Pickup Location <span style={{ color: '#ef4444' }}>*</span>
-                  </label>
-                  <input 
-                    type="text"
-                    name="location"
-                    value={formData.location}
-                    onChange={handleInputChange}
-                    placeholder="e.g. 123 Galle Road, Colombo 03"
-                    className="form-control"
-                    style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '0.95rem' }}
-                    required
-                  />
-                </div>
+              <div>
+                <label style={{ display: 'block', fontWeight: 700, fontSize: '0.9rem', marginBottom: '6px', color: '#374151' }}>
+                  Pickup Organization
+                </label>
+                <select
+                  name="pickupOrganization"
+                  value={formData.pickupOrganization || 'All Registered Organizations'}
+                  onChange={handleInputChange}
+                  className="form-control"
+                  style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '0.95rem' }}
+                >
+                  <option value="All Registered Organizations">All Registered Organizations (Open to Any Verified Partner)</option>
+                  {participatingOrgs.map(org => (
+                    <option key={org.organizationId} value={org.organizationName}>
+                      {org.organizationName} ({org.organizationType || 'Charity'})
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-                <div>
-                  <label style={{ display: 'block', fontWeight: 700, fontSize: '0.9rem', marginBottom: '6px', color: '#374151' }}>
-                    Collection Mode
-                  </label>
-                  <select
-                    name="collectionMode"
-                    value={formData.collectionMode}
-                    onChange={handleInputChange}
-                    className="form-control"
-                    style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '0.95rem' }}
-                  >
-                    <option value="Organization Pickup">Organization Pickup</option>
-                    <option value="Donor Drop-off">Donor Drop-off</option>
-                  </select>
+              <div>
+                <label style={{ display: 'block', fontWeight: 700, fontSize: '0.9rem', marginBottom: '6px', color: '#374151' }}>
+                  Pickup Location <span style={{ fontSize: '0.8rem', color: '#059669', fontWeight: 600 }}>— automatically assigned</span>
+                </label>
+                <div style={{
+                  padding: '10px 14px',
+                  borderRadius: '8px',
+                  background: '#f9fafb',
+                  border: '1px solid #e5e7eb',
+                  color: '#374151',
+                  fontSize: '0.95rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}>
+                  <MapPin size={16} color="#059669" style={{ flexShrink: 0 }} />
+                  <span style={{ fontWeight: 600, color: donorProfileAddress ? '#111827' : '#9ca3af' }}>
+                    {donorProfileAddress || 'Registered profile address (automatically retrieved from account)'}
+                  </span>
+                  <span style={{ marginLeft: 'auto', fontSize: '0.75rem', background: '#ecfdf5', color: '#065f46', padding: '2px 8px', borderRadius: '12px', fontWeight: 700 }}>
+                    Auto-Assigned
+                  </span>
                 </div>
               </div>
 
