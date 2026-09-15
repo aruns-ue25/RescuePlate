@@ -134,23 +134,8 @@ export default function OrganizationBrowsePage() {
   };
 
   const handleOpenClaimModal = (item) => {
-    // Check client-side expiry check (Scenario 4)
-    const isExpired = new Date(item.expiryTime) <= new Date() || item.status === 'Expired';
-    if (isExpired) {
-      alert('This food donation has reached the end of its availability period and cannot be requested.');
-      return;
-    }
-
-    // Check availability (Scenario 5)
-    if (item.remainingQuantity <= 0 || item.status === 'Fully Claimed' || item.status === 'Cancelled' || item.status === 'Completed') {
-      alert('This donation is no longer available for requesting.');
-      return;
-    }
-
-    setClaimDonation(item);
-    setClaimQuantity(Math.min(item.remainingQuantity, 1));
-    setClaimError(null);
-    setClaimSuccess(null);
+    // Donation request workflow is disabled for this version
+    return;
   };
 
   const handleConfirmClaim = async (e) => {
@@ -451,9 +436,20 @@ export default function OrganizationBrowsePage() {
                       <span>Details</span>
                     </button>
                     <button
-                      onClick={() => handleOpenClaimModal(item)}
+                      type="button"
+                      disabled
                       className="btn btn-amber btn-md"
-                      style={{ flex: '2', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontSize: '0.875rem' }}
+                      style={{ 
+                        flex: '2', 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'center', 
+                        gap: '8px', 
+                        fontSize: '0.875rem',
+                        opacity: 0.65,
+                        cursor: 'not-allowed'
+                      }}
+                      title="Requesting donations is disabled for this version"
                     >
                       <Send size={15} />
                       <span>Request</span>
@@ -641,10 +637,9 @@ export default function OrganizationBrowsePage() {
               </div>
             ) : selectedDonation && (() => {
               const isExpired = new Date(selectedDonation.expiryTime) <= new Date() || selectedDonation.status === 'Expired';
-              const isFullyClaimed = selectedDonation.remainingQuantity <= 0 || selectedDonation.status === 'Fully Claimed';
               const isCancelled = selectedDonation.status === 'Cancelled';
               const isCompleted = selectedDonation.status === 'Completed';
-              const isUnavailable = isExpired || isFullyClaimed || isCancelled || isCompleted || selectedDonation.remainingQuantity <= 0;
+              const isUnavailable = isExpired || isCancelled || isCompleted;
 
               let statusBadgeBg = '#ecfdf5';
               let statusBadgeColor = '#065f46';
@@ -661,11 +656,6 @@ export default function OrganizationBrowsePage() {
                 statusBadgeColor = '#991b1b';
                 statusBadgeBorder = '#fecaca';
                 statusText = 'Cancelled by Donor';
-              } else if (isFullyClaimed) {
-                statusBadgeBg = '#fef3c7';
-                statusBadgeColor = '#92400e';
-                statusBadgeBorder = '#fde68a';
-                statusText = 'Fully Claimed';
               } else if (isCompleted) {
                 statusBadgeBg = '#f3f4f6';
                 statusBadgeColor = '#374151';
@@ -811,12 +801,10 @@ export default function OrganizationBrowsePage() {
                       <Calendar size={16} color="#9ca3af" style={{ flexShrink: 0 }} />
                       <span><strong>Availability Deadline:</strong> {formatExpiryTime(selectedDonation.expiryTime)}</span>
                     </div>
-                    {selectedDonation.collectionMode && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#4b5563' }}>
-                        <ShoppingBag size={16} color="#9ca3af" style={{ flexShrink: 0 }} />
-                        <span><strong>Collection Mode:</strong> {selectedDonation.collectionMode}</span>
-                      </div>
-                    )}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#4b5563' }}>
+                      <ShoppingBag size={16} color="#9ca3af" style={{ flexShrink: 0 }} />
+                      <span><strong>Pickup Protocol:</strong> Organization Pickup</span>
+                    </div>
                     {selectedDonation.dietaryTags && (
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#4b5563' }}>
                         <Tag size={16} color="#9ca3af" style={{ flexShrink: 0 }} />
@@ -840,21 +828,24 @@ export default function OrganizationBrowsePage() {
                         disabled
                         className="btn btn-outline btn-md"
                         style={{ background: '#f3f4f6', color: '#9ca3af', borderColor: '#e5e7eb', cursor: 'not-allowed', display: 'flex', alignItems: 'center', gap: '8px' }}
-                        title="Donation is no longer available for requesting"
+                        title="Donation is no longer available"
                       >
                         <Ban size={16} />
-                        <span>{isExpired ? 'Donation Expired' : 'Request Unavailable'}</span>
+                        <span>{isExpired ? 'Donation Expired' : 'Listing Unavailable'}</span>
                       </button>
                     ) : (
                       <button
                         type="button"
-                        onClick={() => {
-                          const target = selectedDonation;
-                          handleCloseDetailsModal();
-                          handleOpenClaimModal(target);
-                        }}
+                        disabled
                         className="btn btn-amber btn-md"
-                        style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+                        style={{ 
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          gap: '8px',
+                          opacity: 0.65,
+                          cursor: 'not-allowed'
+                        }}
+                        title="Requesting donations is disabled for this version"
                       >
                         <Send size={16} />
                         <span>Request Food Portion</span>
