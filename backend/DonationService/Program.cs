@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using DonationService.Data;
+using DonationService.Kafka;
 using DonationService.Services;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -65,8 +66,10 @@ builder.Services.AddCors(options =>
 
 // 4. Register Services
 builder.Services.AddHttpClient();
+builder.Services.AddSingleton<IDonationEventProducer, KafkaDonationEventProducer>();
 builder.Services.AddScoped<IDonationService, DonationServiceImpl>();
 builder.Services.AddHostedService<DonationExpiryBackgroundService>();
+builder.Services.AddHostedService<DonationEventConsumerService>();
 
 // 5. Controllers & JSON Options
 builder.Services.AddControllers()

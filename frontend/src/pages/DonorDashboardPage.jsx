@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { donationApi } from '../services/api';
+import { donationApi, authApi } from '../services/api';
 import { 
   Users,
   Store, 
   Sparkles, 
   PlusCircle, 
+  Building2, 
   Clock, 
   MapPin, 
   Package, 
@@ -70,6 +71,8 @@ export default function DonorDashboardPage() {
   const [categoryFilter, setCategoryFilter] = useState('ALL');
 
   // Form State for creating donation
+  const [profileLocation, setProfileLocation] = useState(currentUser?.location || currentUser?.address || '');
+
   const initialFormState = {
     foodTitle: '',
     category: 'Cooked Meals',
@@ -77,12 +80,27 @@ export default function DonorDashboardPage() {
     unit: 'portions',
     expiryHours: 4,
     collectionMode: 'Organization Pickup',
-    location: currentUser?.location || '',
+    location: '',
     notes: '',
     dietaryTags: 'Vegetarian'
   };
 
   const [formData, setFormData] = useState(initialFormState);
+
+  useEffect(() => {
+    async function loadDonorProfile() {
+      try {
+        const res = await authApi.getMyProfile();
+        if (res?.success && res?.data?.address) {
+          setProfileLocation(res.data.address);
+          setFormData(prev => ({ ...prev, location: res.data.address }));
+        }
+      } catch (e) {
+        // Fallback to current session
+      }
+    }
+    loadDonorProfile();
+  }, [currentUser]);
 
   const fetchMyDonations = async (status = statusFilter, search = searchQuery) => {
     try {
@@ -135,7 +153,7 @@ export default function DonorDashboardPage() {
   // Open Edit Modal with pre-filled fields
   const handleOpenEditModal = (item) => {
     const timeLeft = calculateTimeLeft(item.expiryTime);
-    if (item.status === 'Completed' || item.status === 'Cancelled' || item.status === 'Fully Claimed' || timeLeft.expired) {
+    if (item.status === 'Completed' || item.status === 'Cancelled' || timeLeft.expired) {
       alert(`This donation is in '${item.status}' state and cannot be modified.`);
       return;
     }
@@ -147,8 +165,8 @@ export default function DonorDashboardPage() {
       totalQuantity: item.totalQuantity || 1,
       unit: item.unit || 'portions',
       expiryHours: 4,
-      collectionMode: item.collectionMode || 'Organization Pickup',
-      location: item.location || '',
+      collectionMode: 'Organization Pickup',
+      location: item.location || profileLocation || '',
       notes: item.notes || '',
       dietaryTags: item.dietaryTags || ''
     });
@@ -180,18 +198,8 @@ export default function DonorDashboardPage() {
       return;
     }
 
-    if (!editFormData.location?.trim()) {
-      setEditError('Pickup or delivery location cannot be empty.');
-      return;
-    }
-
     if (!editFormData.totalQuantity || editFormData.totalQuantity <= 0) {
       setEditError('Total quantity must be a positive number greater than 0.');
-      return;
-    }
-
-    if (editDonation.claimedQuantity > 0 && editFormData.totalQuantity < editDonation.claimedQuantity) {
-      setEditError(`Quantity cannot be reduced below the ${editDonation.claimedQuantity} already claimed ${editDonation.unit}.`);
       return;
     }
 
@@ -228,10 +236,6 @@ export default function DonorDashboardPage() {
     }
     if (item.status === 'Completed') {
       alert('Completed donations cannot be cancelled as they have already been distributed.');
-      return;
-    }
-    if (item.claimedQuantity > 0) {
-      alert(`This donation has ${item.claimedQuantity} portions claimed by a charity and cannot be cancelled directly.`);
       return;
     }
 
@@ -278,11 +282,6 @@ export default function DonorDashboardPage() {
 
     if (!formData.foodTitle.trim()) {
       setFormError('Please provide the food item title.');
-      return;
-    }
-
-    if (!formData.location.trim()) {
-      setFormError('Pickup or delivery location is required.');
       return;
     }
 
@@ -380,26 +379,6 @@ export default function DonorDashboardPage() {
           editable: true,
           cancellable: true
         };
-      case 'Partially Claimed':
-        return {
-          bg: '#fef3c7',
-          color: '#92400e',
-          border: '#fde68a',
-          label: 'Partially Claimed',
-          icon: Clock,
-          editable: true,
-          cancellable: false // claimed > 0 cannot cancel directly
-        };
-      case 'Fully Claimed':
-        return {
-          bg: '#ede9fe',
-          color: '#5b21b6',
-          border: '#ddd6fe',
-          label: 'Fully Claimed',
-          icon: Package,
-          editable: false,
-          cancellable: false
-        };
       case 'Completed':
         return {
           bg: '#e0f2fe',
@@ -440,10 +419,8 @@ export default function DonorDashboardPage() {
     return true;
   });
 
-  const totalMealsRescued = donations.reduce((acc, curr) => acc + (curr.totalQuantity || 0), 0);
-  const totalClaimedPortions = donations.reduce((acc, curr) => acc + (curr.claimedQuantity || 0), 0);
   const activeListingsCount = donations.filter(d => 
-    (d.status === 'Posted' || d.status === 'Available' || d.status === 'Partially Claimed') && 
+    (d.status === 'Posted' || d.status === 'Available') && 
     !calculateTimeLeft(d.expiryTime).expired &&
     d.status !== 'Cancelled'
   ).length;
@@ -519,7 +496,7 @@ export default function DonorDashboardPage() {
       {/* Main Content Area */}
       <div className="container" style={{ marginTop: '36px' }}>
         {/* Metric Summary Cards */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px', marginBottom: '32px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '20px', marginBottom: '32px' }}>
           <div className="profile-card" style={{ padding: '20px', borderRadius: '12px', background: '#fff', border: '1px solid #e5e7eb', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
             <div style={{ color: '#6b7280', fontSize: '0.875rem', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span>Active Listings</span>
@@ -535,27 +512,14 @@ export default function DonorDashboardPage() {
 
           <div className="profile-card" style={{ padding: '20px', borderRadius: '12px', background: '#fff', border: '1px solid #e5e7eb', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
             <div style={{ color: '#6b7280', fontSize: '0.875rem', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span>Total Meals Rescued</span>
+              <span>Total Listings</span>
               <Package size={18} style={{ color: '#059669' }} />
             </div>
             <div style={{ fontSize: '1.85rem', fontWeight: 800, color: '#059669', marginTop: '6px' }}>
-              {totalMealsRescued}
+              {donations.length}
             </div>
             <div style={{ fontSize: '0.8rem', color: '#9ca3af', marginTop: '4px' }}>
-              Portions donated through RescuePlate
-            </div>
-          </div>
-
-          <div className="profile-card" style={{ padding: '20px', borderRadius: '12px', background: '#fff', border: '1px solid #e5e7eb', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
-            <div style={{ color: '#6b7280', fontSize: '0.875rem', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span>Portions Claimed</span>
-              <CheckCircle2 size={18} style={{ color: '#3b82f6' }} />
-            </div>
-            <div style={{ fontSize: '1.85rem', fontWeight: 800, color: '#2563eb', marginTop: '6px' }}>
-              {totalClaimedPortions}
-            </div>
-            <div style={{ fontSize: '0.8rem', color: '#9ca3af', marginTop: '4px' }}>
-              Portions distributed or in progress
+              Surplus food batches posted
             </div>
           </div>
 
@@ -592,7 +556,7 @@ export default function DonorDashboardPage() {
                 style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
                 title="Refresh Listings"
               >
-                <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
+                <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
                 <span>Refresh</span>
               </button>
             </div>
@@ -607,8 +571,6 @@ export default function DonorDashboardPage() {
               {[
                 { id: 'ALL', label: 'All Listings' },
                 { id: 'Available', label: 'Active / Available' },
-                { id: 'Partially Claimed', label: 'Partially Claimed' },
-                { id: 'Fully Claimed', label: 'Fully Claimed' },
                 { id: 'Cancelled', label: 'Cancelled' },
                 { id: 'Expired', label: 'Expired' }
               ].map(chip => (
@@ -735,7 +697,7 @@ export default function DonorDashboardPage() {
                 ? Math.round((item.remainingQuantity / item.totalQuantity) * 100) 
                 : 0;
               const isEditable = statusConfig.editable && !timeLeft.expired;
-              const isCancellable = statusConfig.cancellable && item.claimedQuantity === 0 && !timeLeft.expired && item.status !== 'Cancelled';
+              const isCancellable = statusConfig.cancellable && !timeLeft.expired && item.status !== 'Cancelled';
 
               return (
                 <div 
@@ -751,62 +713,55 @@ export default function DonorDashboardPage() {
                     display: 'flex',
                     flexDirection: 'column',
                     justifyContent: 'space-between',
-                    opacity: item.status === 'Cancelled' ? 0.85 : 1,
-                    transition: 'transform 0.15s ease, box-shadow 0.15s ease'
+                    position: 'relative',
+                    transition: 'all 0.2s ease'
                   }}
                 >
                   <div>
-                    {/* Top Row: Category Tag & Status Badge */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
+                    {/* Category and Status Badge */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '14px' }}>
                       <span 
-                        style={{ 
-                          background: '#ecfdf5', 
-                          color: '#065f46', 
-                          fontSize: '0.75rem', 
-                          fontWeight: 700, 
-                          padding: '4px 10px', 
-                          borderRadius: '20px',
-                          textTransform: 'uppercase',
-                          letterSpacing: '0.5px'
+                        style={{
+                          fontSize: '0.78rem',
+                          fontWeight: 700,
+                          padding: '4px 10px',
+                          borderRadius: '8px',
+                          background: '#f3f4f6',
+                          color: '#374151'
                         }}
                       >
                         {item.category}
                       </span>
-
                       <span 
-                        style={{ 
-                          background: statusConfig.bg, 
-                          color: statusConfig.color, 
-                          border: `1px solid ${statusConfig.border}`,
-                          fontSize: '0.75rem', 
-                          fontWeight: 700, 
-                          padding: '4px 10px', 
-                          borderRadius: '20px',
-                          display: 'inline-flex',
+                        style={{
+                          display: 'flex',
                           alignItems: 'center',
-                          gap: '5px'
+                          gap: '5px',
+                          fontSize: '0.75rem',
+                          fontWeight: 700,
+                          padding: '4px 10px',
+                          borderRadius: '16px',
+                          background: statusConfig.bg,
+                          color: statusConfig.color,
+                          border: `1px solid ${statusConfig.border}`
                         }}
                       >
-                        <StatusIcon size={12} />
-                        <span>{statusConfig.label}</span>
+                        <StatusIcon size={13} />
+                        {statusConfig.label}
                       </span>
                     </div>
 
-                    {/* Food Title */}
-                    <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: item.status === 'Cancelled' ? '#6b7280' : '#111827', margin: '0 0 12px', lineHeight: 1.3 }}>
+                    <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: '#111827', margin: '0 0 12px' }}>
                       {item.foodTitle}
                     </h3>
 
-                    {/* Remaining Quantity & Progress Bar */}
-                    <div style={{ background: '#f9fafb', borderRadius: '10px', padding: '12px', border: '1px solid #f3f4f6', marginBottom: '14px' }}>
+                    {/* Portions Remaining Indicator */}
+                    <div style={{ background: '#f9fafb', borderRadius: '10px', padding: '12px 14px', marginBottom: '16px' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                        <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#4b5563', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <Package size={15} style={{ color: '#047857' }} />
-                          Portion Availability
-                        </span>
-                        <span style={{ fontSize: '0.85rem', fontWeight: 800, color: item.status === 'Cancelled' || percentageRemaining === 0 ? '#ef4444' : '#047857' }}>
-                          {item.status === 'Cancelled' ? '0' : item.remainingQuantity} / {item.totalQuantity} {item.unit}
-                        </span>
+                        <span style={{ fontSize: '0.85rem', color: '#6b7280' }}>Available Quantity:</span>
+                        <strong style={{ fontSize: '1.05rem', color: item.status === 'Cancelled' ? '#9ca3af' : '#047857' }}>
+                          {item.remainingQuantity} <span style={{ fontSize: '0.80rem', fontWeight: 600 }}>{item.unit}</span>
+                        </strong>
                       </div>
 
                       <div style={{ width: '100%', height: '8px', background: '#e5e7eb', borderRadius: '4px', overflow: 'hidden' }}>
@@ -822,8 +777,8 @@ export default function DonorDashboardPage() {
                       </div>
 
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '6px', fontSize: '0.75rem', color: '#6b7280' }}>
-                        <span>Claimed: <strong>{item.claimedQuantity} {item.unit}</strong></span>
-                        <span>{item.status === 'Cancelled' ? 'Cancelled' : `${percentageRemaining}% Available`}</span>
+                        <span>Total: <strong>{item.totalQuantity} {item.unit}</strong></span>
+                        <span>{item.status === 'Cancelled' ? 'Cancelled' : `${item.remainingQuantity} ${item.unit} Available`}</span>
                       </div>
                     </div>
 
@@ -850,8 +805,8 @@ export default function DonorDashboardPage() {
                       </div>
 
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <Truck size={16} style={{ color: '#3b82f6', flexShrink: 0 }} />
-                        <span style={{ fontSize: '0.85rem' }}>{item.collectionMode}</span>
+                        <Building2 size={16} style={{ color: '#047857', flexShrink: 0 }} />
+                        <span style={{ fontSize: '0.85rem' }}>Organization Pickup</span>
                       </div>
 
                       {item.dietaryTags && (
@@ -1268,18 +1223,13 @@ export default function DonorDashboardPage() {
                   <input 
                     type="number"
                     name="totalQuantity"
-                    min={Math.max(1, editDonation.claimedQuantity)}
+                    min="1"
                     value={editFormData.totalQuantity}
                     onChange={handleEditInputChange}
                     className="form-control"
                     style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '0.95rem' }}
                     required
                   />
-                  {editDonation.claimedQuantity > 0 && (
-                    <span style={{ fontSize: '0.75rem', color: '#d97706', marginTop: '4px', display: 'block' }}>
-                      * Minimum {editDonation.claimedQuantity} {editDonation.unit} (already claimed)
-                    </span>
-                  )}
                 </div>
 
                 <div>
@@ -1303,37 +1253,29 @@ export default function DonorDashboardPage() {
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: '14px' }}>
-                <div>
-                  <label style={{ display: 'block', fontWeight: 700, fontSize: '0.9rem', marginBottom: '6px', color: '#374151' }}>
-                    Pickup Location <span style={{ color: '#ef4444' }}>*</span>
-                  </label>
-                  <input 
-                    type="text"
-                    name="location"
-                    value={editFormData.location}
-                    onChange={handleEditInputChange}
-                    className="form-control"
-                    style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '0.95rem' }}
-                    required
-                  />
+              <div>
+                <label style={{ display: 'block', fontWeight: 700, fontSize: '0.9rem', marginBottom: '6px', color: '#374151' }}>
+                  Pickup Location
+                </label>
+                <div style={{
+                  padding: '10px 14px',
+                  borderRadius: '8px',
+                  background: '#f3f4f6',
+                  border: '1px solid #d1d5db',
+                  color: '#374151',
+                  fontSize: '0.95rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}>
+                  <MapPin size={16} color="#047857" style={{ flexShrink: 0 }} />
+                  <span style={{ fontWeight: 500 }}>
+                    {editFormData.location || profileLocation || 'Registered shop address'}
+                  </span>
                 </div>
-
-                <div>
-                  <label style={{ display: 'block', fontWeight: 700, fontSize: '0.9rem', marginBottom: '6px', color: '#374151' }}>
-                    Collection Mode
-                  </label>
-                  <select
-                    name="collectionMode"
-                    value={editFormData.collectionMode}
-                    onChange={handleEditInputChange}
-                    className="form-control"
-                    style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '0.95rem' }}
-                  >
-                    <option value="Organization Pickup">Organization Pickup</option>
-                    <option value="Donor Drop-off">Donor Drop-off</option>
-                  </select>
-                </div>
+                <span style={{ fontSize: '0.78rem', color: '#6b7280', marginTop: '4px', display: 'block' }}>
+                  Automatically assigned from your registered donor profile.
+                </span>
               </div>
 
               <div>
@@ -1490,8 +1432,7 @@ export default function DonorDashboardPage() {
 
             <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '10px', padding: '14px', marginBottom: '20px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', fontWeight: 700, marginBottom: '8px' }}>
-                <span style={{ color: '#047857' }}>Remaining: {selectedDonation.remainingQuantity} {selectedDonation.unit}</span>
-                <span style={{ color: '#3b82f6' }}>Claimed: {selectedDonation.claimedQuantity} {selectedDonation.unit}</span>
+                <span style={{ color: '#047857' }}>Available: {selectedDonation.remainingQuantity} {selectedDonation.unit}</span>
                 <span style={{ color: '#111827' }}>Total: {selectedDonation.totalQuantity} {selectedDonation.unit}</span>
               </div>
               <div style={{ width: '100%', height: '10px', background: '#e5e7eb', borderRadius: '6px', overflow: 'hidden' }}>
@@ -1520,7 +1461,7 @@ export default function DonorDashboardPage() {
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
                 <MapPin size={18} style={{ color: '#ef4444', marginTop: '2px', flexShrink: 0 }} />
                 <div>
-                  <strong>Pickup / Delivery Location:</strong>
+                  <strong>Pickup Location:</strong>
                   <div style={{ color: '#6b7280', fontSize: '0.85rem', marginTop: '2px' }}>
                     {selectedDonation.location}
                   </div>
@@ -1528,11 +1469,11 @@ export default function DonorDashboardPage() {
               </div>
 
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
-                <Truck size={18} style={{ color: '#3b82f6', marginTop: '2px', flexShrink: 0 }} />
+                <Building2 size={18} style={{ color: '#047857', marginTop: '2px', flexShrink: 0 }} />
                 <div>
-                  <strong>Collection Protocol:</strong>
+                  <strong>Pickup Protocol:</strong>
                   <div style={{ color: '#6b7280', fontSize: '0.85rem', marginTop: '2px' }}>
-                    {selectedDonation.collectionMode}
+                    Organization Pickup (Registered Charities)
                   </div>
                 </div>
               </div>
@@ -1738,37 +1679,53 @@ export default function DonorDashboardPage() {
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: '14px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
                 <div>
                   <label style={{ display: 'block', fontWeight: 700, fontSize: '0.9rem', marginBottom: '6px', color: '#374151' }}>
-                    Pickup Location <span style={{ color: '#ef4444' }}>*</span>
+                    Pickup Organization
                   </label>
-                  <input 
-                    type="text"
-                    name="location"
-                    value={formData.location}
-                    onChange={handleInputChange}
-                    placeholder="e.g. 123 Galle Road, Colombo 03"
-                    className="form-control"
-                    style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '0.95rem' }}
-                    required
-                  />
+                  <div style={{
+                    padding: '10px 14px',
+                    borderRadius: '8px',
+                    background: '#f9fafb',
+                    border: '1px solid #e5e7eb',
+                    color: '#374151',
+                    fontSize: '0.95rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}>
+                    <Building2 size={16} color="#047857" style={{ flexShrink: 0 }} />
+                    <span style={{ fontWeight: 600 }}>Organization Pickup</span>
+                  </div>
+                  <span style={{ fontSize: '0.78rem', color: '#6b7280', marginTop: '4px', display: 'block' }}>
+                    Pickup facilitated by registered charity organizations.
+                  </span>
                 </div>
 
                 <div>
                   <label style={{ display: 'block', fontWeight: 700, fontSize: '0.9rem', marginBottom: '6px', color: '#374151' }}>
-                    Collection Mode
+                    Pickup Location
                   </label>
-                  <select
-                    name="collectionMode"
-                    value={formData.collectionMode}
-                    onChange={handleInputChange}
-                    className="form-control"
-                    style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '0.95rem' }}
-                  >
-                    <option value="Organization Pickup">Organization Pickup</option>
-                    <option value="Donor Drop-off">Donor Drop-off</option>
-                  </select>
+                  <div style={{
+                    padding: '10px 14px',
+                    borderRadius: '8px',
+                    background: '#f3f4f6',
+                    border: '1px solid #d1d5db',
+                    color: '#374151',
+                    fontSize: '0.95rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}>
+                    <MapPin size={16} color="#047857" style={{ flexShrink: 0 }} />
+                    <span style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {profileLocation || currentUser?.location || 'Assigned from registered shop address'}
+                    </span>
+                  </div>
+                  <span style={{ fontSize: '0.78rem', color: '#6b7280', marginTop: '4px', display: 'block' }}>
+                    Automatically assigned from your registered shop address.
+                  </span>
                 </div>
               </div>
 

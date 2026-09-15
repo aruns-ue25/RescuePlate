@@ -31,13 +31,11 @@ public class CreateDonationDto
     /// </summary>
     public DateTime? ExpiryTime { get; set; }
 
-    [Required(ErrorMessage = "Handover collection mode is required.")]
     [StringLength(50, ErrorMessage = "Collection mode cannot exceed 50 characters.")]
     public string CollectionMode { get; set; } = "Organization Pickup";
 
-    [Required(ErrorMessage = "Pickup or delivery location address is required.")]
     [StringLength(255, ErrorMessage = "Location cannot exceed 255 characters.")]
-    public string Location { get; set; } = string.Empty;
+    public string? Location { get; set; }
 
     [StringLength(500, ErrorMessage = "Notes cannot exceed 500 characters.")]
     public string? Notes { get; set; }

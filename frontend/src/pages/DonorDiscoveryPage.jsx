@@ -371,20 +371,11 @@ export default function DonorDiscoveryPage() {
                   </p>
 
                   {/* Highlights Bar */}
-                  <div style={{ background: '#f9fafb', borderRadius: '10px', padding: '12px', display: 'flex', justifyContent: 'space-around', textAlign: 'center', marginBottom: '18px' }}>
-                    <div>
-                      <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#047857' }}>
-                        {donor.activeDonationsCount}
-                      </div>
-                      <div style={{ fontSize: '0.72rem', color: '#6b7280', fontWeight: 600 }}>Active Listings</div>
+                  <div style={{ background: '#f9fafb', borderRadius: '10px', padding: '12px', textAlign: 'center', marginBottom: '18px' }}>
+                    <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#047857' }}>
+                      {donor.activeDonationsCount}
                     </div>
-                    <div style={{ width: '1px', background: '#e5e7eb' }}></div>
-                    <div>
-                      <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#b45309' }}>
-                        {donor.totalPortionsContributed}
-                      </div>
-                      <div style={{ fontSize: '0.72rem', color: '#6b7280', fontWeight: 600 }}>Portions Donated</div>
-                    </div>
+                    <div style={{ fontSize: '0.72rem', color: '#6b7280', fontWeight: 600 }}>Active Surplus Food Listings</div>
                   </div>
                 </div>
 
@@ -536,18 +527,13 @@ export default function DonorDiscoveryPage() {
                 </div>
 
                 {/* Contributor Impact Stats */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '24px' }}>
-                  <div style={{ background: '#ecfdf5', borderRadius: '10px', padding: '14px', border: '1px solid #a7f3d0' }}>
+                {/* Contributor Impact Stats */}
+                <div style={{ marginBottom: '24px' }}>
+                  <div style={{ background: '#ecfdf5', borderRadius: '10px', padding: '14px', border: '1px solid #a7f3d0', textAlign: 'center' }}>
                     <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#065f46' }}>
                       {detailData?.activeDonationsCount ?? selectedDonor.activeDonationsCount}
                     </div>
-                    <div style={{ fontSize: '0.8rem', color: '#047857', fontWeight: 600 }}>Active Surplus Food Listings</div>
-                  </div>
-                  <div style={{ background: '#fffbeb', borderRadius: '10px', padding: '14px', border: '1px solid #fde68a' }}>
-                    <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#92400e' }}>
-                      {detailData?.totalPortionsContributed ?? selectedDonor.totalPortionsContributed}
-                    </div>
-                    <div style={{ fontSize: '0.8rem', color: '#b45309', fontWeight: 600 }}>Total Portions Donated</div>
+                    <div style={{ fontSize: '0.8rem', color: '#047857', fontWeight: 600 }}>Active Surplus Food Listings Available</div>
                   </div>
                 </div>
 
