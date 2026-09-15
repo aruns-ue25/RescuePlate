@@ -225,40 +225,10 @@ public class DonationsController : ControllerBase
     /// </summary>
     [HttpPost("{id:int}/request")]
     [Authorize(Roles = "ORGANIZATION,DONOR")]
-    [ProducesResponseType(typeof(ApiResponse<DonationResponseDto>), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> RequestDonation(int id, [FromBody] ClaimRequestDto dto)
+    [ProducesResponseType(typeof(ApiResponse<DonationResponseDto>), StatusCodes.Status400BadRequest)]
+    public Task<IActionResult> RequestDonation(int id, [FromBody] ClaimRequestDto dto)
     {
-        var orgId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
-            ?? User.FindFirst("id")?.Value
-            ?? User.FindFirst("sub")?.Value
-            ?? string.Empty;
-
-        var orgName = User.FindFirst("OrganizationName")?.Value
-            ?? User.FindFirst("organizationName")?.Value
-            ?? User.FindFirst("BusinessName")?.Value
-            ?? User.FindFirst("businessName")?.Value
-            ?? User.FindFirst(ClaimTypes.Name)?.Value
-            ?? "Partner Organization";
-
-        if (string.IsNullOrWhiteSpace(orgId))
-        {
-            return Unauthorized(ApiResponse<DonationResponseDto>.Fail("Invalid or missing user authentication claims."));
-        }
-
-        var result = await _donationService.RequestDonationAsync(id, orgId, orgName, dto);
-        if (!result.Success)
-        {
-            if (result.Message.Contains("not found", StringComparison.OrdinalIgnoreCase))
-            {
-                return NotFound(result);
-            }
-            return BadRequest(result);
-        }
-
-        return Ok(result);
+        return Task.FromResult<IActionResult>(BadRequest(ApiResponse<DonationResponseDto>.Fail("Donation request/claim workflow is not supported in this version.")));
     }
 
     /// <summary>
