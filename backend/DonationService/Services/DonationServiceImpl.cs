@@ -61,18 +61,56 @@ public class DonationServiceImpl : IDonationService
                 return ApiResponse<DonationResponseDto>.Fail("Availability period / expiry time must be in the future.");
             }
 
-            // 3. Validation - Required fields (Scenario 2)
+            // 3. Validation - Required fields
             if (string.IsNullOrWhiteSpace(dto.FoodTitle))
             {
                 return ApiResponse<DonationResponseDto>.Fail("Food item title is required.");
             }
 
-            if (string.IsNullOrWhiteSpace(dto.Location))
+            // Automatically resolve donor's registered shop/business location from their profile
+            string resolvedLocation = string.Empty;
+            var userProfile = await FetchUserProfileFromUserServiceAsync(donorId);
+            if (userProfile != null && !string.IsNullOrWhiteSpace(userProfile.Address))
             {
-                return ApiResponse<DonationResponseDto>.Fail("Pickup or delivery location is required.");
+                resolvedLocation = userProfile.Address.Trim();
             }
 
-            // 4. Create and persist entity (Scenario 1 & 5)
+            // Fallback: Check DonorProfiles table directly in the shared PostgreSQL database
+            if (string.IsNullOrWhiteSpace(resolvedLocation))
+            {
+                try
+                {
+                    if (Guid.TryParse(donorId, out var donorGuid))
+                    {
+                        using var command = _context.Database.GetDbConnection().CreateCommand();
+                        command.CommandText = "SELECT \"Address\" FROM \"DonorProfiles\" WHERE \"UserId\" = @userId LIMIT 1";
+                        var param = command.CreateParameter();
+                        param.ParameterName = "@userId";
+                        param.Value = donorGuid;
+                        command.Parameters.Add(param);
+                        if (_context.Database.GetDbConnection().State != System.Data.ConnectionState.Open)
+                        {
+                            await _context.Database.OpenConnectionAsync();
+                        }
+                        var dbAddress = (await command.ExecuteScalarAsync()) as string;
+                        if (!string.IsNullOrWhiteSpace(dbAddress))
+                        {
+                            resolvedLocation = dbAddress.Trim();
+                        }
+                    }
+                }
+                catch (Exception dbEx)
+                {
+                    _logger.LogDebug(dbEx, "Direct DB lookup for DonorProfile address failed.");
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(resolvedLocation))
+            {
+                return ApiResponse<DonationResponseDto>.Fail("Donor registered location could not be found. Please ensure your profile has a registered address.");
+            }
+
+            // 4. Create and persist entity
             var donation = new Donation
             {
                 DonorId = donorId,
@@ -85,9 +123,9 @@ public class DonationServiceImpl : IDonationService
                 RemainingQuantity = dto.TotalQuantity,
                 Unit = string.IsNullOrWhiteSpace(dto.Unit) ? "portions" : dto.Unit.Trim(),
                 ExpiryTime = calculatedExpiry,
-                CollectionMode = string.IsNullOrWhiteSpace(dto.CollectionMode) ? "Organization Pickup" : dto.CollectionMode.Trim(),
+                CollectionMode = "Organization Pickup",
                 Status = "Posted", // Initial Status: Posted
-                Location = dto.Location.Trim(),
+                Location = resolvedLocation,
                 Notes = dto.Notes?.Trim() ?? string.Empty,
                 DietaryTags = dto.DietaryTags?.Trim() ?? string.Empty,
                 CreatedAt = DateTime.UtcNow
@@ -96,8 +134,8 @@ public class DonationServiceImpl : IDonationService
             await _context.Donations.AddAsync(donation);
             await _context.SaveChangesAsync();
 
-            _logger.LogInformation("Donation #{Id} ('{Title}') posted by Donor #{DonorId} successfully.", 
-                donation.Id, donation.FoodTitle, donation.DonorId);
+            _logger.LogInformation("Donation #{Id} ('{Title}') posted by Donor #{DonorId} successfully with pickup location '{Location}'.", 
+                donation.Id, donation.FoodTitle, donation.DonorId, donation.Location);
 
             return ApiResponse<DonationResponseDto>.Ok(MapToResponseDto(donation), "Surplus food donation posted successfully!");
         }
@@ -136,20 +174,10 @@ public class DonationServiceImpl : IDonationService
                 return ApiResponse<DonationResponseDto>.Fail("Expired donations cannot be modified.");
             }
 
-            if (donation.RemainingQuantity == 0 && donation.TotalQuantity > 0)
-            {
-                return ApiResponse<DonationResponseDto>.Fail("Fully claimed donations cannot be modified.");
-            }
-
             // Scenario 3: Validate updated information (non-empty if provided)
             if (dto.FoodTitle != null && string.IsNullOrWhiteSpace(dto.FoodTitle))
             {
                 return ApiResponse<DonationResponseDto>.Fail("Food item title cannot be empty.");
-            }
-
-            if (dto.Location != null && string.IsNullOrWhiteSpace(dto.Location))
-            {
-                return ApiResponse<DonationResponseDto>.Fail("Pickup or delivery location cannot be empty.");
             }
 
             // Scenario 4: Validate Quantity
@@ -158,11 +186,6 @@ public class DonationServiceImpl : IDonationService
                 if (dto.TotalQuantity.Value <= 0)
                 {
                     return ApiResponse<DonationResponseDto>.Fail("Quantity must be a positive number greater than 0.");
-                }
-
-                if (dto.TotalQuantity.Value < donation.ClaimedQuantity)
-                {
-                    return ApiResponse<DonationResponseDto>.Fail($"Total quantity cannot be reduced below the already claimed portions ({donation.ClaimedQuantity} {donation.Unit}).");
                 }
             }
 
@@ -200,7 +223,7 @@ public class DonationServiceImpl : IDonationService
             if (dto.TotalQuantity.HasValue)
             {
                 donation.TotalQuantity = dto.TotalQuantity.Value;
-                donation.RemainingQuantity = Math.Max(0, donation.TotalQuantity - donation.ClaimedQuantity);
+                donation.RemainingQuantity = donation.TotalQuantity;
             }
 
             if (!string.IsNullOrWhiteSpace(dto.Unit))
@@ -211,16 +234,6 @@ public class DonationServiceImpl : IDonationService
             if (calculatedExpiry.HasValue)
             {
                 donation.ExpiryTime = calculatedExpiry.Value;
-            }
-
-            if (!string.IsNullOrWhiteSpace(dto.CollectionMode))
-            {
-                donation.CollectionMode = dto.CollectionMode.Trim();
-            }
-
-            if (!string.IsNullOrWhiteSpace(dto.Location))
-            {
-                donation.Location = dto.Location.Trim();
             }
 
             if (dto.Notes != null)
@@ -273,11 +286,6 @@ public class DonationServiceImpl : IDonationService
             if (donation.Status == "Completed")
             {
                 return ApiResponse<DonationResponseDto>.Fail("Completed donations cannot be cancelled as they have already been distributed.");
-            }
-
-            if (donation.ClaimedQuantity > 0)
-            {
-                return ApiResponse<DonationResponseDto>.Fail($"Donations with active charity claims ({donation.ClaimedQuantity} {donation.Unit} claimed) cannot be cancelled directly. Please coordinate with the charity organization.");
             }
 
             // Scenario 1: Cancel Available Donation
@@ -354,7 +362,7 @@ public class DonationServiceImpl : IDonationService
             donation.ExpiryTime = calculatedExpiry.Value;
             if (donation.Status == "Expired" && donation.RemainingQuantity > 0)
             {
-                donation.Status = donation.ClaimedQuantity > 0 ? "Partially Claimed" : "Available";
+                donation.Status = "Available";
             }
             donation.UpdatedAt = DateTime.UtcNow;
 
@@ -372,70 +380,7 @@ public class DonationServiceImpl : IDonationService
 
     public async Task<ApiResponse<DonationResponseDto>> RequestDonationAsync(int id, string organizationId, string organizationName, ClaimRequestDto dto)
     {
-        try
-        {
-            var donation = await _context.Donations.FindAsync(id);
-            if (donation == null)
-            {
-                return ApiResponse<DonationResponseDto>.Fail("Donation not found.");
-            }
-
-            // Scenario 3 & 4: Prevent request on expired donation
-            if (DateTime.UtcNow > donation.ExpiryTime || donation.Status == "Expired")
-            {
-                return ApiResponse<DonationResponseDto>.Fail("This food donation has reached the end of its availability period (expired) and cannot receive new requests.");
-            }
-
-            if (donation.Status == "Cancelled")
-            {
-                return ApiResponse<DonationResponseDto>.Fail("This food donation has been cancelled by the donor and is no longer available.");
-            }
-
-            if (donation.Status == "Completed")
-            {
-                return ApiResponse<DonationResponseDto>.Fail("This food donation has already been completed and distributed.");
-            }
-
-            if (donation.RemainingQuantity <= 0)
-            {
-                return ApiResponse<DonationResponseDto>.Fail("All available portions for this food donation have already been claimed.");
-            }
-
-            if (dto.Quantity <= 0)
-            {
-                return ApiResponse<DonationResponseDto>.Fail("Requested portion quantity must be greater than 0.");
-            }
-
-            if (dto.Quantity > donation.RemainingQuantity)
-            {
-                return ApiResponse<DonationResponseDto>.Fail($"Requested quantity ({dto.Quantity}) exceeds remaining available portions ({donation.RemainingQuantity} {donation.Unit}).");
-            }
-
-            donation.ClaimedQuantity += dto.Quantity;
-            donation.RemainingQuantity = Math.Max(0, donation.TotalQuantity - donation.ClaimedQuantity);
-
-            if (donation.RemainingQuantity == 0)
-            {
-                donation.Status = "Fully Claimed";
-            }
-            else
-            {
-                donation.Status = "Partially Claimed";
-            }
-
-            donation.UpdatedAt = DateTime.UtcNow;
-
-            await _context.SaveChangesAsync();
-            _logger.LogInformation("Organization '{OrgName}' (#{OrgId}) claimed {Quantity} portions of Donation #{DonationId}. Remaining: {Remaining}",
-                organizationName, organizationId, dto.Quantity, donation.Id, donation.RemainingQuantity);
-
-            return ApiResponse<DonationResponseDto>.Ok(MapToResponseDto(donation), $"Successfully requested {dto.Quantity} {donation.Unit} for {organizationName}.");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error processing food request for donation #{Id}", id);
-            return ApiResponse<DonationResponseDto>.Fail($"Failed to process food request: {ex.Message}");
-        }
+        return await Task.FromResult(ApiResponse<DonationResponseDto>.Fail("Donation request/claim workflow is not supported in this version."));
     }
 
     public async Task<int> ProcessExpiredDonationsAsync()
@@ -925,7 +870,6 @@ public class DonationServiceImpl : IDonationService
 
     private static DonationResponseDto MapToResponseDto(Donation d)
     {
-        var calculatedRemaining = d.Status == "Cancelled" ? 0 : Math.Max(0, d.TotalQuantity - d.ClaimedQuantity);
         var effectiveStatus = d.Status;
 
         if (effectiveStatus != "Completed" && effectiveStatus != "Cancelled")
@@ -934,19 +878,13 @@ public class DonationServiceImpl : IDonationService
             {
                 effectiveStatus = "Expired";
             }
-            else if (calculatedRemaining == 0 && d.TotalQuantity > 0)
-            {
-                effectiveStatus = "Fully Claimed";
-            }
-            else if (d.ClaimedQuantity > 0 && calculatedRemaining > 0)
-            {
-                effectiveStatus = "Partially Claimed";
-            }
             else if (string.IsNullOrWhiteSpace(effectiveStatus) || effectiveStatus == "Posted")
             {
                 effectiveStatus = "Available";
             }
         }
+
+        var calculatedRemaining = effectiveStatus == "Cancelled" ? 0 : d.TotalQuantity;
 
         return new DonationResponseDto
         {
@@ -957,7 +895,7 @@ public class DonationServiceImpl : IDonationService
             FoodTitle = d.FoodTitle,
             Category = d.Category,
             TotalQuantity = d.TotalQuantity,
-            ClaimedQuantity = d.ClaimedQuantity,
+            ClaimedQuantity = 0,
             RemainingQuantity = calculatedRemaining,
             Unit = d.Unit,
             ExpiryTime = d.ExpiryTime,
