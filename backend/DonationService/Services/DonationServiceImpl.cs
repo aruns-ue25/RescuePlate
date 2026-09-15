@@ -4,6 +4,8 @@ using System.Net.Http;
 using System.Text.Json;
 using DonationService.Data;
 using DonationService.DTOs;
+using DonationService.Events;
+using DonationService.Kafka;
 using DonationService.Models;
 
 namespace DonationService.Services;
@@ -14,17 +16,20 @@ public class DonationServiceImpl : IDonationService
     private readonly ILogger<DonationServiceImpl> _logger;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IConfiguration _configuration;
+    private readonly IDonationEventProducer _eventProducer;
 
     public DonationServiceImpl(
         DonationDbContext context, 
         ILogger<DonationServiceImpl> logger,
         IHttpClientFactory httpClientFactory,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        IDonationEventProducer eventProducer)
     {
         _context = context;
         _logger = logger;
         _httpClientFactory = httpClientFactory;
         _configuration = configuration;
+        _eventProducer = eventProducer;
     }
 
     public async Task<ApiResponse<DonationResponseDto>> CreateDonationAsync(
@@ -136,6 +141,35 @@ public class DonationServiceImpl : IDonationService
 
             _logger.LogInformation("Donation #{Id} ('{Title}') posted by Donor #{DonorId} successfully with pickup location '{Location}'.", 
                 donation.Id, donation.FoodTitle, donation.DonorId, donation.Location);
+
+            // Asynchronously publish domain event to Apache Kafka ('donation-events' topic)
+            try
+            {
+                var donationCreatedEvent = new DonationEvent
+                {
+                    EventType = "DonationCreated",
+                    DonationId = donation.Id,
+                    DonorId = donation.DonorId,
+                    DonorName = donation.DonorName,
+                    DonorEmail = donation.DonorEmail,
+                    FoodTitle = donation.FoodTitle,
+                    Category = donation.Category,
+                    TotalQuantity = donation.TotalQuantity,
+                    RemainingQuantity = donation.RemainingQuantity,
+                    Unit = donation.Unit,
+                    Location = donation.Location,
+                    Status = donation.Status,
+                    ExpiryTime = donation.ExpiryTime,
+                    DietaryTags = donation.DietaryTags,
+                    Notes = donation.Notes
+                };
+
+                _ = _eventProducer.PublishEventAsync(donationCreatedEvent);
+            }
+            catch (Exception evEx)
+            {
+                _logger.LogWarning(evEx, "Non-blocking failure initiating Kafka publish for Donation #{Id}", donation.Id);
+            }
 
             return ApiResponse<DonationResponseDto>.Ok(MapToResponseDto(donation), "Surplus food donation posted successfully!");
         }
@@ -252,6 +286,35 @@ public class DonationServiceImpl : IDonationService
 
             _logger.LogInformation("Donation #{Id} successfully updated by Donor #{DonorId}.", donation.Id, donorId);
 
+            // Asynchronously publish domain event to Apache Kafka ('donation-events' topic)
+            try
+            {
+                var donationUpdatedEvent = new DonationEvent
+                {
+                    EventType = "DonationUpdated",
+                    DonationId = donation.Id,
+                    DonorId = donation.DonorId,
+                    DonorName = donation.DonorName,
+                    DonorEmail = donation.DonorEmail,
+                    FoodTitle = donation.FoodTitle,
+                    Category = donation.Category,
+                    TotalQuantity = donation.TotalQuantity,
+                    RemainingQuantity = donation.RemainingQuantity,
+                    Unit = donation.Unit,
+                    Location = donation.Location,
+                    Status = donation.Status,
+                    ExpiryTime = donation.ExpiryTime,
+                    DietaryTags = donation.DietaryTags,
+                    Notes = donation.Notes
+                };
+
+                _ = _eventProducer.PublishEventAsync(donationUpdatedEvent);
+            }
+            catch (Exception evEx)
+            {
+                _logger.LogWarning(evEx, "Non-blocking failure initiating Kafka publish for updated Donation #{Id}", donation.Id);
+            }
+
             return ApiResponse<DonationResponseDto>.Ok(MapToResponseDto(donation), "Donation updated successfully.");
         }
         catch (Exception ex)
@@ -301,6 +364,35 @@ public class DonationServiceImpl : IDonationService
             await _context.SaveChangesAsync();
 
             _logger.LogInformation("Donation #{Id} successfully cancelled by Donor #{DonorId}. Reason: '{Reason}'", id, donorId, reason ?? "None provided");
+
+            // Asynchronously publish domain event to Apache Kafka ('donation-events' topic)
+            try
+            {
+                var donationCancelledEvent = new DonationEvent
+                {
+                    EventType = "DonationCancelled",
+                    DonationId = donation.Id,
+                    DonorId = donation.DonorId,
+                    DonorName = donation.DonorName,
+                    DonorEmail = donation.DonorEmail,
+                    FoodTitle = donation.FoodTitle,
+                    Category = donation.Category,
+                    TotalQuantity = donation.TotalQuantity,
+                    RemainingQuantity = 0,
+                    Unit = donation.Unit,
+                    Location = donation.Location,
+                    Status = donation.Status,
+                    ExpiryTime = donation.ExpiryTime,
+                    DietaryTags = donation.DietaryTags,
+                    Notes = donation.Notes
+                };
+
+                _ = _eventProducer.PublishEventAsync(donationCancelledEvent);
+            }
+            catch (Exception evEx)
+            {
+                _logger.LogWarning(evEx, "Non-blocking failure initiating Kafka publish for cancelled Donation #{Id}", donation.Id);
+            }
 
             return ApiResponse<DonationResponseDto>.Ok(MapToResponseDto(donation), "Donation cancelled successfully.");
         }
