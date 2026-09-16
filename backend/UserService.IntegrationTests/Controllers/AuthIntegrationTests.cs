@@ -312,4 +312,136 @@ public class AuthIntegrationTests : IAsyncLifetime
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
+
+    [Fact]
+    public async Task ChangePassword_CorrectCurrentAndValidNew_ChangesPasswordAndPersists()
+    {
+        // Arrange (TC-AUTH-12-1)
+        var email = "change_pwd@test.com";
+        var oldPassword = "OldPassword123!";
+        var newPassword = "NewStrongPassword123!";
+        
+        var registerDto = new RegisterDto
+        {
+            Email = email,
+            Password = oldPassword,
+            Role = UserRole.DONOR,
+            BusinessOrOrgName = "Change Pwd Bakery",
+            Location = "123 Test St"
+        };
+        var regResponse = await _client.PostAsJsonAsync("/api/auth/register", registerDto);
+        var regData = await regResponse.Content.ReadFromJsonAsync<JsonElement>(_jsonOptions);
+        var token = regData.GetProperty("data").GetProperty("token").GetString()!;
+
+        using var authClient = _factory.CreateClient().WithBearerToken(token);
+        
+        var changeDto = new ChangePasswordDto 
+        { 
+            CurrentPassword = oldPassword, 
+            NewPassword = newPassword, 
+            ConfirmPassword = newPassword 
+        };
+
+        // Act 1: Change Password
+        var changeResponse = await authClient.PostAsJsonAsync("/api/auth/change-password", changeDto);
+
+        // Assert 1
+        changeResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var content = await changeResponse.Content.ReadFromJsonAsync<JsonElement>(_jsonOptions);
+        content.GetProperty("success").GetBoolean().Should().BeTrue();
+
+        // Act 2: Login with Old Password fails
+        var loginOldDto = new LoginDto { Email = email, Password = oldPassword };
+        var loginOldResponse = await _client.PostAsJsonAsync("/api/auth/login", loginOldDto);
+        loginOldResponse.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+
+        // Act 3: Login with New Password succeeds
+        var loginNewDto = new LoginDto { Email = email, Password = newPassword };
+        var loginNewResponse = await _client.PostAsJsonAsync("/api/auth/login", loginNewDto);
+        loginNewResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task ChangePassword_IncorrectCurrentPassword_Returns400BadRequest()
+    {
+        // Arrange (TC-AUTH-12-2)
+        var registerDto = new RegisterDto
+        {
+            Email = "wrong_old_pwd@test.com",
+            Password = "CorrectPassword123!",
+            Role = UserRole.DONOR,
+            BusinessOrOrgName = "Wrong Old Pwd",
+            Location = "Test"
+        };
+        var regResponse = await _client.PostAsJsonAsync("/api/auth/register", registerDto);
+        var regData = await regResponse.Content.ReadFromJsonAsync<JsonElement>(_jsonOptions);
+        var token = regData.GetProperty("data").GetProperty("token").GetString()!;
+
+        using var authClient = _factory.CreateClient().WithBearerToken(token);
+        
+        var changeDto = new ChangePasswordDto 
+        { 
+            CurrentPassword = "WrongOldPassword", 
+            NewPassword = "NewPassword123!", 
+            ConfirmPassword = "NewPassword123!" 
+        };
+
+        // Act
+        var response = await authClient.PostAsJsonAsync("/api/auth/change-password", changeDto);
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var content = await response.Content.ReadFromJsonAsync<JsonElement>(_jsonOptions);
+        content.GetProperty("success").GetBoolean().Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task ChangePassword_InvalidNewPassword_Returns400BadRequest()
+    {
+        // Arrange (TC-AUTH-12-3)
+        var registerDto = new RegisterDto
+        {
+            Email = "weak_new_pwd@test.com",
+            Password = "ValidPassword123!",
+            Role = UserRole.DONOR,
+            BusinessOrOrgName = "Weak Pwd",
+            Location = "Test"
+        };
+        var regResponse = await _client.PostAsJsonAsync("/api/auth/register", registerDto);
+        var regData = await regResponse.Content.ReadFromJsonAsync<JsonElement>(_jsonOptions);
+        var token = regData.GetProperty("data").GetProperty("token").GetString()!;
+
+        using var authClient = _factory.CreateClient().WithBearerToken(token);
+        
+        var changeDto = new ChangePasswordDto 
+        { 
+            CurrentPassword = "ValidPassword123!", 
+            NewPassword = "123", // Too short
+            ConfirmPassword = "123" 
+        };
+
+        // Act
+        var response = await authClient.PostAsJsonAsync("/api/auth/change-password", changeDto);
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task ChangePassword_Unauthenticated_Returns401Unauthorized()
+    {
+        // Arrange (TC-AUTH-12-7)
+        var changeDto = new ChangePasswordDto 
+        { 
+            CurrentPassword = "Old", 
+            NewPassword = "New", 
+            ConfirmPassword = "New" 
+        };
+
+        // Act
+        var response = await _client.PostAsJsonAsync("/api/auth/change-password", changeDto);
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
 }
