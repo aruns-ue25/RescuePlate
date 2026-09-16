@@ -44,7 +44,10 @@ jobs:
           dotnet-version: '10.0.x'
 
       - name: Restore backend dependencies
-        run: dotnet restore backend/RescuePlate.slnx
+        run: |
+          dotnet restore backend/RescuePlate.slnx
+          dotnet restore backend/DonationService.UnitTests
+          dotnet restore backend/DonationService.IntegrationTests
 
       - name: Build backend
         run: dotnet build backend/RescuePlate.slnx --no-restore --configuration Release
