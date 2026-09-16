@@ -222,4 +222,113 @@ public class ProfileControllerTests
         notFoundResult.Should().NotBeNull();
         notFoundResult!.StatusCode.Should().Be(404);
     }
+
+    [Fact]
+    public async Task UploadProfilePicture_ValidFile_Returns200Ok()
+    {
+        // Arrange
+        var userId = Guid.NewGuid();
+        SetUserContext(userId);
+
+        var fileMock = new Mock<IFormFile>();
+        _profileServiceMock
+            .Setup(s => s.UploadProfilePictureAsync(userId, fileMock.Object, It.IsAny<string>()))
+            .ReturnsAsync((true, "Profile picture updated successfully!", "/uploads/test.png"));
+
+        // Act
+        var result = await _controller.UploadProfilePicture(fileMock.Object);
+
+        // Assert
+        var okResult = result as OkObjectResult;
+        okResult.Should().NotBeNull();
+        okResult!.StatusCode.Should().Be(200);
+    }
+
+    [Fact]
+    public async Task RemoveProfilePicture_Returns200Ok()
+    {
+        // Arrange
+        var userId = Guid.NewGuid();
+        SetUserContext(userId);
+
+        _profileServiceMock
+            .Setup(s => s.RemoveProfilePictureAsync(userId, It.IsAny<string>()))
+            .ReturnsAsync((true, "Profile picture removed successfully."));
+
+        // Act
+        var result = await _controller.RemoveProfilePicture();
+
+        // Assert
+        var okResult = result as OkObjectResult;
+        okResult.Should().NotBeNull();
+        okResult!.StatusCode.Should().Be(200);
+    }
+
+    [Fact]
+    public async Task GetPublicProfile_OrganizationUser_ReturnsExpectedFields()
+    {
+        // Arrange
+        var userId = Guid.NewGuid();
+        var profileDto = new UserProfileDto
+        {
+            UserId = userId,
+            Role = "ORGANIZATION",
+            BusinessOrOrgName = "Charity Org",
+            AcceptedFoodCategories = new List<string> { "Cooked Meals" },
+            ProfilePictureUrl = "/uploads/test.png"
+        };
+
+        _profileServiceMock
+            .Setup(s => s.GetProfileByUserIdAsync(userId))
+            .ReturnsAsync(profileDto);
+
+        // Act
+        var result = await _controller.GetPublicProfile(userId);
+
+        // Assert
+        var okResult = result as OkObjectResult;
+        okResult.Should().NotBeNull();
+        okResult!.StatusCode.Should().Be(200);
+        
+        // Use reflection to check properties since it returns anonymous object
+        var value = okResult.Value;
+        value.Should().NotBeNull();
+        
+        var type = value!.GetType();
+        var dataProp = type.GetProperty("data")!.GetValue(value, null);
+        dataProp.Should().NotBeNull();
+        
+        var dataType = dataProp!.GetType();
+        dataType.GetProperty("BusinessOrOrgName")!.GetValue(dataProp, null).Should().Be("Charity Org");
+        var categories = dataType.GetProperty("AcceptedFoodCategories")!.GetValue(dataProp, null) as List<string>;
+        categories.Should().Contain("Cooked Meals");
+        dataType.GetProperty("ProfilePictureUrl")!.GetValue(dataProp, null).Should().Be("/uploads/test.png");
+    }
+
+    [Fact]
+    public async Task GetPublicProfile_DeactivatedAccount_BehavesAccordingToImplementation()
+    {
+        // Arrange
+        var userId = Guid.NewGuid();
+        // The implementation does not filter out deactivated accounts at the controller level
+        var profileDto = new UserProfileDto
+        {
+            UserId = userId,
+            Role = "DONOR",
+            BusinessOrOrgName = "Deactivated User",
+            IsActive = false // Deactivated
+        };
+
+        _profileServiceMock
+            .Setup(s => s.GetProfileByUserIdAsync(userId))
+            .ReturnsAsync(profileDto);
+
+        // Act
+        var result = await _controller.GetPublicProfile(userId);
+
+        // Assert
+        var okResult = result as OkObjectResult;
+        okResult.Should().NotBeNull();
+        okResult!.StatusCode.Should().Be(200); // Verify it returns 200 OK
+    }
 }

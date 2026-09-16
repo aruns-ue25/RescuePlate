@@ -110,6 +110,11 @@ public class DonationServiceImpl : IDonationService
                 }
             }
 
+            if (string.IsNullOrWhiteSpace(resolvedLocation) && !string.IsNullOrWhiteSpace(dto.Location))
+            {
+                resolvedLocation = dto.Location.Trim();
+            }
+
             if (string.IsNullOrWhiteSpace(resolvedLocation))
             {
                 return ApiResponse<DonationResponseDto>.Fail("Donor registered location could not be found. Please ensure your profile has a registered address.");
@@ -164,7 +169,7 @@ public class DonationServiceImpl : IDonationService
                     Notes = donation.Notes
                 };
 
-                _ = _eventProducer.PublishEventAsync(donationCreatedEvent);
+                await _eventProducer.PublishEventAsync(donationCreatedEvent);
             }
             catch (Exception evEx)
             {
@@ -308,7 +313,7 @@ public class DonationServiceImpl : IDonationService
                     Notes = donation.Notes
                 };
 
-                _ = _eventProducer.PublishEventAsync(donationUpdatedEvent);
+                await _eventProducer.PublishEventAsync(donationUpdatedEvent);
             }
             catch (Exception evEx)
             {
@@ -387,7 +392,7 @@ public class DonationServiceImpl : IDonationService
                     Notes = donation.Notes
                 };
 
-                _ = _eventProducer.PublishEventAsync(donationCancelledEvent);
+                await _eventProducer.PublishEventAsync(donationCancelledEvent);
             }
             catch (Exception evEx)
             {

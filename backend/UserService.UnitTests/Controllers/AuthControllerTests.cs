@@ -235,4 +235,82 @@ public class AuthControllerTests
         unauthorizedResult.Should().NotBeNull();
         unauthorizedResult!.StatusCode.Should().Be(401);
     }
+
+    [Fact]
+    public async Task ChangePassword_ValidDto_Returns200Ok()
+    {
+        // Arrange
+        var userId = Guid.NewGuid();
+        SetUserContext(userId);
+
+        var dto = new ChangePasswordDto { CurrentPassword = "Old", NewPassword = "New", ConfirmPassword = "New" };
+        _authServiceMock
+            .Setup(s => s.ChangePasswordAsync(userId, dto))
+            .ReturnsAsync((true, "Password has been changed successfully."));
+
+        // Act
+        var result = await _controller.ChangePassword(dto);
+
+        // Assert
+        var okResult = result as OkObjectResult;
+        okResult.Should().NotBeNull();
+        okResult!.StatusCode.Should().Be(200);
+    }
+
+    [Fact]
+    public async Task ChangePassword_InvalidModelState_Returns400BadRequest()
+    {
+        // Arrange
+        _controller.ModelState.AddModelError("NewPassword", "Required");
+        var dto = new ChangePasswordDto();
+
+        // Act
+        var result = await _controller.ChangePassword(dto);
+
+        // Assert
+        var badRequestResult = result as BadRequestObjectResult;
+        badRequestResult.Should().NotBeNull();
+        badRequestResult!.StatusCode.Should().Be(400);
+    }
+
+    [Fact]
+    public async Task ChangePassword_ServiceFails_Returns400BadRequest()
+    {
+        // Arrange
+        var userId = Guid.NewGuid();
+        SetUserContext(userId);
+
+        var dto = new ChangePasswordDto { CurrentPassword = "Wrong", NewPassword = "New", ConfirmPassword = "New" };
+        _authServiceMock
+            .Setup(s => s.ChangePasswordAsync(userId, dto))
+            .ReturnsAsync((false, "The current password you provided is incorrect."));
+
+        // Act
+        var result = await _controller.ChangePassword(dto);
+
+        // Assert
+        var badRequestResult = result as BadRequestObjectResult;
+        badRequestResult.Should().NotBeNull();
+        badRequestResult!.StatusCode.Should().Be(400);
+    }
+
+    [Fact]
+    public async Task ChangePassword_MissingClaims_Returns401Unauthorized()
+    {
+        // Arrange
+        _controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal() }
+        };
+
+        var dto = new ChangePasswordDto { CurrentPassword = "Old", NewPassword = "New", ConfirmPassword = "New" };
+
+        // Act
+        var result = await _controller.ChangePassword(dto);
+
+        // Assert
+        var unauthorizedResult = result as UnauthorizedObjectResult;
+        unauthorizedResult.Should().NotBeNull();
+        unauthorizedResult!.StatusCode.Should().Be(401);
+    }
 }
