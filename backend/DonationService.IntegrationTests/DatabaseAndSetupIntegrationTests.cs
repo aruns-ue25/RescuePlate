@@ -54,7 +54,8 @@ public class DatabaseAndSetupIntegrationTests : IAsyncLifetime
         // Assert
         canConnect.Should().BeTrue();
         count.Should().Be(0);
-        _factory.ConnectionString.Should().Contain("RescuePlate_Donation_IntegrationTestDB");
+        var expectedDbName = Environment.GetEnvironmentVariable("POSTGRES_DB") ?? IntegrationTestConfig.DefaultDatabaseName;
+        _factory.ConnectionString.Should().Contain(expectedDbName);
     }
 
     [Fact]
