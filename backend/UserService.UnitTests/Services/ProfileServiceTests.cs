@@ -1,5 +1,8 @@
+using System.IO;
 using FluentAssertions;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+using Moq;
 using UserService.Data;
 using UserService.DTOs;
 using UserService.Models;
@@ -231,5 +234,107 @@ public class ProfileServiceTests : IDisposable
         success.Should().BeFalse();
         message.Should().Be("User not found.");
         data.Should().BeNull();
+    }
+
+    private Mock<IFormFile> CreateMockFormFile(string fileName, string contentType, byte[] content)
+    {
+        var fileMock = new Mock<IFormFile>();
+        var stream = new MemoryStream(content);
+        fileMock.Setup(f => f.OpenReadStream()).Returns(stream);
+        fileMock.Setup(f => f.FileName).Returns(fileName);
+        fileMock.Setup(f => f.ContentType).Returns(contentType);
+        fileMock.Setup(f => f.Length).Returns(stream.Length);
+        return fileMock;
+    }
+
+    [Fact]
+    public async Task UploadProfilePictureAsync_ValidImage_SavesFileAndUpdatesDb()
+    {
+        // Arrange
+        var user = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "pic@domain.com",
+            Role = UserRole.DONOR,
+            IsActive = true
+        };
+        _dbContext.Users.Add(user);
+        await _dbContext.SaveChangesAsync();
+
+        var magicBytes = new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x00 }; // PNG magic bytes
+        var fileMock = CreateMockFormFile("avatar.png", "image/png", magicBytes);
+        var webRootPath = Path.Combine(Path.GetTempPath(), "RescuePlateTestRoot");
+        
+        // Act
+        var (success, message, url) = await _profileService.UploadProfilePictureAsync(user.Id, fileMock.Object, webRootPath);
+
+        // Assert
+        success.Should().BeTrue();
+        message.Should().Be("Profile picture updated successfully!");
+        url.Should().NotBeNull();
+        url.Should().Contain(".png");
+        
+        var updatedUser = await _dbContext.Users.FindAsync(user.Id);
+        updatedUser!.ProfilePictureUrl.Should().Be(url);
+    }
+
+    [Fact]
+    public async Task UploadProfilePictureAsync_InvalidExtension_ReturnsFailure()
+    {
+        // Arrange
+        var user = new User { Id = Guid.NewGuid(), Email = "test@domain.com" };
+        var fileMock = CreateMockFormFile("document.pdf", "application/pdf", new byte[] { 0x25, 0x50, 0x44, 0x46 });
+        
+        // Act
+        var (success, message, url) = await _profileService.UploadProfilePictureAsync(user.Id, fileMock.Object, "dummy");
+
+        // Assert
+        success.Should().BeFalse();
+        message.Should().Contain("Unsupported image format");
+        url.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task UploadProfilePictureAsync_OversizedFile_ReturnsFailure()
+    {
+        // Arrange
+        var user = new User { Id = Guid.NewGuid(), Email = "test@domain.com" };
+        
+        var fileMock = new Mock<IFormFile>();
+        fileMock.Setup(f => f.Length).Returns(6 * 1024 * 1024); // 6MB
+        
+        // Act
+        var (success, message, url) = await _profileService.UploadProfilePictureAsync(user.Id, fileMock.Object, "dummy");
+
+        // Assert
+        success.Should().BeFalse();
+        message.Should().Contain("exceeds the 5MB limit");
+    }
+
+    [Fact]
+    public async Task RemoveProfilePictureAsync_ExistingPicture_RemovesDbReference()
+    {
+        // Arrange
+        var user = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "pic_remove@domain.com",
+            ProfilePictureUrl = "/uploads/profiles/old.png",
+            IsActive = true
+        };
+        _dbContext.Users.Add(user);
+        await _dbContext.SaveChangesAsync();
+
+        var webRootPath = Path.Combine(Path.GetTempPath(), "RescuePlateTestRoot");
+
+        // Act
+        var (success, message) = await _profileService.RemoveProfilePictureAsync(user.Id, webRootPath);
+
+        // Assert
+        success.Should().BeTrue();
+        message.Should().Be("Profile picture removed successfully.");
+        
+        var updatedUser = await _dbContext.Users.FindAsync(user.Id);
+        updatedUser!.ProfilePictureUrl.Should().BeNull();
     }
 }

@@ -328,6 +328,152 @@ public class AuthServiceTests : IDisposable
         var (success, message) = await _authService.DeleteAccountAsync(nonExistentId, "AnyPassword");
 
         // Assert
+    }
+
+    [Fact]
+    public async Task ChangePasswordAsync_CorrectPasswordAndValidNew_ChangesPasswordSuccessfully()
+    {
+        // Arrange
+        var password = "OldPassword123!";
+        var user = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "change_pwd@domain.com",
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword(password),
+            Role = UserRole.DONOR,
+            IsActive = true
+        };
+        _dbContext.Users.Add(user);
+        await _dbContext.SaveChangesAsync();
+
+        var dto = new ChangePasswordDto
+        {
+            CurrentPassword = password,
+            NewPassword = "NewStrongPassword123!",
+            ConfirmPassword = "NewStrongPassword123!"
+        };
+
+        // Act
+        var (success, message) = await _authService.ChangePasswordAsync(user.Id, dto);
+
+        // Assert
+        success.Should().BeTrue();
+        message.Should().Be("Password has been changed successfully.");
+        
+        var updatedUser = await _dbContext.Users.FindAsync(user.Id);
+        BCrypt.Net.BCrypt.Verify("NewStrongPassword123!", updatedUser!.PasswordHash).Should().BeTrue();
+        BCrypt.Net.BCrypt.Verify(password, updatedUser.PasswordHash).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task ChangePasswordAsync_IncorrectCurrentPassword_ReturnsFailure()
+    {
+        // Arrange
+        var password = "OldPassword123!";
+        var user = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "wrong_pwd@domain.com",
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword(password),
+            Role = UserRole.DONOR,
+            IsActive = true
+        };
+        _dbContext.Users.Add(user);
+        await _dbContext.SaveChangesAsync();
+
+        var dto = new ChangePasswordDto
+        {
+            CurrentPassword = "WrongOldPassword",
+            NewPassword = "NewStrongPassword123!",
+            ConfirmPassword = "NewStrongPassword123!"
+        };
+
+        // Act
+        var (success, message) = await _authService.ChangePasswordAsync(user.Id, dto);
+
+        // Assert
+        success.Should().BeFalse();
+        message.Should().Be("The current password you provided is incorrect.");
+    }
+
+    [Fact]
+    public async Task ChangePasswordAsync_NewPasswordMatchesCurrent_ReturnsFailure()
+    {
+        // Arrange
+        var password = "OldPassword123!";
+        var user = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "same_pwd@domain.com",
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword(password),
+            Role = UserRole.DONOR,
+            IsActive = true
+        };
+        _dbContext.Users.Add(user);
+        await _dbContext.SaveChangesAsync();
+
+        var dto = new ChangePasswordDto
+        {
+            CurrentPassword = password,
+            NewPassword = password, // Same as old
+            ConfirmPassword = password
+        };
+
+        // Act
+        var (success, message) = await _authService.ChangePasswordAsync(user.Id, dto);
+
+        // Assert
+        success.Should().BeFalse();
+        message.Should().Be("New password cannot be the same as your current password.");
+    }
+
+    [Fact]
+    public async Task ChangePasswordAsync_ConfirmPasswordMismatch_ReturnsFailure()
+    {
+        // Arrange
+        var password = "OldPassword123!";
+        var user = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "mismatch_pwd@domain.com",
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword(password),
+            Role = UserRole.DONOR,
+            IsActive = true
+        };
+        _dbContext.Users.Add(user);
+        await _dbContext.SaveChangesAsync();
+
+        var dto = new ChangePasswordDto
+        {
+            CurrentPassword = password,
+            NewPassword = "NewStrongPassword123!",
+            ConfirmPassword = "DifferentPassword123!"
+        };
+
+        // Act
+        var (success, message) = await _authService.ChangePasswordAsync(user.Id, dto);
+
+        // Assert
+        success.Should().BeFalse();
+        message.Should().Be("New password and confirmation password do not match.");
+    }
+
+    [Fact]
+    public async Task ChangePasswordAsync_UserNotFound_ReturnsFailure()
+    {
+        // Arrange
+        var nonExistentId = Guid.NewGuid();
+        var dto = new ChangePasswordDto
+        {
+            CurrentPassword = "AnyPassword",
+            NewPassword = "NewStrongPassword123!",
+            ConfirmPassword = "NewStrongPassword123!"
+        };
+
+        // Act
+        var (success, message) = await _authService.ChangePasswordAsync(nonExistentId, dto);
+
+        // Assert
         success.Should().BeFalse();
         message.Should().Be("User account not found.");
     }
