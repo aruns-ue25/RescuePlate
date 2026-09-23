@@ -34,6 +34,28 @@ services:
     ports:
       - "5000:8080"
 
+  requestworkflowservice:
+    image: rescueplate-requestworkflowservice:latest
+    container_name: rescueplate-requestworkflowservice
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ConnectionStrings__PostgreSQLConnection: "Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}"
+
+      Jwt__SecretKey: ${JWT_SECRET_KEY}
+      Jwt__Issuer: "RescuePlate.UserService"
+      Jwt__Audience: "RescuePlate.Client"
+
+      Services__UserServiceUrl: "http://userservice:8080"
+      Services__DonationServiceUrl: "http://donationservice:8080"
+      FrontendUrl: ${FRONTEND_URL}
+
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
+    ports:
+      - "5002:8080"
+
+
   frontend:
     image: rescueplate-frontend:latest
     container_name: rescueplate-frontend
