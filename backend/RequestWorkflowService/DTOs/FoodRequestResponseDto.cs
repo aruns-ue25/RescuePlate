@@ -1,6 +1,6 @@
-namespace RequestWorkflowService.Models;
+namespace RequestWorkflowService.DTOs;
 
-public class FoodRequest
+public class FoodRequestResponseDto
 {
     public int Id { get; set; }
     public int DonationId { get; set; }
@@ -11,9 +11,9 @@ public class FoodRequest
     public int RequestedQuantity { get; set; }
     public int? AcceptedQuantity { get; set; }
     public string Unit { get; set; } = "portions";
-    public string Status { get; set; } = "PENDING"; // PENDING, ACCEPTED, REJECTED
+    public string Status { get; set; } = "PENDING";
     public string? Notes { get; set; }
     public string? RejectionReason { get; set; }
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
 }

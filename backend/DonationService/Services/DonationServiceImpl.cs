@@ -965,6 +965,66 @@ public class DonationServiceImpl : IDonationService
         return null;
     }
 
+    public async Task<ApiResponse<DonationResponseDto>> DeductQuantityAsync(int id, int quantity)
+    {
+        try
+        {
+            if (quantity <= 0)
+            {
+                return ApiResponse<DonationResponseDto>.Fail("Deduction quantity must be greater than 0.");
+            }
+
+            var donation = await _context.Donations.FindAsync(id);
+            if (donation == null)
+            {
+                return ApiResponse<DonationResponseDto>.Fail($"Donation with ID {id} not found.");
+            }
+
+            if (donation.Status == "Cancelled" || donation.Status == "Expired" || donation.Status == "FullyClaimed")
+            {
+                return ApiResponse<DonationResponseDto>.Fail($"Donation {id} is currently {donation.Status} and cannot be requested/claimed.");
+            }
+
+            if (DateTime.UtcNow > donation.ExpiryTime)
+            {
+                donation.Status = "Expired";
+                await _context.SaveChangesAsync();
+                return ApiResponse<DonationResponseDto>.Fail($"Donation {id} has expired.");
+            }
+
+            if (donation.RemainingQuantity < quantity)
+            {
+                return ApiResponse<DonationResponseDto>.Fail($"Insufficient remaining quantity. Requested: {quantity}, Available: {donation.RemainingQuantity}.");
+            }
+
+            donation.ClaimedQuantity += quantity;
+            donation.RemainingQuantity -= quantity;
+
+            if (donation.RemainingQuantity <= 0)
+            {
+                donation.RemainingQuantity = 0;
+                donation.Status = "FullyClaimed";
+            }
+            else
+            {
+                donation.Status = "PartiallyClaimed";
+            }
+
+            donation.UpdatedAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync();
+
+            _logger.LogInformation("Successfully deducted {Quantity} from Donation {DonationId}. Remaining: {Remaining}, Status: {Status}",
+                quantity, id, donation.RemainingQuantity, donation.Status);
+
+            return ApiResponse<DonationResponseDto>.Ok(MapToResponseDto(donation), "Donation quantity updated successfully.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deducting quantity from Donation {DonationId}", id);
+            return ApiResponse<DonationResponseDto>.Fail($"Internal server error: {ex.Message}");
+        }
+    }
+
     private static DonationResponseDto MapToResponseDto(Donation d)
     {
         var effectiveStatus = d.Status;
@@ -977,11 +1037,11 @@ public class DonationServiceImpl : IDonationService
             }
             else if (string.IsNullOrWhiteSpace(effectiveStatus) || effectiveStatus == "Posted")
             {
-                effectiveStatus = "Available";
+                effectiveStatus = d.RemainingQuantity <= 0 ? "FullyClaimed" : (d.ClaimedQuantity > 0 ? "PartiallyClaimed" : "Available");
             }
         }
 
-        var calculatedRemaining = effectiveStatus == "Cancelled" ? 0 : d.TotalQuantity;
+        var calculatedRemaining = effectiveStatus == "Cancelled" ? 0 : (d.RemainingQuantity <= 0 && d.ClaimedQuantity == 0 ? d.TotalQuantity : d.RemainingQuantity);
 
         return new DonationResponseDto
         {
@@ -992,7 +1052,7 @@ public class DonationServiceImpl : IDonationService
             FoodTitle = d.FoodTitle,
             Category = d.Category,
             TotalQuantity = d.TotalQuantity,
-            ClaimedQuantity = 0,
+            ClaimedQuantity = d.ClaimedQuantity,
             RemainingQuantity = calculatedRemaining,
             Unit = d.Unit,
             ExpiryTime = d.ExpiryTime,

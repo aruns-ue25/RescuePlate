@@ -17,4 +17,5 @@ public interface IDonationService
     Task<ApiResponse<DonorDiscoveryDto>> GetDonorProfileDetailsAsync(string donorId);
     Task<ApiResponse<List<OrganizationDiscoveryDto>>> GetParticipatingOrganizationsAsync(string? search = null, string? foodCategory = null);
     Task<ApiResponse<OrganizationDiscoveryDto>> GetOrganizationProfileDetailsAsync(string organizationId);
+    Task<ApiResponse<DonationResponseDto>> DeductQuantityAsync(int id, int quantity);
 }

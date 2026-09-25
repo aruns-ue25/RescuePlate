@@ -171,13 +171,15 @@ export default function DonorDiscoveryPage() {
 
           {/* Quick tab switcher between Browse Food & Browse Donors */}
           <div style={{ display: 'flex', gap: '12px', marginTop: '20px' }}>
-            <Link 
-              to="/browse-food" 
-              className="btn btn-outline"
-              style={{ background: 'rgba(255,255,255,0.15)', color: '#fff', borderColor: 'rgba(255,255,255,0.4)', borderRadius: '24px', padding: '8px 18px', fontSize: '0.875rem' }}
-            >
-              Browse Surplus Food Listings
-            </Link>
+            {currentUser?.role !== 'DONOR' && (
+              <Link 
+                to="/browse-food" 
+                className="btn btn-outline"
+                style={{ background: 'rgba(255,255,255,0.15)', color: '#fff', borderColor: 'rgba(255,255,255,0.4)', borderRadius: '24px', padding: '8px 18px', fontSize: '0.875rem' }}
+              >
+                Browse Surplus Food Listings
+              </Link>
+            )}
             <div 
               style={{ background: '#fff', color: '#111827', fontWeight: 700, borderRadius: '24px', padding: '8px 18px', fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '6px' }}
             >
@@ -543,9 +545,11 @@ export default function DonorDiscoveryPage() {
                     <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                       Active Food Items Available Right Now
                     </label>
-                    <Link to="/browse-food" style={{ fontSize: '0.8rem', color: '#d97706', fontWeight: 600, textDecoration: 'none' }}>
-                      View all food &rarr;
-                    </Link>
+                    {currentUser?.role !== 'DONOR' && (
+                      <Link to="/browse-food" style={{ fontSize: '0.8rem', color: '#d97706', fontWeight: 600, textDecoration: 'none' }}>
+                        View all food &rarr;
+                      </Link>
+                    )}
                   </div>
 
                   {detailData?.activeListings && detailData.activeListings.length > 0 ? (
@@ -571,19 +575,21 @@ export default function DonorDiscoveryPage() {
                               {item.category} &bull; {item.remainingQuantity} {item.unit} available
                             </div>
                           </div>
-                          <Link 
-                            to="/browse-food" 
-                            className="btn btn-amber btn-sm"
-                            style={{ fontSize: '0.78rem', padding: '4px 10px' }}
-                          >
-                            Claim Food
-                          </Link>
+                          {currentUser?.role !== 'DONOR' && (
+                            <Link 
+                              to="/browse-food" 
+                              className="btn btn-amber btn-sm"
+                              style={{ fontSize: '0.78rem', padding: '4px 10px' }}
+                            >
+                              Claim Food
+                            </Link>
+                          )}
                         </div>
                       ))}
                     </div>
                   ) : (
                     <div style={{ padding: '16px', background: '#f9fafb', borderRadius: '8px', textAlign: 'center', color: '#6b7280', fontSize: '0.85rem' }}>
-                      No active listings right now. Check back soon or visit <Link to="/browse-food" style={{ color: '#d97706' }}>Browse Food</Link>.
+                      No active listings right now.{currentUser?.role !== 'DONOR' && (<> Check back soon or visit <Link to="/browse-food" style={{ color: '#d97706' }}>Browse Food</Link>.</>)}
                     </div>
                   )}
                 </div>

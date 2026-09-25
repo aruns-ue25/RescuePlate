@@ -56,9 +56,11 @@ export default function Navbar() {
           <NavLink to="/" className={({ isActive }) => `nav-link ${isActive ? 'nav-link-active' : ''}`}>
             Home
           </NavLink>
-          <NavLink to="/browse-food" className={({ isActive }) => `nav-link ${isActive ? 'nav-link-active' : ''}`}>
-            Browse Food
-          </NavLink>
+          {currentUser?.role !== 'DONOR' && (
+            <NavLink to="/browse-food" className={({ isActive }) => `nav-link ${isActive ? 'nav-link-active' : ''}`}>
+              Browse Food
+            </NavLink>
+          )}
           <NavLink to="/donors" className={({ isActive }) => `nav-link ${isActive ? 'nav-link-active' : ''}`}>
             Donors
           </NavLink>
@@ -70,15 +72,29 @@ export default function Navbar() {
               Post Surplus
             </NavLink>
           )}
-          <NavLink to="/how-it-works" className={({ isActive }) => `nav-link ${isActive ? 'nav-link-active' : ''}`}>
-            How It Works
-          </NavLink>
-          <NavLink to="/about" className={({ isActive }) => `nav-link ${isActive ? 'nav-link-active' : ''}`}>
-            About Us
-          </NavLink>
-          <NavLink to="/contact" className={({ isActive }) => `nav-link ${isActive ? 'nav-link-active' : ''}`}>
-            Contact
-          </NavLink>
+          {currentUser && (
+            <>
+              <NavLink to="/requests" className={({ isActive }) => `nav-link ${isActive ? 'nav-link-active' : ''}`}>
+                Requests
+              </NavLink>
+              <NavLink to="/food-needs" className={({ isActive }) => `nav-link ${isActive ? 'nav-link-active' : ''}`}>
+                Food Needs
+              </NavLink>
+            </>
+          )}
+          {!currentUser && (
+            <>
+              <NavLink to="/how-it-works" className={({ isActive }) => `nav-link ${isActive ? 'nav-link-active' : ''}`}>
+                How It Works
+              </NavLink>
+              <NavLink to="/about" className={({ isActive }) => `nav-link ${isActive ? 'nav-link-active' : ''}`}>
+                About Us
+              </NavLink>
+              <NavLink to="/contact" className={({ isActive }) => `nav-link ${isActive ? 'nav-link-active' : ''}`}>
+                Contact
+              </NavLink>
+            </>
+          )}
         </nav>
 
         {/* Desktop Auth CTAs / Logged-in State */}
@@ -134,10 +150,12 @@ export default function Navbar() {
               <span>Home</span>
               <ChevronRight size={16} />
             </Link>
-            <Link to="/browse-food" className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>
-              <span>Browse Surplus Food</span>
-              <ChevronRight size={16} />
-            </Link>
+            {currentUser?.role !== 'DONOR' && (
+              <Link to="/browse-food" className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>
+                <span>Browse Surplus Food</span>
+                <ChevronRight size={16} />
+              </Link>
+            )}
             <Link to="/donors" className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>
               <span>Browse Donors</span>
               <ChevronRight size={16} />
@@ -152,18 +170,34 @@ export default function Navbar() {
                 <ChevronRight size={16} />
               </Link>
             )}
-            <Link to="/how-it-works" className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>
-              <span>How It Works</span>
-              <ChevronRight size={16} />
-            </Link>
-            <Link to="/about" className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>
-              <span>About Us</span>
-              <ChevronRight size={16} />
-            </Link>
-            <Link to="/contact" className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>
-              <span>Contact Support</span>
-              <ChevronRight size={16} />
-            </Link>
+            {currentUser && (
+              <>
+                <Link to="/requests" className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>
+                  <span>Food Requests</span>
+                  <ChevronRight size={16} />
+                </Link>
+                <Link to="/food-needs" className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>
+                  <span>Charity Food Needs</span>
+                  <ChevronRight size={16} />
+                </Link>
+              </>
+            )}
+            {!currentUser && (
+              <>
+                <Link to="/how-it-works" className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>
+                  <span>How It Works</span>
+                  <ChevronRight size={16} />
+                </Link>
+                <Link to="/about" className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>
+                  <span>About Us</span>
+                  <ChevronRight size={16} />
+                </Link>
+                <Link to="/contact" className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>
+                  <span>Contact Support</span>
+                  <ChevronRight size={16} />
+                </Link>
+              </>
+            )}
             {currentUser && (
               <Link to="/profile" className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>

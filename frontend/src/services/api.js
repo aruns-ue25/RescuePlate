@@ -288,6 +288,217 @@ export const donationApi = {
   }
 };
 
+const REQUEST_API_BASE_URL = import.meta.env.VITE_REQUEST_API_BASE_URL || 'http://localhost:5002/api';
+
+const requestClient = axios.create({
+  baseURL: REQUEST_API_BASE_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  timeout: 8000,
+});
+
+requestClient.interceptors.request.use((config) => {
+  const token = localStorage.getItem('rescueplate_token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+export const requestApi = {
+  createRequest: async (requestData) => {
+    try {
+      const response = await requestClient.post('/requests', requestData);
+      return response.data;
+    } catch (error) {
+      if (error.response?.data) {
+        throw error.response.data;
+      }
+      throw { message: error.message || 'Network Error', isNetworkError: !error.response };
+    }
+  },
+
+  getMyRequests: async (params = {}) => {
+    try {
+      const cleanParams = {};
+      if (params.status && params.status !== 'ALL') cleanParams.status = params.status;
+      const response = await requestClient.get('/requests/my-requests', { params: cleanParams });
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { message: 'Failed to fetch sent requests' };
+    }
+  },
+
+  getReceivedRequests: async (params = {}) => {
+    try {
+      const cleanParams = {};
+      if (params.status && params.status !== 'ALL') cleanParams.status = params.status;
+      if (params.donationId) cleanParams.donationId = params.donationId;
+      const response = await requestClient.get('/requests/received', { params: cleanParams });
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { message: 'Failed to fetch received requests' };
+    }
+  },
+
+  acceptRequest: async (id) => {
+    try {
+      const response = await requestClient.post(`/requests/${id}/accept`);
+      return response.data;
+    } catch (error) {
+      if (error.response?.data) {
+        throw error.response.data;
+      }
+      throw { message: error.message || 'Network Error', isNetworkError: !error.response };
+    }
+  },
+
+  rejectRequest: async (id, reason) => {
+    try {
+      const response = await requestClient.post(`/requests/${id}/reject`, { reason });
+      return response.data;
+    } catch (error) {
+      if (error.response?.data) {
+        throw error.response.data;
+      }
+      throw { message: error.message || 'Network Error', isNetworkError: !error.response };
+    }
+  },
+
+  getRequestById: async (id) => {
+    try {
+      const response = await requestClient.get(`/requests/${id}`);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { message: 'Failed to fetch request details' };
+    }
+  }
+};
+
+export const needRequestApi = {
+  createNeedRequest: async (data) => {
+    try {
+      const response = await requestClient.post('/need-requests', data);
+      return response.data;
+    } catch (error) {
+      if (error.response?.data) {
+        throw error.response.data;
+      }
+      throw { message: error.message || 'Network Error', isNetworkError: !error.response };
+    }
+  },
+
+  getMyNeedRequests: async (params = {}) => {
+    try {
+      const cleanParams = {};
+      if (params.status && params.status !== 'ALL') cleanParams.status = params.status;
+      const response = await requestClient.get('/need-requests/my-requests', { params: cleanParams });
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { message: 'Failed to fetch food need requests' };
+    }
+  },
+
+  updateNeedRequest: async (id, data) => {
+    try {
+      const response = await requestClient.put(`/need-requests/${id}`, data);
+      return response.data;
+    } catch (error) {
+      if (error.response?.data) {
+        throw error.response.data;
+      }
+      throw { message: error.message || 'Network Error', isNetworkError: !error.response };
+    }
+  },
+
+  cancelNeedRequest: async (id) => {
+    try {
+      const response = await requestClient.patch(`/need-requests/${id}/cancel`);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { message: 'Failed to cancel food need request' };
+    }
+  },
+
+  getActiveNeedRequests: async (params = {}) => {
+    try {
+      const cleanParams = {};
+      if (params.category && params.category !== 'ALL') cleanParams.category = params.category;
+      if (params.search && params.search.trim()) cleanParams.search = params.search.trim();
+      const response = await requestClient.get('/need-requests/active', { params: cleanParams });
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { message: 'Failed to fetch active food need requests' };
+    }
+  },
+
+  getNeedRequestById: async (id) => {
+    try {
+      const response = await requestClient.get(`/need-requests/${id}`);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { message: 'Failed to fetch need request details' };
+    }
+  },
+
+  createDonorOffer: async (needId, offerData) => {
+    try {
+      const response = await requestClient.post(`/need-requests/${needId}/offers`, offerData);
+      return response.data;
+    } catch (error) {
+      if (error.response?.data) {
+        throw error.response.data;
+      }
+      throw { message: error.message || 'Network Error', isNetworkError: !error.response };
+    }
+  },
+
+  getOffersForNeedRequest: async (needId) => {
+    try {
+      const response = await requestClient.get(`/need-requests/${needId}/offers`);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { message: 'Failed to fetch offers for request' };
+    }
+  },
+
+  getMySubmittedOffers: async (params = {}) => {
+    try {
+      const cleanParams = {};
+      if (params.status && params.status !== 'ALL') cleanParams.status = params.status;
+      const response = await requestClient.get('/offers/my-offers', { params: cleanParams });
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { message: 'Failed to fetch submitted food offers' };
+    }
+  },
+
+  acceptDonorOffer: async (offerId) => {
+    try {
+      const response = await requestClient.post(`/offers/${offerId}/accept`);
+      return response.data;
+    } catch (error) {
+      if (error.response?.data) {
+        throw error.response.data;
+      }
+      throw { message: error.message || 'Network Error', isNetworkError: !error.response };
+    }
+  },
+
+  rejectDonorOffer: async (offerId) => {
+    try {
+      const response = await requestClient.post(`/offers/${offerId}/reject`);
+      return response.data;
+    } catch (error) {
+      if (error.response?.data) {
+        throw error.response.data;
+      }
+      throw { message: error.message || 'Network Error', isNetworkError: !error.response };
+    }
+  }
+};
+
 export const getProfileImageUrl = (url) => {
   if (!url) return null;
   if (url.startsWith('http://') || url.startsWith('https://')) return url;
