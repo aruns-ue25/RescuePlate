@@ -73,9 +73,14 @@ export default function Navbar() {
             </NavLink>
           )}
           {currentUser && (
-            <NavLink to="/requests" className={({ isActive }) => `nav-link ${isActive ? 'nav-link-active' : ''}`}>
-              Requests
-            </NavLink>
+            <>
+              <NavLink to="/requests" className={({ isActive }) => `nav-link ${isActive ? 'nav-link-active' : ''}`}>
+                Requests
+              </NavLink>
+              <NavLink to="/food-needs" className={({ isActive }) => `nav-link ${isActive ? 'nav-link-active' : ''}`}>
+                Food Needs
+              </NavLink>
+            </>
           )}
           {!currentUser && (
             <>
@@ -166,10 +171,16 @@ export default function Navbar() {
               </Link>
             )}
             {currentUser && (
-              <Link to="/requests" className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>
-                <span>Food Requests</span>
-                <ChevronRight size={16} />
-              </Link>
+              <>
+                <Link to="/requests" className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>
+                  <span>Food Requests</span>
+                  <ChevronRight size={16} />
+                </Link>
+                <Link to="/food-needs" className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>
+                  <span>Charity Food Needs</span>
+                  <ChevronRight size={16} />
+                </Link>
+              </>
             )}
             {!currentUser && (
               <>
