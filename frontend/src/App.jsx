@@ -18,6 +18,7 @@ import DonorDiscoveryPage from './pages/DonorDiscoveryPage';
 import OrganizationDiscoveryPage from './pages/OrganizationDiscoveryPage';
 import ProfilePage from './pages/ProfilePage';
 import RequestsPage from './pages/RequestsPage';
+import FoodNeedsPage from './pages/FoodNeedsPage';
 
 import './App.css';
 
@@ -59,6 +60,16 @@ export default function App() {
                 element={
                   <ProtectedRoute>
                     <RequestsPage />
+                  </ProtectedRoute>
+                }
+              />
+
+              {/* Protected Charity Food Needs Portal (Any authenticated user) */}
+              <Route
+                path="/food-needs"
+                element={
+                  <ProtectedRoute>
+                    <FoodNeedsPage />
                   </ProtectedRoute>
                 }
               />
