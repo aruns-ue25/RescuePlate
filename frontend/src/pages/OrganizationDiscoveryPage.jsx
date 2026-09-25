@@ -167,13 +167,6 @@ export default function OrganizationDiscoveryPage() {
 
           {/* Quick tab switchers */}
           <div style={{ display: 'flex', gap: '12px', marginTop: '20px', flexWrap: 'wrap' }}>
-            <Link 
-              to="/donor-portal" 
-              className="btn btn-outline"
-              style={{ background: 'rgba(255,255,255,0.15)', color: '#fff', borderColor: 'rgba(255,255,255,0.4)', borderRadius: '24px', padding: '8px 18px', fontSize: '0.875rem' }}
-            >
-              My Surplus Food Listings
-            </Link>
             <div 
               style={{ background: '#fff', color: '#064e3b', fontWeight: 700, borderRadius: '24px', padding: '8px 18px', fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '6px' }}
             >
@@ -591,19 +584,21 @@ export default function OrganizationDiscoveryPage() {
                 </div>
 
                 {/* Post Food Shortcut */}
-                <div style={{ background: '#f9fafb', borderRadius: '10px', padding: '16px', border: '1px solid #e5e7eb', textAlign: 'center' }}>
-                  <p style={{ margin: '0 0 10px', color: '#4b5563', fontSize: '0.875rem' }}>
-                    Have surplus food matching this organization's accepted categories?
-                  </p>
-                  <Link 
-                    to="/donor-portal" 
-                    className="btn btn-primary btn-sm"
-                    style={{ background: '#047857', border: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-                  >
-                    <Package size={15} />
-                    <span>Post Surplus Food Now</span>
-                  </Link>
-                </div>
+                {currentUser?.role !== 'ORGANIZATION' && (
+                  <div style={{ background: '#f9fafb', borderRadius: '10px', padding: '16px', border: '1px solid #e5e7eb', textAlign: 'center' }}>
+                    <p style={{ margin: '0 0 10px', color: '#4b5563', fontSize: '0.875rem' }}>
+                      Have surplus food matching this organization's accepted categories?
+                    </p>
+                    <Link 
+                      to="/donor-portal" 
+                      className="btn btn-primary btn-sm"
+                      style={{ background: '#047857', border: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                    >
+                      <Package size={15} />
+                      <span>Post Surplus Food Now</span>
+                    </Link>
+                  </div>
+                )}
               </div>
             )}
 

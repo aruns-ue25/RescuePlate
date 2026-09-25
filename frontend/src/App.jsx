@@ -17,6 +17,7 @@ import OrganizationBrowsePage from './pages/OrganizationBrowsePage';
 import DonorDiscoveryPage from './pages/DonorDiscoveryPage';
 import OrganizationDiscoveryPage from './pages/OrganizationDiscoveryPage';
 import ProfilePage from './pages/ProfilePage';
+import RequestsPage from './pages/RequestsPage';
 
 import './App.css';
 
@@ -48,6 +49,16 @@ export default function App() {
                 element={
                   <ProtectedRoute allowedRoles={['DONOR']}>
                     <DonorDashboardPage />
+                  </ProtectedRoute>
+                }
+              />
+
+              {/* Protected Food Requests Portal (Any authenticated user) */}
+              <Route
+                path="/requests"
+                element={
+                  <ProtectedRoute>
+                    <RequestsPage />
                   </ProtectedRoute>
                 }
               />

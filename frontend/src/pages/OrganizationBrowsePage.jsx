@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { donationApi } from '../services/api';
+import { donationApi, requestApi } from '../services/api';
 import { 
   HeartHandshake, 
   Sparkles, 
@@ -133,18 +133,22 @@ export default function OrganizationBrowsePage() {
     fetchAvailableDonations(categoryFilter, searchQuery);
   };
 
+  const [requestNotes, setRequestNotes] = useState('');
+
   const handleOpenClaimModal = (item) => {
-    // Donation request workflow is disabled for this version
-    return;
+    setClaimDonation(item);
+    setClaimQuantity(Math.min(1, item.remainingQuantity || 1));
+    setRequestNotes('');
+    setClaimError(null);
+    setClaimSuccess(null);
   };
 
   const handleConfirmClaim = async (e) => {
     e.preventDefault();
     if (!claimDonation) return;
 
-    // Validate client-side before sending
     if (new Date(claimDonation.expiryTime) <= new Date()) {
-      setClaimError('This donation has just expired and can no longer accept requests.');
+      setClaimError('This donation has expired and can no longer accept requests.');
       return;
     }
 
@@ -161,9 +165,13 @@ export default function OrganizationBrowsePage() {
     try {
       setClaimSubmitting(true);
       setClaimError(null);
-      const res = await donationApi.requestDonation(claimDonation.id, { quantity: Number(claimQuantity) });
+      const res = await requestApi.createRequest({
+        donationId: claimDonation.id,
+        requestedQuantity: Number(claimQuantity),
+        notes: requestNotes
+      });
       if (res.success) {
-        setClaimSuccess(`Successfully requested ${claimQuantity} ${claimDonation.unit}! Notification sent to donor.`);
+        setClaimSuccess(`Successfully requested ${claimQuantity} ${claimDonation.unit}! Request sent to ${claimDonation.donorName}.`);
         fetchAvailableDonations(categoryFilter, searchQuery);
         setTimeout(() => {
           setClaimDonation(null);
@@ -437,7 +445,8 @@ export default function OrganizationBrowsePage() {
                     </button>
                     <button
                       type="button"
-                      disabled
+                      onClick={() => handleOpenClaimModal(item)}
+                      disabled={item.remainingQuantity <= 0 || calculateHoursLeft(item.expiryTime).expired}
                       className="btn btn-amber btn-md"
                       style={{ 
                         flex: '2', 
@@ -445,14 +454,12 @@ export default function OrganizationBrowsePage() {
                         alignItems: 'center', 
                         justifyContent: 'center', 
                         gap: '8px', 
-                        fontSize: '0.875rem',
-                        opacity: 0.65,
-                        cursor: 'not-allowed'
+                        fontSize: '0.875rem'
                       }}
-                      title="Requesting donations is disabled for this version"
+                      title={item.remainingQuantity <= 0 ? "Fully Claimed" : "Submit food request for this listing"}
                     >
                       <Send size={15} />
-                      <span>Request</span>
+                      <span>{item.remainingQuantity <= 0 ? 'Fully Claimed' : 'Request Food'}</span>
                     </button>
                   </div>
                 </div>
@@ -533,7 +540,7 @@ export default function OrganizationBrowsePage() {
                 </div>
               </div>
 
-              <div style={{ marginBottom: '20px' }}>
+              <div style={{ marginBottom: '16px' }}>
                 <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 700, color: '#374151', marginBottom: '8px' }}>
                   Quantity to Request ({claimDonation.unit}) *
                 </label>
@@ -548,14 +555,41 @@ export default function OrganizationBrowsePage() {
                     width: '100%',
                     padding: '10px 14px',
                     borderRadius: '8px',
-                    border: '1px solid #d1d5db',
+                    border: claimQuantity > claimDonation.remainingQuantity || claimQuantity <= 0 ? '1px solid #ef4444' : '1px solid #d1d5db',
                     fontSize: '1rem',
                     fontWeight: 600
                   }}
                 />
-                <span style={{ fontSize: '0.78rem', color: '#6b7280', marginTop: '4px', display: 'block' }}>
-                  Enter how many portions your organization intends to collect and redistribute.
-                </span>
+                {claimQuantity > claimDonation.remainingQuantity && (
+                  <span style={{ fontSize: '0.78rem', color: '#dc2626', marginTop: '4px', display: 'block', fontWeight: 600 }}>
+                    Requested quantity exceeds remaining stock of {claimDonation.remainingQuantity} {claimDonation.unit}.
+                  </span>
+                )}
+                {claimQuantity <= 0 && (
+                  <span style={{ fontSize: '0.78rem', color: '#dc2626', marginTop: '4px', display: 'block', fontWeight: 600 }}>
+                    Quantity must be a positive number greater than 0.
+                  </span>
+                )}
+              </div>
+
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 700, color: '#374151', marginBottom: '8px' }}>
+                  Pickup Notes & Special Instructions (Optional)
+                </label>
+                <textarea
+                  rows="3"
+                  value={requestNotes}
+                  onChange={(e) => setRequestNotes(e.target.value)}
+                  placeholder="e.g. Pickup vehicle capacity, estimated collection time..."
+                  style={{
+                    width: '100%',
+                    padding: '10px 14px',
+                    borderRadius: '8px',
+                    border: '1px solid #d1d5db',
+                    fontSize: '0.875rem'
+                  }}
+                  maxLength={500}
+                />
               </div>
 
               <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
