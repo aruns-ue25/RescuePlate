@@ -220,15 +220,25 @@ public class DonationsController : ControllerBase
     }
 
     /// <summary>
-    /// Claims/requests portions of an available donation for an Organization.
-    /// Scenario 2 & 4: Prevents requests on expired or unavailable donations.
+    /// Internal / inter-service endpoint to deduct remaining quantity when a request is accepted.
     /// </summary>
-    [HttpPost("{id:int}/request")]
-    [Authorize(Roles = "ORGANIZATION,DONOR")]
+    [HttpPost("{id:int}/deduct-quantity")]
+    [ProducesResponseType(typeof(ApiResponse<DonationResponseDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<DonationResponseDto>), StatusCodes.Status400BadRequest)]
-    public Task<IActionResult> RequestDonation(int id, [FromBody] ClaimRequestDto dto)
+    [ProducesResponseType(typeof(ApiResponse<DonationResponseDto>), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> DeductQuantity(int id, [FromBody] DeductQuantityDto dto)
     {
-        return Task.FromResult<IActionResult>(BadRequest(ApiResponse<DonationResponseDto>.Fail("Donation request/claim workflow is not supported in this version.")));
+        var result = await _donationService.DeductQuantityAsync(id, dto.Quantity);
+        if (!result.Success)
+        {
+            if (result.Message.Contains("not found", StringComparison.OrdinalIgnoreCase))
+            {
+                return NotFound(result);
+            }
+            return BadRequest(result);
+        }
+
+        return Ok(result);
     }
 
     /// <summary>
