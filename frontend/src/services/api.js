@@ -499,6 +499,44 @@ export const needRequestApi = {
   }
 };
 
+export const notificationApi = {
+  getMyNotifications: async () => {
+    try {
+      const response = await requestClient.get('/notifications');
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { message: 'Failed to fetch notifications' };
+    }
+  },
+
+  markAsRead: async (id) => {
+    try {
+      const response = await requestClient.patch(`/notifications/${id}/read`);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { message: 'Failed to mark notification as read' };
+    }
+  },
+
+  markAllAsRead: async () => {
+    try {
+      const response = await requestClient.patch('/notifications/read-all');
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { message: 'Failed to mark all as read' };
+    }
+  },
+
+  clearRead: async () => {
+    try {
+      const response = await requestClient.delete('/notifications/clear-read');
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { message: 'Failed to clear read notifications' };
+    }
+  }
+};
+
 export const getProfileImageUrl = (url) => {
   if (!url) return null;
   if (url.startsWith('http://') || url.startsWith('https://')) return url;

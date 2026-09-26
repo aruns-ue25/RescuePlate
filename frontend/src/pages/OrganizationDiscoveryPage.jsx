@@ -79,6 +79,17 @@ export default function OrganizationDiscoveryPage() {
     fetchOrganizations(searchQuery, selectedCategory);
   }, [selectedCategory]);
 
+  useEffect(() => {
+    if (selectedOrg) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [selectedOrg]);
+
   const handleSearchSubmit = (e) => {
     e.preventDefault();
     fetchOrganizations(searchQuery, selectedCategory);
@@ -415,20 +426,20 @@ export default function OrganizationDiscoveryPage() {
         <div 
           style={{
             position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: 'rgba(0,0,0,0.5)',
+            inset: 0,
+            background: 'rgba(0,0,0,0.65)',
+            backdropFilter: 'blur(4px)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             zIndex: 1000,
-            padding: '20px'
+            padding: '20px',
+            overflowY: 'auto'
           }}
         >
           <div 
             style={{
+              margin: 'auto',
               background: '#fff',
               borderRadius: '16px',
               maxWidth: '560px',

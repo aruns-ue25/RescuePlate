@@ -102,6 +102,18 @@ export default function DonorDashboardPage() {
     loadDonorProfile();
   }, [currentUser]);
 
+  useEffect(() => {
+    const isAnyModalOpen = Boolean(isCreateModalOpen || editDonation || cancelTargetDonation || selectedDonation);
+    if (isAnyModalOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [isCreateModalOpen, editDonation, cancelTargetDonation, selectedDonation]);
+
   const fetchMyDonations = async (status = statusFilter, search = searchQuery) => {
     try {
       setLoading(true);
@@ -965,16 +977,20 @@ export default function DonorDashboardPage() {
             alignItems: 'center',
             justifyContent: 'center',
             zIndex: 9999,
-            padding: '20px'
+            padding: '20px',
+            overflowY: 'auto'
           }}
         >
           <div 
             className="animate-fade-in-up"
             style={{
+              margin: 'auto',
               background: '#fff',
               borderRadius: '16px',
               maxWidth: '500px',
               width: '100%',
+              maxHeight: '90vh',
+              overflowY: 'auto',
               boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.25)',
               padding: '28px'
             }}
@@ -1106,12 +1122,14 @@ export default function DonorDashboardPage() {
             alignItems: 'center',
             justifyContent: 'center',
             zIndex: 9999,
-            padding: '20px'
+            padding: '20px',
+            overflowY: 'auto'
           }}
         >
           <div 
             className="animate-fade-in-up"
             style={{
+              margin: 'auto',
               background: '#fff',
               borderRadius: '16px',
               maxWidth: '620px',
@@ -1351,12 +1369,14 @@ export default function DonorDashboardPage() {
             alignItems: 'center',
             justifyContent: 'center',
             zIndex: 9999,
-            padding: '20px'
+            padding: '20px',
+            overflowY: 'auto'
           }}
         >
           <div 
             className="animate-fade-in-up"
             style={{
+              margin: 'auto',
               background: '#fff',
               borderRadius: '16px',
               maxWidth: '580px',
@@ -1531,12 +1551,14 @@ export default function DonorDashboardPage() {
             alignItems: 'center',
             justifyContent: 'center',
             zIndex: 9999,
-            padding: '20px'
+            padding: '20px',
+            overflowY: 'auto'
           }}
         >
           <div 
             className="animate-fade-in-up"
             style={{
+              margin: 'auto',
               background: '#fff',
               borderRadius: '16px',
               maxWidth: '620px',
