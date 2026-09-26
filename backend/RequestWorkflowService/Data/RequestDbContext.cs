@@ -12,6 +12,7 @@ public class RequestDbContext : DbContext
     public DbSet<FoodRequest> Requests => Set<FoodRequest>();
     public DbSet<OrgFoodNeedRequest> OrgNeedRequests => Set<OrgFoodNeedRequest>();
     public DbSet<DonorFoodOffer> DonorOffers => Set<DonorFoodOffer>();
+    public DbSet<Notification> Notifications => Set<Notification>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -66,6 +67,19 @@ public class RequestDbContext : DbContext
             entity.HasIndex(e => e.OrgFoodNeedRequestId);
             entity.HasIndex(e => e.DonorId);
             entity.HasIndex(e => e.Status);
+        });
+
+        modelBuilder.Entity<Notification>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.UserId).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.Title).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.Message).IsRequired().HasMaxLength(1000);
+            entity.Property(e => e.Type).IsRequired().HasMaxLength(50);
+
+            entity.HasIndex(e => e.UserId);
+            entity.HasIndex(e => e.IsRead);
+            entity.HasIndex(e => e.CreatedAt);
         });
     }
 }
