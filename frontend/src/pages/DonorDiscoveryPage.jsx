@@ -81,15 +81,11 @@ export default function DonorDiscoveryPage() {
   }, [selectedType]);
 
   useEffect(() => {
-    if (selectedDonor) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = 'unset';
-    }
+    document.body.style.overflow = 'unset';
     return () => {
       document.body.style.overflow = 'unset';
     };
-  }, [selectedDonor]);
+  }, []);
 
   const handleSearchSubmit = (e) => {
     e.preventDefault();
@@ -416,23 +412,23 @@ export default function DonorDiscoveryPage() {
             background: 'rgba(0,0,0,0.65)',
             backdropFilter: 'blur(4px)',
             display: 'flex',
-            alignItems: 'center',
+            alignItems: 'flex-start',
             justifyContent: 'center',
             zIndex: 1000,
-            padding: '20px',
+            padding: '2rem 1rem',
             overflowY: 'auto'
           }}
         >
           <div 
             style={{
-              margin: 'auto',
+              margin: '0 auto',
               background: '#fff',
               borderRadius: '16px',
               maxWidth: '560px',
               width: '100%',
               padding: '28px',
               boxShadow: '0 20px 25px -5px rgba(0,0,0,0.2)',
-              maxHeight: '90vh',
+              maxHeight: 'calc(100vh - 4rem)',
               overflowY: 'auto'
             }}
           >

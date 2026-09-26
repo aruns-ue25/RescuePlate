@@ -77,16 +77,11 @@ export default function OrganizationBrowsePage() {
   }, [categoryFilter]);
 
   useEffect(() => {
-    const isAnyModalOpen = Boolean(claimDonation || selectedDonation || detailLoading || detailError);
-    if (isAnyModalOpen) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = 'unset';
-    }
+    document.body.style.overflow = 'unset';
     return () => {
       document.body.style.overflow = 'unset';
     };
-  }, [claimDonation, selectedDonation, detailLoading, detailError]);
+  }, []);
 
   // Scenario 1: Support direct URL navigation to donation details via query param ?donationId={id} or ?view={id}
   useEffect(() => {
@@ -490,21 +485,21 @@ export default function OrganizationBrowsePage() {
             background: 'rgba(0,0,0,0.65)',
             backdropFilter: 'blur(4px)',
             display: 'flex',
-            alignItems: 'center',
+            alignItems: 'flex-start',
             justifyContent: 'center',
             zIndex: 1000,
-            padding: '20px',
+            padding: '2rem 1rem',
             overflowY: 'auto'
           }}
         >
           <div 
             style={{
-              margin: 'auto',
+              margin: '0 auto',
               background: '#fff',
               borderRadius: '16px',
               maxWidth: '480px',
               width: '100%',
-              maxHeight: '90vh',
+              maxHeight: 'calc(100vh - 4rem)',
               overflowY: 'auto',
               padding: '28px',
               boxShadow: '0 20px 25px -5px rgba(0,0,0,0.2)'
@@ -638,23 +633,23 @@ export default function OrganizationBrowsePage() {
             background: 'rgba(0,0,0,0.65)',
             backdropFilter: 'blur(4px)',
             display: 'flex',
-            alignItems: 'center',
+            alignItems: 'flex-start',
             justifyContent: 'center',
             zIndex: 1000,
-            padding: '20px',
+            padding: '2rem 1rem',
             overflowY: 'auto'
           }}
         >
           <div 
             style={{
-              margin: 'auto',
+              margin: '0 auto',
               background: '#fff',
               borderRadius: '16px',
               maxWidth: '580px',
               width: '100%',
               padding: '28px',
               boxShadow: '0 20px 25px -5px rgba(0,0,0,0.2)',
-              maxHeight: '90vh',
+              maxHeight: 'calc(100vh - 4rem)',
               overflowY: 'auto'
             }}
           >
