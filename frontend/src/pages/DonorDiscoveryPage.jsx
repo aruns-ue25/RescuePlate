@@ -80,6 +80,17 @@ export default function DonorDiscoveryPage() {
     fetchDonors(searchQuery, selectedType);
   }, [selectedType]);
 
+  useEffect(() => {
+    if (selectedDonor) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [selectedDonor]);
+
   const handleSearchSubmit = (e) => {
     e.preventDefault();
     fetchDonors(searchQuery, selectedType);
@@ -401,20 +412,20 @@ export default function DonorDiscoveryPage() {
         <div 
           style={{
             position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: 'rgba(0,0,0,0.5)',
+            inset: 0,
+            background: 'rgba(0,0,0,0.65)',
+            backdropFilter: 'blur(4px)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             zIndex: 1000,
-            padding: '20px'
+            padding: '20px',
+            overflowY: 'auto'
           }}
         >
           <div 
             style={{
+              margin: 'auto',
               background: '#fff',
               borderRadius: '16px',
               maxWidth: '560px',
