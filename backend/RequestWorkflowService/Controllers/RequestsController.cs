@@ -102,6 +102,19 @@ public class RequestsController : ControllerBase
         };
 
         _context.Requests.Add(foodRequest);
+
+        // Send Notification to Donor
+        var notif = new Notification
+        {
+            UserId = donation.DonorId,
+            Title = "New Food Request",
+            Message = $"{foodRequest.OrganizationName} requested {foodRequest.RequestedQuantity} {foodRequest.Unit} of '{foodRequest.DonationTitle}'.",
+            Type = "DONATION_REQUEST",
+            RelatedId = foodRequest.Id,
+            CreatedAt = DateTime.UtcNow
+        };
+        _context.Notifications.Add(notif);
+
         await _context.SaveChangesAsync();
 
         _logger.LogInformation("Organization {OrgId} successfully created FoodRequest {RequestId} for Donation {DonationId} ({Quantity} {Unit})",
@@ -239,6 +252,18 @@ public class RequestsController : ControllerBase
         request.AcceptedQuantity = request.RequestedQuantity;
         request.UpdatedAt = DateTime.UtcNow;
 
+        var (_, donorNameAccept) = GetCallerIdentity();
+        var acceptNotif = new Notification
+        {
+            UserId = request.OrganizationId,
+            Title = "Request Accepted",
+            Message = $"{donorNameAccept} accepted your request for {request.AcceptedQuantity} {request.Unit} of '{request.DonationTitle}'.",
+            Type = "REQUEST_ACCEPTED",
+            RelatedId = request.Id,
+            CreatedAt = DateTime.UtcNow
+        };
+        _context.Notifications.Add(acceptNotif);
+
         await _context.SaveChangesAsync();
 
         _logger.LogInformation("Donor {DonorId} accepted FoodRequest {RequestId} for {Quantity} {Unit}",
@@ -287,6 +312,18 @@ public class RequestsController : ControllerBase
         request.Status = "REJECTED";
         request.RejectionReason = dto?.Reason?.Trim();
         request.UpdatedAt = DateTime.UtcNow;
+
+        var (_, donorNameReject) = GetCallerIdentity();
+        var rejectNotif = new Notification
+        {
+            UserId = request.OrganizationId,
+            Title = "Request Declined",
+            Message = $"{donorNameReject} declined your request for '{request.DonationTitle}'." + (!string.IsNullOrWhiteSpace(request.RejectionReason) ? $" Reason: {request.RejectionReason}" : ""),
+            Type = "REQUEST_REJECTED",
+            RelatedId = request.Id,
+            CreatedAt = DateTime.UtcNow
+        };
+        _context.Notifications.Add(rejectNotif);
 
         await _context.SaveChangesAsync();
 
