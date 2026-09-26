@@ -40,6 +40,17 @@ export default function RequestsPage() {
     fetchRequests();
   }, [selectedStatus, currentUser]);
 
+  useEffect(() => {
+    if (rejectModalOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [rejectModalOpen]);
+
   const fetchRequests = async () => {
     setLoading(true);
     setError(null);
@@ -343,8 +354,8 @@ export default function RequestsPage() {
 
       {/* Decline Reason Modal */}
       {rejectModalOpen && (
-        <div className="modal-overlay animate-fade-in" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
-          <div className="modal-card animate-scale-up" style={{ background: '#fff', borderRadius: '16px', maxWidth: '480px', width: '100%', padding: '28px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}>
+        <div className="modal-overlay animate-fade-in" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px', overflowY: 'auto' }}>
+          <div className="modal-card animate-scale-up" style={{ margin: 'auto', background: '#fff', borderRadius: '16px', maxWidth: '480px', width: '100%', padding: '28px', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}>
             <h3 style={{ fontSize: '1.2rem', fontWeight: 700, color: '#111827', margin: '0 0 8px' }}>
               Decline Donation Request
             </h3>
