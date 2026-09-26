@@ -76,6 +76,18 @@ export default function OrganizationBrowsePage() {
     fetchAvailableDonations(categoryFilter, searchQuery);
   }, [categoryFilter]);
 
+  useEffect(() => {
+    const isAnyModalOpen = Boolean(claimDonation || selectedDonation || detailLoading || detailError);
+    if (isAnyModalOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [claimDonation, selectedDonation, detailLoading, detailError]);
+
   // Scenario 1: Support direct URL navigation to donation details via query param ?donationId={id} or ?view={id}
   useEffect(() => {
     const donationIdParam = searchParams.get('donationId') || searchParams.get('view');
@@ -474,24 +486,26 @@ export default function OrganizationBrowsePage() {
         <div 
           style={{
             position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: 'rgba(0,0,0,0.5)',
+            inset: 0,
+            background: 'rgba(0,0,0,0.65)',
+            backdropFilter: 'blur(4px)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             zIndex: 1000,
-            padding: '20px'
+            padding: '20px',
+            overflowY: 'auto'
           }}
         >
           <div 
             style={{
+              margin: 'auto',
               background: '#fff',
               borderRadius: '16px',
               maxWidth: '480px',
               width: '100%',
+              maxHeight: '90vh',
+              overflowY: 'auto',
               padding: '28px',
               boxShadow: '0 20px 25px -5px rgba(0,0,0,0.2)'
             }}
@@ -620,20 +634,20 @@ export default function OrganizationBrowsePage() {
         <div 
           style={{
             position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: 'rgba(0,0,0,0.55)',
+            inset: 0,
+            background: 'rgba(0,0,0,0.65)',
+            backdropFilter: 'blur(4px)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             zIndex: 1000,
-            padding: '20px'
+            padding: '20px',
+            overflowY: 'auto'
           }}
         >
           <div 
             style={{
+              margin: 'auto',
               background: '#fff',
               borderRadius: '16px',
               maxWidth: '580px',
