@@ -9,7 +9,7 @@ using RequestWorkflowService.Models;
 namespace RequestWorkflowService.Controllers;
 
 [ApiController]
-[Route("api/[controller]")]
+[Route("api/need-requests")]
 public class OrgNeedRequestsController : ControllerBase
 {
     private readonly RequestDbContext _context;
