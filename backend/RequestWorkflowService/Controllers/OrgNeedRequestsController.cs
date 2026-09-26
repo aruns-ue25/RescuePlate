@@ -342,6 +342,18 @@ public class OrgNeedRequestsController : ControllerBase
         };
 
         _context.DonorOffers.Add(offer);
+
+        var notif = new Notification
+        {
+            UserId = request.OrganizationId,
+            Title = "New Food Offer",
+            Message = $"{offer.DonorName} offered {offer.OfferedQuantity} {offer.Unit} of {offer.FoodType} for '{request.Title}'.",
+            Type = "FOOD_OFFER",
+            RelatedId = request.Id,
+            CreatedAt = DateTime.UtcNow
+        };
+        _context.Notifications.Add(notif);
+
         await _context.SaveChangesAsync();
 
         _logger.LogInformation("Donor {DonorId} submitted offer {OfferId} ({Quantity} {Unit} of {FoodType}) for Need Request {RequestId}",
@@ -489,6 +501,18 @@ public class OrgNeedRequestsController : ControllerBase
 
         request.UpdatedAt = DateTime.UtcNow;
 
+        var (_, orgNameAccept) = GetCallerIdentity();
+        var acceptNotif = new Notification
+        {
+            UserId = offer.DonorId,
+            Title = "Offer Accepted",
+            Message = $"{orgNameAccept} accepted your offer of {offer.OfferedQuantity} {offer.Unit} of {offer.FoodType} for '{request.Title}'.",
+            Type = "OFFER_ACCEPTED",
+            RelatedId = request.Id,
+            CreatedAt = DateTime.UtcNow
+        };
+        _context.Notifications.Add(acceptNotif);
+
         await _context.SaveChangesAsync();
 
         _logger.LogInformation("Organization {OrgId} accepted offer {OfferId} ({AcceptedQty} {Unit}). Need Request {RequestId} status: {Status}",
@@ -536,6 +560,18 @@ public class OrgNeedRequestsController : ControllerBase
 
         offer.Status = "REJECTED";
         offer.UpdatedAt = DateTime.UtcNow;
+
+        var (_, orgNameReject) = GetCallerIdentity();
+        var rejectNotif = new Notification
+        {
+            UserId = offer.DonorId,
+            Title = "Offer Declined",
+            Message = $"{orgNameReject} declined your offer for '{request.Title}'.",
+            Type = "OFFER_REJECTED",
+            RelatedId = request.Id,
+            CreatedAt = DateTime.UtcNow
+        };
+        _context.Notifications.Add(rejectNotif);
 
         await _context.SaveChangesAsync();
 
