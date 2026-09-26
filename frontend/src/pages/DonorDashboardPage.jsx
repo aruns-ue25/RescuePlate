@@ -103,16 +103,11 @@ export default function DonorDashboardPage() {
   }, [currentUser]);
 
   useEffect(() => {
-    const isAnyModalOpen = Boolean(isCreateModalOpen || editDonation || cancelTargetDonation || selectedDonation);
-    if (isAnyModalOpen) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = 'unset';
-    }
+    document.body.style.overflow = 'unset';
     return () => {
       document.body.style.overflow = 'unset';
     };
-  }, [isCreateModalOpen, editDonation, cancelTargetDonation, selectedDonation]);
+  }, []);
 
   const fetchMyDonations = async (status = statusFilter, search = searchQuery) => {
     try {
@@ -974,22 +969,22 @@ export default function DonorDashboardPage() {
             background: 'rgba(0, 0, 0, 0.65)',
             backdropFilter: 'blur(4px)',
             display: 'flex',
-            alignItems: 'center',
+            alignItems: 'flex-start',
             justifyContent: 'center',
             zIndex: 9999,
-            padding: '20px',
+            padding: '2rem 1rem',
             overflowY: 'auto'
           }}
         >
           <div 
             className="animate-fade-in-up"
             style={{
-              margin: 'auto',
+              margin: '0 auto',
               background: '#fff',
               borderRadius: '16px',
               maxWidth: '500px',
               width: '100%',
-              maxHeight: '90vh',
+              maxHeight: 'calc(100vh - 4rem)',
               overflowY: 'auto',
               boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.25)',
               padding: '28px'
@@ -1119,22 +1114,22 @@ export default function DonorDashboardPage() {
             background: 'rgba(0, 0, 0, 0.65)',
             backdropFilter: 'blur(4px)',
             display: 'flex',
-            alignItems: 'center',
+            alignItems: 'flex-start',
             justifyContent: 'center',
             zIndex: 9999,
-            padding: '20px',
+            padding: '2rem 1rem',
             overflowY: 'auto'
           }}
         >
           <div 
             className="animate-fade-in-up"
             style={{
-              margin: 'auto',
+              margin: '0 auto',
               background: '#fff',
               borderRadius: '16px',
               maxWidth: '620px',
               width: '100%',
-              maxHeight: '90vh',
+              maxHeight: 'calc(100vh - 4rem)',
               overflowY: 'auto',
               boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.2)',
               padding: '28px'
@@ -1366,22 +1361,22 @@ export default function DonorDashboardPage() {
             background: 'rgba(0, 0, 0, 0.65)',
             backdropFilter: 'blur(4px)',
             display: 'flex',
-            alignItems: 'center',
+            alignItems: 'flex-start',
             justifyContent: 'center',
             zIndex: 9999,
-            padding: '20px',
+            padding: '2rem 1rem',
             overflowY: 'auto'
           }}
         >
           <div 
             className="animate-fade-in-up"
             style={{
-              margin: 'auto',
+              margin: '0 auto',
               background: '#fff',
               borderRadius: '16px',
               maxWidth: '580px',
               width: '100%',
-              maxHeight: '90vh',
+              maxHeight: 'calc(100vh - 4rem)',
               overflowY: 'auto',
               boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.2)',
               padding: '28px'
@@ -1548,22 +1543,22 @@ export default function DonorDashboardPage() {
             background: 'rgba(0, 0, 0, 0.65)',
             backdropFilter: 'blur(4px)',
             display: 'flex',
-            alignItems: 'center',
+            alignItems: 'flex-start',
             justifyContent: 'center',
             zIndex: 9999,
-            padding: '20px',
+            padding: '2rem 1rem',
             overflowY: 'auto'
           }}
         >
           <div 
             className="animate-fade-in-up"
             style={{
-              margin: 'auto',
+              margin: '0 auto',
               background: '#fff',
               borderRadius: '16px',
               maxWidth: '620px',
               width: '100%',
-              maxHeight: '90vh',
+              maxHeight: 'calc(100vh - 4rem)',
               overflowY: 'auto',
               boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.2)',
               padding: '28px'
