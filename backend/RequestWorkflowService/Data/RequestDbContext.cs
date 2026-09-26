@@ -20,6 +20,7 @@ public class RequestDbContext : DbContext
 
         modelBuilder.Entity<FoodRequest>(entity =>
         {
+            entity.ToTable("Requests");
             entity.HasKey(e => e.Id);
             entity.Property(e => e.DonationTitle).IsRequired().HasMaxLength(200);
             entity.Property(e => e.OrganizationId).IsRequired().HasMaxLength(100);
@@ -38,6 +39,7 @@ public class RequestDbContext : DbContext
 
         modelBuilder.Entity<OrgFoodNeedRequest>(entity =>
         {
+            entity.ToTable("OrgNeedRequests");
             entity.HasKey(e => e.Id);
             entity.Property(e => e.OrganizationId).IsRequired().HasMaxLength(100);
             entity.Property(e => e.OrganizationName).IsRequired().HasMaxLength(150);
@@ -55,6 +57,7 @@ public class RequestDbContext : DbContext
 
         modelBuilder.Entity<DonorFoodOffer>(entity =>
         {
+            entity.ToTable("DonorOffers");
             entity.HasKey(e => e.Id);
             entity.Property(e => e.OrgFoodNeedRequestTitle).IsRequired().HasMaxLength(200);
             entity.Property(e => e.DonorId).IsRequired().HasMaxLength(100);
@@ -71,6 +74,7 @@ public class RequestDbContext : DbContext
 
         modelBuilder.Entity<Notification>(entity =>
         {
+            entity.ToTable("Notifications");
             entity.HasKey(e => e.Id);
             entity.Property(e => e.UserId).IsRequired().HasMaxLength(100);
             entity.Property(e => e.Title).IsRequired().HasMaxLength(200);
