@@ -135,7 +135,20 @@ jobs:
           az containerapp update \
             --name ${{ env.REQUEST_APP }} \
             --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-            --image ${{ env.ACR_LOGIN_SERVER }}/rescueplate-requestservice:${{ github.event.workflow_run.head_sha }}
+            --image ${{ env.ACR_LOGIN_SERVER }}/rescueplate-requestservice:${{ github.event.workflow_run.head_sha }} \
+            --set-env-vars \
+              Kafka__BootstrapServers=rescueplate-kafka.servicebus.windows.net:9093 \
+              Kafka__RequestTopic=request-events \
+              Kafka__NeedRequestTopic=need-request-events \
+              Kafka__DonationTopic=donation-events \
+              Kafka__ConsumerGroupId=rescueplate-requestworkflow-consumer-group \
+              Kafka__EnableConsumer=true \
+              Kafka__PublishRetries=3 \
+              Kafka__RetryBackoffMs=500 \
+              Kafka__SecurityProtocol=SASL_SSL \
+              Kafka__SaslMechanism=PLAIN \
+              Kafka__SaslUsername='$ConnectionString' \
+              Kafka__SaslPassword=secretref:kafka-connection-string
 
       # --------------------------------------------------
       # 7. Deploy frontend Container App
