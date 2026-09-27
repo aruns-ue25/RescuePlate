@@ -50,7 +50,11 @@ public class KafkaRequestEventProducer : IRequestEventProducer, IDisposable
                 RequestTimeoutMs = 5000
             };
 
-            if (Enum.TryParse<SecurityProtocol>(securityProtocolValue, true, out var secProtocol))
+            if (string.Equals(securityProtocolValue, "SASL_SSL", StringComparison.OrdinalIgnoreCase))
+            {
+                config.SecurityProtocol = SecurityProtocol.SaslSsl;
+            }
+            else if (Enum.TryParse<SecurityProtocol>(securityProtocolValue, true, out var secProtocol))
             {
                 config.SecurityProtocol = secProtocol;
             }
@@ -70,6 +74,12 @@ public class KafkaRequestEventProducer : IRequestEventProducer, IDisposable
             {
                 config.SaslPassword = saslPassword;
             }
+
+            _logger.LogInformation(
+                "Kafka producer configured: BootstrapServers='{BootstrapServers}', SecurityProtocol={SecurityProtocol}, SaslMechanism={SaslMechanism}",
+                bootstrapServers,
+                config.SecurityProtocol,
+                config.SaslMechanism);
 
             _producer = new ProducerBuilder<string, string>(config).Build();
             _logger.LogInformation("KafkaRequestEventProducer initialized successfully for bootstrap servers '{BootstrapServers}'.", bootstrapServers);
