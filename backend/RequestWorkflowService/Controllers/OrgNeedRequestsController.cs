@@ -4,6 +4,8 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using RequestWorkflowService.Data;
 using RequestWorkflowService.DTOs;
+using RequestWorkflowService.Events;
+using RequestWorkflowService.Kafka;
 using RequestWorkflowService.Models;
 
 namespace RequestWorkflowService.Controllers;
@@ -13,11 +15,19 @@ namespace RequestWorkflowService.Controllers;
 public class OrgNeedRequestsController : ControllerBase
 {
     private readonly RequestDbContext _context;
+    private readonly IRequestEventProducer _eventProducer;
+    private readonly IConfiguration _configuration;
     private readonly ILogger<OrgNeedRequestsController> _logger;
 
-    public OrgNeedRequestsController(RequestDbContext context, ILogger<OrgNeedRequestsController> logger)
+    public OrgNeedRequestsController(
+        RequestDbContext context,
+        IRequestEventProducer eventProducer,
+        IConfiguration configuration,
+        ILogger<OrgNeedRequestsController> logger)
     {
         _context = context;
+        _eventProducer = eventProducer;
+        _configuration = configuration;
         _logger = logger;
     }
 
@@ -76,6 +86,19 @@ public class OrgNeedRequestsController : ControllerBase
 
         _context.OrgNeedRequests.Add(needRequest);
         await _context.SaveChangesAsync();
+
+        var needTopic = _configuration["Kafka:NeedRequestTopic"] ?? "need-request-events";
+        await _eventProducer.PublishEventAsync(needTopic, needRequest.Id.ToString(), new FoodNeedRequestCreatedEvent
+        {
+            NeedRequestId = needRequest.Id,
+            OrganizationId = needRequest.OrganizationId,
+            OrganizationName = needRequest.OrganizationName,
+            Title = needRequest.Title,
+            Quantity = needRequest.QuantityNeeded,
+            Unit = needRequest.Unit,
+            Status = needRequest.Status,
+            CreatedAt = needRequest.CreatedAt
+        });
 
         _logger.LogInformation("Organization {OrgId} successfully created food need request {Id} ({Title})",
             orgId, needRequest.Id, needRequest.Title);
@@ -356,6 +379,19 @@ public class OrgNeedRequestsController : ControllerBase
 
         await _context.SaveChangesAsync();
 
+        var needTopic = _configuration["Kafka:NeedRequestTopic"] ?? "need-request-events";
+        await _eventProducer.PublishEventAsync(needTopic, offer.Id.ToString(), new FoodOfferCreatedEvent
+        {
+            OfferId = offer.Id,
+            NeedRequestId = request.Id,
+            DonorId = offer.DonorId,
+            DonorName = offer.DonorName,
+            Quantity = offer.OfferedQuantity,
+            Unit = offer.Unit,
+            Status = offer.Status,
+            CreatedAt = offer.CreatedAt
+        });
+
         _logger.LogInformation("Donor {DonorId} submitted offer {OfferId} ({Quantity} {Unit} of {FoodType}) for Need Request {RequestId}",
             donorId, offer.Id, offer.OfferedQuantity, offer.Unit, offer.FoodType, request.Id);
 
@@ -515,6 +551,17 @@ public class OrgNeedRequestsController : ControllerBase
 
         await _context.SaveChangesAsync();
 
+        var needTopic = _configuration["Kafka:NeedRequestTopic"] ?? "need-request-events";
+        await _eventProducer.PublishEventAsync(needTopic, offer.Id.ToString(), new FoodOfferStatusChangedEvent
+        {
+            OfferId = offer.Id,
+            NeedRequestId = request.Id,
+            OrganizationId = request.OrganizationId,
+            DonorId = offer.DonorId,
+            Status = offer.Status,
+            RespondedAt = DateTime.UtcNow
+        });
+
         _logger.LogInformation("Organization {OrgId} accepted offer {OfferId} ({AcceptedQty} {Unit}). Need Request {RequestId} status: {Status}",
             orgId, offer.Id, acceptedQty, offer.Unit, request.Id, request.Status);
 
@@ -574,6 +621,17 @@ public class OrgNeedRequestsController : ControllerBase
         _context.Notifications.Add(rejectNotif);
 
         await _context.SaveChangesAsync();
+
+        var needTopic = _configuration["Kafka:NeedRequestTopic"] ?? "need-request-events";
+        await _eventProducer.PublishEventAsync(needTopic, offer.Id.ToString(), new FoodOfferStatusChangedEvent
+        {
+            OfferId = offer.Id,
+            NeedRequestId = request.Id,
+            OrganizationId = request.OrganizationId,
+            DonorId = offer.DonorId,
+            Status = offer.Status,
+            RespondedAt = DateTime.UtcNow
+        });
 
         _logger.LogInformation("Organization {OrgId} rejected offer {OfferId}", orgId, offer.Id);
 

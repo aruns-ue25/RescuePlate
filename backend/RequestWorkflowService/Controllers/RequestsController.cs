@@ -5,6 +5,8 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using RequestWorkflowService.Data;
 using RequestWorkflowService.DTOs;
+using RequestWorkflowService.Events;
+using RequestWorkflowService.Kafka;
 using RequestWorkflowService.Models;
 
 namespace RequestWorkflowService.Controllers;
@@ -15,15 +17,21 @@ public class RequestsController : ControllerBase
 {
     private readonly RequestDbContext _context;
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly IRequestEventProducer _eventProducer;
+    private readonly IConfiguration _configuration;
     private readonly ILogger<RequestsController> _logger;
 
     public RequestsController(
         RequestDbContext context,
         IHttpClientFactory httpClientFactory,
+        IRequestEventProducer eventProducer,
+        IConfiguration configuration,
         ILogger<RequestsController> logger)
     {
         _context = context;
         _httpClientFactory = httpClientFactory;
+        _eventProducer = eventProducer;
+        _configuration = configuration;
         _logger = logger;
     }
 
@@ -116,6 +124,21 @@ public class RequestsController : ControllerBase
         _context.Notifications.Add(notif);
 
         await _context.SaveChangesAsync();
+
+        var requestTopic = _configuration["Kafka:RequestTopic"] ?? "request-events";
+        await _eventProducer.PublishEventAsync(requestTopic, foodRequest.Id.ToString(), new DonationRequestCreatedEvent
+        {
+            RequestId = foodRequest.Id,
+            DonationId = donation.Id,
+            DonationTitle = foodRequest.DonationTitle,
+            OrganizationId = foodRequest.OrganizationId,
+            OrganizationName = foodRequest.OrganizationName,
+            DonorId = foodRequest.DonorId,
+            RequestedQuantity = foodRequest.RequestedQuantity,
+            Unit = foodRequest.Unit,
+            Status = foodRequest.Status,
+            CreatedAt = foodRequest.CreatedAt
+        });
 
         _logger.LogInformation("Organization {OrgId} successfully created FoodRequest {RequestId} for Donation {DonationId} ({Quantity} {Unit})",
             orgId, foodRequest.Id, donation.Id, foodRequest.RequestedQuantity, foodRequest.Unit);
@@ -266,6 +289,20 @@ public class RequestsController : ControllerBase
 
         await _context.SaveChangesAsync();
 
+        var requestTopic = _configuration["Kafka:RequestTopic"] ?? "request-events";
+        await _eventProducer.PublishEventAsync(requestTopic, request.Id.ToString(), new DonationRequestAcceptedEvent
+        {
+            RequestId = request.Id,
+            DonationId = request.DonationId,
+            DonationTitle = request.DonationTitle,
+            OrganizationId = request.OrganizationId,
+            OrganizationName = request.OrganizationName,
+            DonorId = request.DonorId,
+            AcceptedQuantity = request.AcceptedQuantity ?? request.RequestedQuantity,
+            Unit = request.Unit,
+            AcceptedAt = DateTime.UtcNow
+        });
+
         _logger.LogInformation("Donor {DonorId} accepted FoodRequest {RequestId} for {Quantity} {Unit}",
             donorId, request.Id, request.AcceptedQuantity, request.Unit);
 
@@ -326,6 +363,18 @@ public class RequestsController : ControllerBase
         _context.Notifications.Add(rejectNotif);
 
         await _context.SaveChangesAsync();
+
+        var requestTopic = _configuration["Kafka:RequestTopic"] ?? "request-events";
+        await _eventProducer.PublishEventAsync(requestTopic, request.Id.ToString(), new DonationRequestRejectedEvent
+        {
+            RequestId = request.Id,
+            DonationId = request.DonationId,
+            DonationTitle = request.DonationTitle,
+            OrganizationId = request.OrganizationId,
+            DonorId = request.DonorId,
+            Reason = request.RejectionReason,
+            RejectedAt = DateTime.UtcNow
+        });
 
         _logger.LogInformation("Donor {DonorId} rejected FoodRequest {RequestId}", donorId, request.Id);
 
