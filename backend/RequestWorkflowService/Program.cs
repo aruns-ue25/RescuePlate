@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using RequestWorkflowService.Data;
+using RequestWorkflowService.Kafka;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -69,7 +70,7 @@ builder.Services.AddCors(options =>
     });
 });
 
-// 5. Inter-Service Communication Setup (UserService & DonationService HttpClients)
+// 5. Inter-Service Communication Setup (UserService & DonationService HttpClients + Kafka)
 builder.Services.AddHttpClient("UserService", client =>
 {
     client.BaseAddress = new Uri(builder.Configuration["Services:UserServiceUrl"] ?? "http://localhost:5000");
@@ -78,6 +79,9 @@ builder.Services.AddHttpClient("DonationService", client =>
 {
     client.BaseAddress = new Uri(builder.Configuration["Services:DonationServiceUrl"] ?? "http://localhost:5001");
 });
+
+builder.Services.AddSingleton<IRequestEventProducer, KafkaRequestEventProducer>();
+builder.Services.AddHostedService<RequestEventConsumerService>();
 
 // 6. Controllers & JSON Serializer Options
 builder.Services.AddControllers()
