@@ -48,7 +48,11 @@ public class RequestEventConsumerService : BackgroundService
             MaxPollIntervalMs = 300000
         };
 
-        if (Enum.TryParse<SecurityProtocol>(securityProtocolValue, true, out var secProtocol))
+        if (string.Equals(securityProtocolValue, "SASL_SSL", StringComparison.OrdinalIgnoreCase))
+        {
+            config.SecurityProtocol = SecurityProtocol.SaslSsl;
+        }
+        else if (Enum.TryParse<SecurityProtocol>(securityProtocolValue, true, out var secProtocol))
         {
             config.SecurityProtocol = secProtocol;
         }
@@ -68,6 +72,13 @@ public class RequestEventConsumerService : BackgroundService
         {
             config.SaslPassword = saslPassword;
         }
+
+        _logger.LogInformation(
+            "Kafka consumer configured: BootstrapServers='{BootstrapServers}', SecurityProtocol={SecurityProtocol}, SaslMechanism={SaslMechanism}, GroupId='{GroupId}'",
+            bootstrapServers,
+            config.SecurityProtocol,
+            config.SaslMechanism,
+            groupId);
 
         await Task.Run(() =>
         {
