@@ -103,6 +103,12 @@ export default function FoodNeedsPage() {
   }, [activeTab, categoryFilter, statusFilter, currentUser]);
 
   useEffect(() => {
+    if (isCreateModalOpen || editingNeed || viewOffersNeed || targetOfferNeed) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, [isCreateModalOpen, editingNeed, viewOffersNeed, targetOfferNeed]);
+
+  useEffect(() => {
     document.body.style.overflow = 'unset';
     return () => {
       document.body.style.overflow = 'unset';
@@ -937,8 +943,8 @@ export default function FoodNeedsPage() {
 
       {/* --- MODAL 1: Create Need Request (Org) --- */}
       {isCreateModalOpen && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 1000, padding: '2rem 1rem', overflowY: 'auto' }}>
-          <div style={{ margin: '0 auto', background: '#fff', borderRadius: '16px', maxWidth: '520px', width: '100%', padding: '28px', maxHeight: 'calc(100vh - 4rem)', overflowY: 'auto', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.2)' }}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 1000, padding: '90px 1rem 2rem 1rem', overflowY: 'auto' }}>
+          <div style={{ margin: '0 auto', background: '#fff', borderRadius: '16px', maxWidth: '520px', width: '100%', padding: '28px', maxHeight: 'calc(100vh - 7rem)', overflowY: 'auto', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.2)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
               <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: '#111827' }}>
                 Raise Food Need Request
@@ -1042,8 +1048,8 @@ export default function FoodNeedsPage() {
 
       {/* --- MODAL 2: Edit Need Request (Org) --- */}
       {editingNeed && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 1000, padding: '2rem 1rem', overflowY: 'auto' }}>
-          <div style={{ margin: '0 auto', background: '#fff', borderRadius: '16px', maxWidth: '500px', width: '100%', padding: '28px', maxHeight: 'calc(100vh - 4rem)', overflowY: 'auto', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.2)' }}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 1000, padding: '90px 1rem 2rem 1rem', overflowY: 'auto' }}>
+          <div style={{ margin: '0 auto', background: '#fff', borderRadius: '16px', maxWidth: '500px', width: '100%', padding: '28px', maxHeight: 'calc(100vh - 7rem)', overflowY: 'auto', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.2)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
               <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: '#111827' }}>
                 Edit Food Need Request
@@ -1115,8 +1121,8 @@ export default function FoodNeedsPage() {
 
       {/* --- MODAL 3: View Offers Received (Org) --- */}
       {viewOffersNeed && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 1000, padding: '2rem 1rem', overflowY: 'auto' }}>
-          <div style={{ margin: '0 auto', background: '#fff', borderRadius: '16px', maxWidth: '600px', width: '100%', padding: '28px', maxHeight: 'calc(100vh - 4rem)', overflowY: 'auto', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.2)' }}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 1000, padding: '90px 1rem 2rem 1rem', overflowY: 'auto' }}>
+          <div style={{ margin: '0 auto', background: '#fff', borderRadius: '16px', maxWidth: '600px', width: '100%', padding: '28px', maxHeight: 'calc(100vh - 7rem)', overflowY: 'auto', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.2)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
               <div>
                 <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: '#111827' }}>
@@ -1191,8 +1197,8 @@ export default function FoodNeedsPage() {
 
       {/* --- MODAL 4: Submit Food Offer (Donor) --- */}
       {targetOfferNeed && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 1000, padding: '2rem 1rem', overflowY: 'auto' }}>
-          <div style={{ margin: '0 auto', background: '#fff', borderRadius: '16px', maxWidth: '480px', width: '100%', padding: '28px', maxHeight: 'calc(100vh - 4rem)', overflowY: 'auto', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.2)' }}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 1000, padding: '90px 1rem 2rem 1rem', overflowY: 'auto' }}>
+          <div style={{ margin: '0 auto', background: '#fff', borderRadius: '16px', maxWidth: '480px', width: '100%', padding: '28px', maxHeight: 'calc(100vh - 7rem)', overflowY: 'auto', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.2)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Gift size={20} color="#10b981" />

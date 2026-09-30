@@ -111,16 +111,11 @@ export default function ProfilePage() {
     }
   }, [currentUser]);
 
-  // Lock background scroll when modals are open
+  // Lock background scroll and autoscroll when modals are open
   useEffect(() => {
     if (showDeleteModal || showRemovePicModal) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = 'unset';
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
-    return () => {
-      document.body.style.overflow = 'unset';
-    };
   }, [showDeleteModal, showRemovePicModal]);
 
   if (!currentUser) {
