@@ -4,11 +4,10 @@ on:
   push:
     branches:
       - main
-      - sprint3-test
+
   pull_request:
     branches:
       - main
-      - sprint3-test
 
 jobs:
   requestworkflowservice-build-and-test:
