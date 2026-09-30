@@ -40,9 +40,18 @@ export default function App() {
               <Route path="/about" element={<AboutPage />} />
               <Route path="/how-it-works" element={<HowItWorksPage />} />
               <Route path="/contact" element={<ContactPage />} />
-              <Route path="/browse-food" element={<OrganizationBrowsePage />} />
               <Route path="/donors" element={<DonorDiscoveryPage />} />
               <Route path="/organizations" element={<OrganizationDiscoveryPage />} />
+
+              {/* Protected Browse Food (Requires authentication) */}
+              <Route
+                path="/browse-food"
+                element={
+                  <ProtectedRoute>
+                    <OrganizationBrowsePage />
+                  </ProtectedRoute>
+                }
+              />
 
               {/* Protected Donor Portal (Only authenticated DONOR can access) */}
               <Route
