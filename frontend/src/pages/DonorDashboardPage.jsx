@@ -103,6 +103,12 @@ export default function DonorDashboardPage() {
   }, [currentUser]);
 
   useEffect(() => {
+    if (isCreateModalOpen || editDonation || cancelTargetDonation || selectedDonation) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, [isCreateModalOpen, editDonation, cancelTargetDonation, selectedDonation]);
+
+  useEffect(() => {
     document.body.style.overflow = 'unset';
     return () => {
       document.body.style.overflow = 'unset';
@@ -972,7 +978,7 @@ export default function DonorDashboardPage() {
             alignItems: 'flex-start',
             justifyContent: 'center',
             zIndex: 9999,
-            padding: '2rem 1rem',
+            padding: '90px 1rem 2rem 1rem',
             overflowY: 'auto'
           }}
         >
@@ -984,7 +990,7 @@ export default function DonorDashboardPage() {
               borderRadius: '16px',
               maxWidth: '500px',
               width: '100%',
-              maxHeight: 'calc(100vh - 4rem)',
+              maxHeight: 'calc(100vh - 7rem)',
               overflowY: 'auto',
               boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.25)',
               padding: '28px'
@@ -1117,7 +1123,7 @@ export default function DonorDashboardPage() {
             alignItems: 'flex-start',
             justifyContent: 'center',
             zIndex: 9999,
-            padding: '2rem 1rem',
+            padding: '90px 1rem 2rem 1rem',
             overflowY: 'auto'
           }}
         >
@@ -1129,7 +1135,7 @@ export default function DonorDashboardPage() {
               borderRadius: '16px',
               maxWidth: '620px',
               width: '100%',
-              maxHeight: 'calc(100vh - 4rem)',
+              maxHeight: 'calc(100vh - 7rem)',
               overflowY: 'auto',
               boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.2)',
               padding: '28px'
@@ -1364,7 +1370,7 @@ export default function DonorDashboardPage() {
             alignItems: 'flex-start',
             justifyContent: 'center',
             zIndex: 9999,
-            padding: '2rem 1rem',
+            padding: '90px 1rem 2rem 1rem',
             overflowY: 'auto'
           }}
         >
@@ -1376,7 +1382,7 @@ export default function DonorDashboardPage() {
               borderRadius: '16px',
               maxWidth: '580px',
               width: '100%',
-              maxHeight: 'calc(100vh - 4rem)',
+              maxHeight: 'calc(100vh - 7rem)',
               overflowY: 'auto',
               boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.2)',
               padding: '28px'
@@ -1546,7 +1552,7 @@ export default function DonorDashboardPage() {
             alignItems: 'flex-start',
             justifyContent: 'center',
             zIndex: 9999,
-            padding: '2rem 1rem',
+            padding: '90px 1rem 2rem 1rem',
             overflowY: 'auto'
           }}
         >
@@ -1558,7 +1564,7 @@ export default function DonorDashboardPage() {
               borderRadius: '16px',
               maxWidth: '620px',
               width: '100%',
-              maxHeight: 'calc(100vh - 4rem)',
+              maxHeight: 'calc(100vh - 7rem)',
               overflowY: 'auto',
               boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.2)',
               padding: '28px'
