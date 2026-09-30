@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
@@ -18,6 +19,12 @@ builder.Services.AddDbContext<DonationDbContext>(options =>
 {
     options.UseNpgsql(connectionString);
 });
+
+// Standard ASP.NET Core Health Checks
+builder.Services.AddHealthChecks()
+    .AddDbContextCheck<DonationDbContext>(
+        name: "PostgreSQL",
+        tags: new[] { "db", "data" });
 
 // 2. JWT Authentication & Authorization
 var secretKey = builder.Configuration["Jwt:SecretKey"] ?? "RescuePlate_Super_Secret_Key_For_Jwt_Authentication_2026_Sprint1_RescueFood";
@@ -170,14 +177,8 @@ app.UseCors("AllowFrontend");
 app.UseAuthentication();
 app.UseAuthorization();
 
-// Microservice Health Check Endpoint
-app.MapGet("/health", () => Results.Ok(new
-{
-    service = "RescuePlate.DonationService",
-    status = "Healthy",
-    database = "PostgreSQL",
-    timestamp = DateTime.UtcNow
-})).WithName("HealthCheck");
+// Standard ASP.NET Core Health Checks Endpoint
+app.MapHealthChecks("/health");
 
 app.MapControllers();
 
