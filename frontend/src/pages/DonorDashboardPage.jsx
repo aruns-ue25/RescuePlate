@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { donationApi, authApi } from '../services/api';
@@ -64,6 +64,26 @@ export default function DonorDashboardPage() {
   const [cancelling, setCancelling] = useState(false);
   const [cancelError, setCancelError] = useState(null);
   const [cancelSuccess, setCancelSuccess] = useState(null);
+
+  // Modal Refs for Auto-scroll Reset
+  const createModalOverlayRef = useRef(null);
+  const createModalContentRef = useRef(null);
+  const detailModalOverlayRef = useRef(null);
+  const detailModalContentRef = useRef(null);
+
+  useEffect(() => {
+    if (isCreateModalOpen) {
+      if (createModalOverlayRef.current) createModalOverlayRef.current.scrollTop = 0;
+      if (createModalContentRef.current) createModalContentRef.current.scrollTop = 0;
+    }
+  }, [isCreateModalOpen]);
+
+  useEffect(() => {
+    if (selectedDonation) {
+      if (detailModalOverlayRef.current) detailModalOverlayRef.current.scrollTop = 0;
+      if (detailModalContentRef.current) detailModalContentRef.current.scrollTop = 0;
+    }
+  }, [selectedDonation]);
 
   // Filter & Search States
   const [searchQuery, setSearchQuery] = useState('');
@@ -1355,6 +1375,7 @@ export default function DonorDashboardPage() {
       {/* DETAIL MODAL (Task 3) */}
       {selectedDonation && (
         <div 
+          ref={detailModalOverlayRef}
           style={{
             position: 'fixed',
             inset: 0,
@@ -1364,11 +1385,12 @@ export default function DonorDashboardPage() {
             alignItems: 'flex-start',
             justifyContent: 'center',
             zIndex: 9999,
-            padding: '2rem 1rem',
+            padding: '90px 1rem 2rem 1rem',
             overflowY: 'auto'
           }}
         >
           <div 
+            ref={detailModalContentRef}
             className="animate-fade-in-up"
             style={{
               margin: '0 auto',
@@ -1376,7 +1398,7 @@ export default function DonorDashboardPage() {
               borderRadius: '16px',
               maxWidth: '580px',
               width: '100%',
-              maxHeight: 'calc(100vh - 4rem)',
+              maxHeight: 'calc(100vh - 120px)',
               overflowY: 'auto',
               boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.2)',
               padding: '28px'
@@ -1537,6 +1559,7 @@ export default function DonorDashboardPage() {
       {/* CREATE DONATION MODAL */}
       {isCreateModalOpen && (
         <div 
+          ref={createModalOverlayRef}
           style={{
             position: 'fixed',
             inset: 0,
@@ -1546,11 +1569,12 @@ export default function DonorDashboardPage() {
             alignItems: 'flex-start',
             justifyContent: 'center',
             zIndex: 9999,
-            padding: '2rem 1rem',
+            padding: '90px 1rem 2rem 1rem',
             overflowY: 'auto'
           }}
         >
           <div 
+            ref={createModalContentRef}
             className="animate-fade-in-up"
             style={{
               margin: '0 auto',
@@ -1558,7 +1582,7 @@ export default function DonorDashboardPage() {
               borderRadius: '16px',
               maxWidth: '620px',
               width: '100%',
-              maxHeight: 'calc(100vh - 4rem)',
+              maxHeight: 'calc(100vh - 120px)',
               overflowY: 'auto',
               boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.2)',
               padding: '28px'

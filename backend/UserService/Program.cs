@@ -1,5 +1,6 @@
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
@@ -18,6 +19,12 @@ builder.Services.AddDbContext<RescuePlateDbContext>(options =>
 {
     options.UseNpgsql(connectionString);
 });
+
+// Standard ASP.NET Core Health Checks
+builder.Services.AddHealthChecks()
+    .AddDbContextCheck<RescuePlateDbContext>(
+        name: "PostgreSQL",
+        tags: new[] { "db", "data" });
 
 // 2. Dependency Injection Services
 builder.Services.AddScoped<ITokenService, TokenService>();
@@ -149,6 +156,10 @@ app.UseStaticFiles(new StaticFileOptions
 app.UseCors("AllowFrontend");
 app.UseAuthentication();
 app.UseAuthorization();
+
+// Standard ASP.NET Core Health Checks Endpoint
+app.MapHealthChecks("/health");
+
 app.MapControllers();
 
 app.Run();
