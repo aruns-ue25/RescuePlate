@@ -107,17 +107,21 @@ export default function Navbar() {
           <NavLink to="/" className={({ isActive }) => `nav-link ${isActive ? 'nav-link-active' : ''}`}>
             Home
           </NavLink>
-          {currentUser?.role !== 'DONOR' && (
-            <NavLink to="/browse-food" className={({ isActive }) => `nav-link ${isActive ? 'nav-link-active' : ''}`}>
+          {(!currentUser || currentUser?.role !== 'DONOR') && (
+            <NavLink to={currentUser ? "/browse-food" : "/login"} className={({ isActive }) => `nav-link ${isActive ? 'nav-link-active' : ''}`}>
               Browse Food
             </NavLink>
           )}
-          <NavLink to="/donors" className={({ isActive }) => `nav-link ${isActive ? 'nav-link-active' : ''}`}>
-            Donors
-          </NavLink>
-          <NavLink to="/organizations" className={({ isActive }) => `nav-link ${isActive ? 'nav-link-active' : ''}`}>
-            Charities
-          </NavLink>
+          {currentUser && (
+            <>
+              <NavLink to="/donors" className={({ isActive }) => `nav-link ${isActive ? 'nav-link-active' : ''}`}>
+                Donors
+              </NavLink>
+              <NavLink to="/organizations" className={({ isActive }) => `nav-link ${isActive ? 'nav-link-active' : ''}`}>
+                Charities
+              </NavLink>
+            </>
+          )}
           {currentUser?.role !== 'ORGANIZATION' && (
             <NavLink to="/donor-portal" className={({ isActive }) => `nav-link ${isActive ? 'nav-link-active' : ''}`}>
               Post Surplus
@@ -340,20 +344,24 @@ export default function Navbar() {
               <span>Home</span>
               <ChevronRight size={16} />
             </Link>
-            {currentUser?.role !== 'DONOR' && (
-              <Link to="/browse-food" className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>
+            {(!currentUser || currentUser?.role !== 'DONOR') && (
+              <Link to={currentUser ? "/browse-food" : "/login"} className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>
                 <span>Browse Surplus Food</span>
                 <ChevronRight size={16} />
               </Link>
             )}
-            <Link to="/donors" className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>
-              <span>Browse Donors</span>
-              <ChevronRight size={16} />
-            </Link>
-            <Link to="/organizations" className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>
-              <span>Browse Charities</span>
-              <ChevronRight size={16} />
-            </Link>
+            {currentUser && (
+              <>
+                <Link to="/donors" className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>
+                  <span>Browse Donors</span>
+                  <ChevronRight size={16} />
+                </Link>
+                <Link to="/organizations" className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>
+                  <span>Browse Charities</span>
+                  <ChevronRight size={16} />
+                </Link>
+              </>
+            )}
             {currentUser?.role !== 'ORGANIZATION' && (
               <Link to="/donor-portal" className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>
                 <span>Donor Portal / Post Food</span>
