@@ -145,6 +145,12 @@ export default function OrganizationDiscoveryPage() {
     }
   }, [searchParams, organizations]);
 
+  useEffect(() => {
+    if (selectedOrg) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, [selectedOrg]);
+
   const handleCloseModal = () => {
     setSelectedOrg(null);
     setDetailData(null);
@@ -429,7 +435,7 @@ export default function OrganizationDiscoveryPage() {
             alignItems: 'flex-start',
             justifyContent: 'center',
             zIndex: 1000,
-            padding: '2rem 1rem',
+            padding: '90px 1rem 2rem 1rem',
             overflowY: 'auto'
           }}
         >
@@ -442,7 +448,7 @@ export default function OrganizationDiscoveryPage() {
               width: '100%',
               padding: '28px',
               boxShadow: '0 20px 25px -5px rgba(0,0,0,0.2)',
-              maxHeight: 'calc(100vh - 4rem)',
+              maxHeight: 'calc(100vh - 7rem)',
               overflowY: 'auto'
             }}
           >

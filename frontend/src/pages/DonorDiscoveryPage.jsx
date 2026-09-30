@@ -150,6 +150,12 @@ export default function DonorDiscoveryPage() {
     }
   }, [searchParams, donors]);
 
+  useEffect(() => {
+    if (selectedDonor) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, [selectedDonor]);
+
   const handleCloseModal = () => {
     setSelectedDonor(null);
     setDetailData(null);
@@ -415,7 +421,7 @@ export default function DonorDiscoveryPage() {
             alignItems: 'flex-start',
             justifyContent: 'center',
             zIndex: 1000,
-            padding: '2rem 1rem',
+            padding: '90px 1rem 2rem 1rem',
             overflowY: 'auto'
           }}
         >
@@ -428,7 +434,7 @@ export default function DonorDiscoveryPage() {
               width: '100%',
               padding: '28px',
               boxShadow: '0 20px 25px -5px rgba(0,0,0,0.2)',
-              maxHeight: 'calc(100vh - 4rem)',
+              maxHeight: 'calc(100vh - 7rem)',
               overflowY: 'auto'
             }}
           >

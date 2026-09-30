@@ -3,5 +3,10 @@
   <Project Path="UserService.UnitTests/UserService.UnitTests.csproj" />
   <Project Path="UserService.IntegrationTests/UserService.IntegrationTests.csproj" />
   <Project Path="DonationService/DonationService.csproj" />
+  <Project Path="DonationService.UnitTests/DonationService.UnitTests.csproj" />
+  <Project Path="DonationService.IntegrationTests/DonationService.IntegrationTests.csproj" />
   <Project Path="RequestWorkflowService/RequestWorkflowService.csproj" />
+  <Project Path="RequestWorkflowService.UnitTests/RequestWorkflowService.UnitTests.csproj" />
+  <Project Path="RequestWorkflowService.IntegrationTests/RequestWorkflowService.IntegrationTests.csproj" />
 </Solution>
+

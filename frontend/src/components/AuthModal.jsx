@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   X, 
   User, 
@@ -19,6 +19,12 @@ import {
 } from 'lucide-react';
 
 export default function AuthModal({ isOpen, onClose, initialMode = 'login', initialRole = 'DONOR', onAuthSuccess, onShowToast }) {
+  useEffect(() => {
+    if (isOpen) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   const [mode, setMode] = useState(initialMode); // 'login' or 'register'

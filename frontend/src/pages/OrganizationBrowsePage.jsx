@@ -77,6 +77,12 @@ export default function OrganizationBrowsePage() {
   }, [categoryFilter]);
 
   useEffect(() => {
+    if (selectedDonation || claimDonation || detailLoading || detailError) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, [selectedDonation, claimDonation, detailLoading, detailError]);
+
+  useEffect(() => {
     document.body.style.overflow = 'unset';
     return () => {
       document.body.style.overflow = 'unset';
@@ -488,7 +494,7 @@ export default function OrganizationBrowsePage() {
             alignItems: 'flex-start',
             justifyContent: 'center',
             zIndex: 1000,
-            padding: '2rem 1rem',
+            padding: '90px 1rem 2rem 1rem',
             overflowY: 'auto'
           }}
         >
@@ -636,7 +642,7 @@ export default function OrganizationBrowsePage() {
             alignItems: 'flex-start',
             justifyContent: 'center',
             zIndex: 1000,
-            padding: '2rem 1rem',
+            padding: '90px 1rem 2rem 1rem',
             overflowY: 'auto'
           }}
         >
