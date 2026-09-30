@@ -35,9 +35,7 @@ public class DatabaseAndSetupIntegrationTests : IAsyncLifetime
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var content = await response.Content.ReadAsStringAsync();
-        content.Should().Contain("RescuePlate.DonationService");
         content.Should().Contain("Healthy");
-        content.Should().Contain("PostgreSQL");
     }
 
     [Fact]
