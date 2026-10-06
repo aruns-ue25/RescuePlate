@@ -55,6 +55,28 @@ services:
     ports:
       - "5002:8080"
 
+  deliveryworkflowservice:
+    build:
+      context: ./backend/DeliveryWorkflowService
+      dockerfile: Dockerfile
+    image: rescueplate-deliveryworkflowservice:latest
+    container_name: rescueplate-deliveryworkflowservice
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ConnectionStrings__PostgreSQLConnection: "Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}"
+
+      Jwt__SecretKey: ${JWT_SECRET_KEY}
+      Jwt__Issuer: "RescuePlate.UserService"
+      Jwt__Audience: "RescuePlate.Client"
+
+      FrontendUrl: ${FRONTEND_URL}
+
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
+    ports:
+      - "5003:8080"
+
 
   frontend:
     image: rescueplate-frontend:latest
