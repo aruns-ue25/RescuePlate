@@ -537,6 +537,92 @@ export const notificationApi = {
   }
 };
 
+const DELIVERY_API_BASE_URL = import.meta.env.VITE_DELIVERY_API_BASE_URL || 'http://localhost:5003/api';
+
+const deliveryClient = axios.create({
+  baseURL: DELIVERY_API_BASE_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  timeout: 8000,
+});
+
+deliveryClient.interceptors.request.use((config) => {
+  const token = localStorage.getItem('rescueplate_token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+export const deliveryApi = {
+  arrangeCollection: async (arrangeData) => {
+    try {
+      const response = await deliveryClient.post('/deliveries/arrange', arrangeData);
+      return response.data;
+    } catch (error) {
+      if (error.response?.data) {
+        throw error.response.data;
+      }
+      throw { message: error.message || 'Network Error', isNetworkError: !error.response };
+    }
+  },
+
+  recordCollection: async (id, notes = null) => {
+    try {
+      const response = await deliveryClient.post(`/deliveries/${id}/collect`, { notes });
+      return response.data;
+    } catch (error) {
+      if (error.response?.data) {
+        throw error.response.data;
+      }
+      throw { message: error.message || 'Network Error', isNetworkError: !error.response };
+    }
+  },
+
+  confirmReceipt: async (id, notes = null) => {
+    try {
+      const response = await deliveryClient.post(`/deliveries/${id}/receive`, { notes });
+      return response.data;
+    } catch (error) {
+      if (error.response?.data) {
+        throw error.response.data;
+      }
+      throw { message: error.message || 'Network Error', isNetworkError: !error.response };
+    }
+  },
+
+  completeDonation: async (id, notes = null) => {
+    try {
+      const response = await deliveryClient.post(`/deliveries/${id}/complete`, { notes });
+      return response.data;
+    } catch (error) {
+      if (error.response?.data) {
+        throw error.response.data;
+      }
+      throw { message: error.message || 'Network Error', isNetworkError: !error.response };
+    }
+  },
+
+  getTrackingById: async (id) => {
+    try {
+      const response = await deliveryClient.get(`/deliveries/${id}`);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { message: 'Failed to fetch delivery tracking details' };
+    }
+  },
+
+  getTrackingByRequestId: async (requestId) => {
+    try {
+      const response = await deliveryClient.get(`/deliveries/request/${requestId}`);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { message: 'Failed to fetch tracking by request ID' };
+    }
+  }
+};
+
 export const getProfileImageUrl = (url) => {
   if (!url) return null;
   if (url.startsWith('http://') || url.startsWith('https://')) return url;
