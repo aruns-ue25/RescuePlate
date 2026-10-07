@@ -110,6 +110,15 @@ export default function RequestsPage() {
     }
   };
 
+  const getLocalDatetimeLocalString = (date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+  };
+
   const fetchDeliveriesMap = async (acceptedRequests) => {
     const newMap = {};
     await Promise.all(
@@ -120,7 +129,12 @@ export default function RequestsPage() {
             newMap[req.id] = res.data;
           }
         } catch (e) {
-          // Delivery arrangement not created yet for this request
+          // Only 404 means no arrangement created yet.
+          // Non-404 errors (500, network error) indicate service error.
+          const isNotFound = e?.status === 404 || e?.response?.status === 404 || (e?.message && e.message.includes('not found'));
+          if (!isNotFound) {
+            console.warn(`Delivery tracking fetch error for request ${req.id}:`, e);
+          }
         }
       })
     );
@@ -177,8 +191,8 @@ export default function RequestsPage() {
   // Open Arrange Collection Modal
   const openArrangeModal = (req) => {
     setArrangeTargetRequest(req);
-    // Pre-fill contact details if available
-    const defaultTime = new Date(Date.now() + 2 * 3600 * 1000).toISOString().slice(0, 16);
+    // Pre-fill contact details with local time 2 hours in the future
+    const defaultTime = getLocalDatetimeLocalString(new Date(Date.now() + 2 * 3600 * 1000));
     setArrangeForm({
       pickupAddress: '',
       deliveryAddress: '',

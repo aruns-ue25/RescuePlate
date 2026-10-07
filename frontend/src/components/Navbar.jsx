@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { getProfileImageUrl, notificationApi } from '../services/api';
+import { getProfileImageUrl, notificationApi, deliveryApi } from '../services/api';
 import { 
   Utensils, 
   Menu, 
@@ -29,6 +29,7 @@ export default function Navbar() {
   const [notifications, setNotifications] = useState([]);
   const [notifOpen, setNotifOpen] = useState(false);
   const [notifLoading, setNotifLoading] = useState(false);
+  const [notifError, setNotifError] = useState(null);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -38,17 +39,52 @@ export default function Navbar() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // Fetch notifications for authenticated user
+  // Fetch notifications concurrently from both RequestWorkflowService and DeliveryWorkflowService
   const fetchNotifications = async () => {
     if (!currentUser) return;
     try {
       setNotifLoading(true);
-      const res = await notificationApi.getMyNotifications();
-      if (res && res.data) {
-        setNotifications(res.data);
+      setNotifError(null);
+
+      const [reqRes, delRes] = await Promise.allSettled([
+        notificationApi.getMyNotifications(),
+        deliveryApi.getMyNotifications()
+      ]);
+
+      let combined = [];
+      let fetchFailed = false;
+
+      if (reqRes.status === 'fulfilled' && reqRes.value?.data) {
+        const reqNotifs = reqRes.value.data.map(n => ({
+          ...n,
+          source: 'request',
+          compositeKey: `request-${n.id}`
+        }));
+        combined = [...combined, ...reqNotifs];
+      } else if (reqRes.status === 'rejected') {
+        fetchFailed = true;
+      }
+
+      if (delRes.status === 'fulfilled' && delRes.value?.data) {
+        const delNotifs = delRes.value.data.map(n => ({
+          ...n,
+          source: 'delivery',
+          compositeKey: `delivery-${n.id}`
+        }));
+        combined = [...combined, ...delNotifs];
+      } else if (delRes.status === 'rejected') {
+        fetchFailed = true;
+      }
+
+      // Sort newest first by CreatedAt
+      combined.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+      setNotifications(combined);
+
+      if (fetchFailed && combined.length === 0) {
+        setNotifError("Notification service temporarily unavailable.");
       }
     } catch (e) {
-      // Quiet fail if not logged in or backend unavailable
+      setNotifications([]);
     } finally {
       setNotifLoading(false);
     }
@@ -64,19 +100,45 @@ export default function Navbar() {
     }
   }, [currentUser]);
 
-  const handleMarkAsRead = async (id, e) => {
-    e.stopPropagation();
+  const handleMarkAsRead = async (notif, e) => {
+    if (e && e.stopPropagation) e.stopPropagation();
     try {
-      await notificationApi.markAsRead(id);
-      setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n));
-    } catch (err) {}
+      if (notif.source === 'delivery') {
+        await deliveryApi.markAsRead(notif.id);
+      } else {
+        await notificationApi.markAsRead(notif.id);
+      }
+      setNotifications(prev => prev.map(n => n.compositeKey === notif.compositeKey ? { ...n, isRead: true } : n));
+    } catch (err) {
+      console.error("Failed to mark notification as read:", err);
+    }
   };
 
   const handleMarkAllAsRead = async () => {
-    try {
-      await notificationApi.markAllAsRead();
-      setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
-    } catch (err) {}
+    const unreadReq = notifications.some(n => n.source === 'request' && !n.isRead);
+    const unreadDel = notifications.some(n => n.source === 'delivery' && !n.isRead);
+
+    const promises = [];
+    if (unreadReq) promises.push(notificationApi.markAllAsRead().then(() => 'request'));
+    if (unreadDel) promises.push(deliveryApi.markAllAsRead().then(() => 'delivery'));
+
+    if (promises.length === 0) return;
+
+    setNotifError(null);
+    const results = await Promise.allSettled(promises);
+
+    const succeededSources = new Set(
+      results.filter(r => r.status === 'fulfilled').map(r => r.value)
+    );
+    const failed = results.filter(r => r.status === 'rejected');
+
+    if (succeededSources.size > 0) {
+      setNotifications(prev => prev.map(n => succeededSources.has(n.source) ? { ...n, isRead: true } : n));
+    }
+
+    if (failed.length > 0) {
+      setNotifError("Unable to mark all as read for one of the notification services.");
+    }
   };
 
   const unreadCount = notifications.filter(n => !n.isRead).length;
@@ -245,9 +307,9 @@ export default function Navbar() {
                       ) : (
                         notifications.map(n => (
                           <div
-                            key={n.id}
+                            key={n.compositeKey}
                             onClick={() => {
-                              if (!n.isRead) handleMarkAsRead(n.id, { stopPropagation: () => {} });
+                              if (!n.isRead) handleMarkAsRead(n, { stopPropagation: () => {} });
                               setNotifOpen(false);
                               if (n.type.includes('OFFER')) {
                                 navigate('/food-needs');
@@ -280,7 +342,7 @@ export default function Navbar() {
                             </div>
                             {!n.isRead && (
                               <button
-                                onClick={(e) => handleMarkAsRead(n.id, e)}
+                                onClick={(e) => handleMarkAsRead(n, e)}
                                 style={{ background: 'none', border: 'none', color: '#10b981', cursor: 'pointer', padding: '2px' }}
                                 title="Mark as read"
                               >
