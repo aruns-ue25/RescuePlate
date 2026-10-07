@@ -11,6 +11,7 @@ public class DeliveryDbContext : DbContext
 
     public DbSet<DeliveryArrangement> DeliveryArrangements => Set<DeliveryArrangement>();
     public DbSet<DeliveryStatusHistory> DeliveryStatusHistories => Set<DeliveryStatusHistory>();
+    public DbSet<DeliveryNotification> DeliveryNotifications => Set<DeliveryNotification>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -29,6 +30,14 @@ public class DeliveryDbContext : DbContext
         {
             entity.HasIndex(e => e.DeliveryArrangementId);
             entity.HasIndex(e => e.Timestamp);
+        });
+
+        modelBuilder.Entity<DeliveryNotification>(entity =>
+        {
+            entity.HasIndex(e => new { e.UserId, e.Type, e.RelatedId }).IsUnique();
+            entity.HasIndex(e => e.UserId);
+            entity.HasIndex(e => e.IsRead);
+            entity.HasIndex(e => e.CreatedAt);
         });
     }
 }

@@ -80,7 +80,7 @@ public class DeliveriesController : ControllerBase
                 $"A collection arrangement has already been created for donation request {dto.RequestId}."));
         }
 
-        // 4. Create DeliveryArrangement & History entry in a single atomic database transaction
+        // 4. Create DeliveryArrangement, History, and Notifications in a single atomic database transaction
         using var transaction = await _context.Database.BeginTransactionAsync();
         try
         {
@@ -118,6 +118,16 @@ public class DeliveriesController : ControllerBase
             arrangement.History.Add(history);
             _context.DeliveryArrangements.Add(arrangement);
 
+            // Save arrangement first to get valid Database Id for RelatedId
+            await _context.SaveChangesAsync();
+
+            // Add Notifications for Donor and Organization within the same transaction
+            var formattedTime = arrangement.ScheduledCollectionTime.ToString("yyyy-MM-dd HH:mm UTC");
+            var notifMsg = $"Collection details for '{arrangement.DonationTitle}' have been arranged for {formattedTime}.";
+
+            AddNotificationIfUnique(arrangement.DonorId, "Collection Arranged", notifMsg, "COLLECTION_ARRANGED", arrangement.Id, now);
+            AddNotificationIfUnique(arrangement.OrganizationId, "Collection Arranged", notifMsg, "COLLECTION_ARRANGED", arrangement.Id, now);
+
             await _context.SaveChangesAsync();
             await transaction.CommitAsync();
 
@@ -130,7 +140,7 @@ public class DeliveriesController : ControllerBase
         catch (DbUpdateException ex)
         {
             await transaction.RollbackAsync();
-            _logger.LogWarning(ex, "Duplicate arrangement prevented by database constraint for request {RequestId}", dto.RequestId);
+            _logger.LogWarning(ex, "Duplicate arrangement or notification prevented for request {RequestId}", dto.RequestId);
             return BadRequest(ApiResponse<DeliveryTrackingResponseDto>.Fail(
                 $"A collection arrangement has already been created for donation request {dto.RequestId}."));
         }
@@ -185,7 +195,7 @@ public class DeliveriesController : ControllerBase
                 $"Cannot record collection. Donation is currently in status '{arrangement.Status}', but must be 'CollectionArranged'."));
         }
 
-        // Atomic Concurrency Guard & History Entry inside a single Database Transaction
+        // Atomic Concurrency Guard, History & Notifications inside a single Database Transaction
         using var transaction = await _context.Database.BeginTransactionAsync();
         try
         {
@@ -207,7 +217,7 @@ public class DeliveriesController : ControllerBase
                     "Action rejected. The donation status has already been updated or modified concurrently."));
             }
 
-            // Insert status history entry in the exact same transaction
+            // Insert status history entry
             var history = new DeliveryStatusHistory
             {
                 DeliveryArrangementId = arrangement.Id,
@@ -218,10 +228,14 @@ public class DeliveriesController : ControllerBase
                 Notes = dto?.Notes?.Trim(),
                 Timestamp = now
             };
-
             _context.DeliveryStatusHistories.Add(history);
-            await _context.SaveChangesAsync();
 
+            // Add Notifications for Donor and Organization within the same transaction
+            var notifMsg = $"'{arrangement.DonationTitle}' has been marked as collected.";
+            AddNotificationIfUnique(arrangement.DonorId, "Donation Collected", notifMsg, "DONATION_COLLECTED", arrangement.Id, now);
+            AddNotificationIfUnique(arrangement.OrganizationId, "Donation Collected", notifMsg, "DONATION_COLLECTED", arrangement.Id, now);
+
+            await _context.SaveChangesAsync();
             await transaction.CommitAsync();
 
             _logger.LogInformation("User {UserId} recorded collection for Delivery {DeliveryId}", userId, arrangement.Id);
@@ -285,7 +299,7 @@ public class DeliveriesController : ControllerBase
                 $"Cannot confirm receipt. Donation is currently in status '{arrangement.Status}', but must be 'Collected'."));
         }
 
-        // Atomic Concurrency Guard & History Entry inside a single Database Transaction
+        // Atomic Concurrency Guard, History & Notifications inside a single Database Transaction
         using var transaction = await _context.Database.BeginTransactionAsync();
         try
         {
@@ -307,7 +321,7 @@ public class DeliveriesController : ControllerBase
                     "Action rejected. The donation status has already been updated or modified concurrently."));
             }
 
-            // Insert status history entry in the exact same transaction
+            // Insert status history entry
             var history = new DeliveryStatusHistory
             {
                 DeliveryArrangementId = arrangement.Id,
@@ -318,10 +332,13 @@ public class DeliveriesController : ControllerBase
                 Notes = dto?.Notes?.Trim(),
                 Timestamp = now
             };
-
             _context.DeliveryStatusHistories.Add(history);
-            await _context.SaveChangesAsync();
 
+            // Add Notification for Donor when Organization confirms receipt
+            var notifMsg = $"{arrangement.OrganizationName} confirmed receipt of '{arrangement.DonationTitle}'.";
+            AddNotificationIfUnique(arrangement.DonorId, "Receipt Confirmed", notifMsg, "RECEIPT_CONFIRMED", arrangement.Id, now);
+
+            await _context.SaveChangesAsync();
             await transaction.CommitAsync();
 
             _logger.LogInformation("Organization {UserId} confirmed receipt for Delivery {DeliveryId}", userId, arrangement.Id);
@@ -449,7 +466,7 @@ public class DeliveriesController : ControllerBase
                 $"Cannot complete donation. Current status is '{arrangement.Status}', but must be 'Received'."));
         }
 
-        // Atomic Concurrency Guard & History Entry inside a single Database Transaction
+        // Atomic Concurrency Guard, History & Notifications inside a single Database Transaction
         using var transaction = await _context.Database.BeginTransactionAsync();
         try
         {
@@ -471,7 +488,7 @@ public class DeliveriesController : ControllerBase
                     "Action rejected. The donation status has already been updated or modified concurrently."));
             }
 
-            // Insert status history entry in the exact same transaction
+            // Insert status history entry
             var history = new DeliveryStatusHistory
             {
                 DeliveryArrangementId = arrangement.Id,
@@ -482,10 +499,14 @@ public class DeliveriesController : ControllerBase
                 Notes = dto?.Notes?.Trim(),
                 Timestamp = now
             };
-
             _context.DeliveryStatusHistories.Add(history);
-            await _context.SaveChangesAsync();
 
+            // Add Notifications for Donor and Organization within the same transaction
+            var notifMsg = $"Donation lifecycle for '{arrangement.DonationTitle}' has been successfully completed!";
+            AddNotificationIfUnique(arrangement.DonorId, "Donation Completed", notifMsg, "DONATION_COMPLETED", arrangement.Id, now);
+            AddNotificationIfUnique(arrangement.OrganizationId, "Donation Completed", notifMsg, "DONATION_COMPLETED", arrangement.Id, now);
+
+            await _context.SaveChangesAsync();
             await transaction.CommitAsync();
 
             _logger.LogInformation("User {UserId} completed donation lifecycle for Delivery {DeliveryId}", userId, arrangement.Id);
@@ -504,6 +525,26 @@ public class DeliveriesController : ControllerBase
             _logger.LogError(ex, "Error completing donation lifecycle for delivery {DeliveryId}", id);
             return StatusCode(StatusCodes.Status500InternalServerError,
                 ApiResponse<DeliveryTrackingResponseDto>.Fail("An internal error occurred while completing donation."));
+        }
+    }
+
+    private void AddNotificationIfUnique(string recipientUserId, string title, string message, string type, int relatedId, DateTime createdAt)
+    {
+        if (string.IsNullOrWhiteSpace(recipientUserId)) return;
+
+        // Check local change tracker or db to prevent duplicate notification entry in the same transaction
+        if (!_context.DeliveryNotifications.Local.Any(n => n.UserId == recipientUserId && n.Type == type && n.RelatedId == relatedId))
+        {
+            _context.DeliveryNotifications.Add(new DeliveryNotification
+            {
+                UserId = recipientUserId,
+                Title = title,
+                Message = message,
+                Type = type,
+                RelatedId = relatedId,
+                IsRead = false,
+                CreatedAt = createdAt
+            });
         }
     }
 
