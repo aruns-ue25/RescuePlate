@@ -52,7 +52,8 @@ export default function Navbar() {
       ]);
 
       let combined = [];
-      let fetchFailed = false;
+      const reqFailed = reqRes.status === 'rejected';
+      const delFailed = delRes.status === 'rejected';
 
       if (reqRes.status === 'fulfilled' && reqRes.value?.data) {
         const reqNotifs = reqRes.value.data.map(n => ({
@@ -61,8 +62,6 @@ export default function Navbar() {
           compositeKey: `request-${n.id}`
         }));
         combined = [...combined, ...reqNotifs];
-      } else if (reqRes.status === 'rejected') {
-        fetchFailed = true;
       }
 
       if (delRes.status === 'fulfilled' && delRes.value?.data) {
@@ -72,19 +71,22 @@ export default function Navbar() {
           compositeKey: `delivery-${n.id}`
         }));
         combined = [...combined, ...delNotifs];
-      } else if (delRes.status === 'rejected') {
-        fetchFailed = true;
       }
 
       // Sort newest first by CreatedAt
       combined.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
       setNotifications(combined);
 
-      if (fetchFailed && combined.length === 0) {
-        setNotifError("Notification service temporarily unavailable.");
+      if (reqFailed && delFailed) {
+        setNotifError("Notification services temporarily unavailable.");
+      } else if (reqFailed) {
+        setNotifError("Request notifications unavailable.");
+      } else if (delFailed) {
+        setNotifError("Delivery notifications unavailable.");
       }
     } catch (e) {
       setNotifications([]);
+      setNotifError("Failed to load notifications.");
     } finally {
       setNotifLoading(false);
     }
@@ -111,6 +113,7 @@ export default function Navbar() {
       setNotifications(prev => prev.map(n => n.compositeKey === notif.compositeKey ? { ...n, isRead: true } : n));
     } catch (err) {
       console.error("Failed to mark notification as read:", err);
+      setNotifError("Failed to mark notification as read.");
     }
   };
 
@@ -297,6 +300,12 @@ export default function Navbar() {
                         </button>
                       )}
                     </div>
+
+                    {notifError && (
+                      <div style={{ padding: '8px 16px', background: '#fef2f2', color: '#991b1b', fontSize: '0.78rem', borderBottom: '1px solid #fee2e2', fontWeight: 500 }}>
+                        ⚠️ {notifError}
+                      </div>
+                    )}
 
                     <div style={{ maxHeight: '360px', overflowY: 'auto' }}>
                       {notifications.length === 0 ? (

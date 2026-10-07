@@ -132,8 +132,11 @@ export default function RequestsPage() {
           // Only 404 means no arrangement created yet.
           // Non-404 errors (500, network error) indicate service error.
           const isNotFound = e?.status === 404 || e?.response?.status === 404 || (e?.message && e.message.includes('not found'));
-          if (!isNotFound) {
+          if (isNotFound) {
+            newMap[req.id] = null;
+          } else {
             console.warn(`Delivery tracking fetch error for request ${req.id}:`, e);
+            newMap[req.id] = { _error: true };
           }
         }
       })
@@ -461,7 +464,9 @@ export default function RequestsPage() {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             {requests.map((req) => {
-              const delivery = deliveriesMap[req.id];
+              const rawDelivery = deliveriesMap[req.id];
+              const deliveryError = rawDelivery?._error;
+              const delivery = rawDelivery && !rawDelivery._error ? rawDelivery : null;
               const isAccepted = req.status?.toUpperCase() === 'ACCEPTED';
 
               return (
@@ -570,7 +575,14 @@ export default function RequestsPage() {
                     )}
 
                     {/* SPRINT 4 DELIVERY WORKFLOW BUTTONS */}
-                    {isAccepted && !delivery && (
+                    {isAccepted && deliveryError && (
+                      <div style={{ fontSize: '0.8rem', color: '#dc2626', background: '#fef2f2', padding: '6px 12px', borderRadius: '6px', border: '1px solid #fee2e2', display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 600 }}>
+                        <AlertCircle size={15} />
+                        <span>Delivery service unavailable</span>
+                      </div>
+                    )}
+
+                    {isAccepted && !delivery && !deliveryError && (
                       <button
                         onClick={() => openArrangeModal(req)}
                         disabled={actionLoading}
