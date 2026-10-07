@@ -24,6 +24,7 @@ public class DeliveriesController : ControllerBase
 
     /// <summary>
     /// Story 1: Arrange collection for an accepted donation.
+    /// Authorized for Donor (DonorId) or Organization (OrganizationId) associated with the request.
     /// </summary>
     [HttpPost("arrange")]
     [ProducesResponseType(typeof(ApiResponse<DeliveryTrackingResponseDto>), StatusCodes.Status201Created)]
@@ -47,20 +48,20 @@ public class DeliveriesController : ControllerBase
             return NotFound(ApiResponse<DeliveryTrackingResponseDto>.Fail($"Donation request with ID {dto.RequestId} was not found."));
         }
 
-        if (!requestInfo.Status.Equals("ACCEPTED", StringComparison.OrdinalIgnoreCase))
+        if (requestInfo.Status != "ACCEPTED")
         {
             return BadRequest(ApiResponse<DeliveryTrackingResponseDto>.Fail(
                 $"Collection arrangement rejected. Donation request {dto.RequestId} is in status '{requestInfo.Status}', but must be 'ACCEPTED'."));
         }
 
-        // 2. Authorization Check (Story 1 Scenario 4)
-        if (userId != requestInfo.DonorId && userId != requestInfo.OrganizationId && !userRole.Equals("ADMIN", StringComparison.OrdinalIgnoreCase))
+        // 2. Strict Authorization Check (Story 1: Donor or Organization ONLY)
+        if (userId != requestInfo.DonorId && userId != requestInfo.OrganizationId)
         {
             return StatusCode(StatusCodes.Status403Forbidden,
                 ApiResponse<DeliveryTrackingResponseDto>.Fail("You are not authorized to arrange collection for this donation request."));
         }
 
-        // 3. Duplicate arrangement check (Concurrency prevention)
+        // 3. Duplicate arrangement check (Concurrency & Unique Index guard)
         var existingArrangement = await _context.DeliveryArrangements
             .AnyAsync(d => d.RequestId == dto.RequestId);
         if (existingArrangement)
@@ -69,52 +70,72 @@ public class DeliveriesController : ControllerBase
                 $"A collection arrangement has already been created for donation request {dto.RequestId}."));
         }
 
-        // 4. Create DeliveryArrangement (Story 1 Scenario 1)
-        var arrangement = new DeliveryArrangement
+        // 4. Create DeliveryArrangement & History entry in a single atomic database transaction
+        using var transaction = await _context.Database.BeginTransactionAsync();
+        try
         {
-            RequestId = dto.RequestId,
-            DonationId = requestInfo.DonationId,
-            DonationTitle = string.IsNullOrWhiteSpace(requestInfo.DonationTitle) ? "Surplus Food Donation" : requestInfo.DonationTitle,
-            DonorId = requestInfo.DonorId,
-            DonorName = "Donor User",
-            OrganizationId = requestInfo.OrganizationId,
-            OrganizationName = string.IsNullOrWhiteSpace(requestInfo.OrganizationName) ? "Organization User" : requestInfo.OrganizationName,
-            PickupAddress = dto.PickupAddress.Trim(),
-            DeliveryAddress = dto.DeliveryAddress.Trim(),
-            ContactName = dto.ContactName.Trim(),
-            ContactPhone = dto.ContactPhone.Trim(),
-            ScheduledCollectionTime = dto.ScheduledCollectionTime.ToUniversalTime(),
-            Notes = dto.Notes?.Trim(),
-            Status = "CollectionArranged",
-            ArrangedAt = DateTime.UtcNow,
-            CreatedAt = DateTime.UtcNow
-        };
+            var now = DateTime.UtcNow;
+            var arrangement = new DeliveryArrangement
+            {
+                RequestId = dto.RequestId,
+                DonationId = requestInfo.DonationId,
+                DonationTitle = string.IsNullOrWhiteSpace(requestInfo.DonationTitle) ? "Surplus Food Donation" : requestInfo.DonationTitle,
+                DonorId = requestInfo.DonorId,
+                DonorName = "Donor User",
+                OrganizationId = requestInfo.OrganizationId,
+                OrganizationName = string.IsNullOrWhiteSpace(requestInfo.OrganizationName) ? "Organization User" : requestInfo.OrganizationName,
+                PickupAddress = dto.PickupAddress.Trim(),
+                DeliveryAddress = dto.DeliveryAddress.Trim(),
+                ContactName = dto.ContactName.Trim(),
+                ContactPhone = dto.ContactPhone.Trim(),
+                ScheduledCollectionTime = dto.ScheduledCollectionTime.ToUniversalTime(),
+                Notes = dto.Notes?.Trim(),
+                Status = "CollectionArranged",
+                ArrangedAt = now,
+                CreatedAt = now
+            };
 
-        // 5. Atomic Status History entry
-        var history = new DeliveryStatusHistory
+            var history = new DeliveryStatusHistory
+            {
+                PreviousStatus = "Accepted",
+                NewStatus = "CollectionArranged",
+                ChangedByUserId = userId,
+                ChangedByRole = userRole,
+                Notes = dto.Notes?.Trim(),
+                Timestamp = now
+            };
+
+            arrangement.History.Add(history);
+            _context.DeliveryArrangements.Add(arrangement);
+
+            await _context.SaveChangesAsync();
+            await transaction.CommitAsync();
+
+            _logger.LogInformation("User {UserId} successfully arranged collection for Request {RequestId}, Delivery {DeliveryId}",
+                userId, dto.RequestId, arrangement.Id);
+
+            return CreatedAtAction(nameof(GetTrackingById), new { id = arrangement.Id },
+                ApiResponse<DeliveryTrackingResponseDto>.Ok(MapToDto(arrangement), "Collection arrangement created successfully."));
+        }
+        catch (DbUpdateException ex)
         {
-            PreviousStatus = "Accepted",
-            NewStatus = "CollectionArranged",
-            ChangedByUserId = userId,
-            ChangedByRole = userRole,
-            Notes = dto.Notes?.Trim(),
-            Timestamp = DateTime.UtcNow
-        };
-
-        arrangement.History.Add(history);
-        _context.DeliveryArrangements.Add(arrangement);
-
-        await _context.SaveChangesAsync();
-
-        _logger.LogInformation("User {UserId} successfully arranged collection for Request {RequestId}, Delivery {DeliveryId}",
-            userId, dto.RequestId, arrangement.Id);
-
-        return CreatedAtAction(nameof(GetTrackingById), new { id = arrangement.Id },
-            ApiResponse<DeliveryTrackingResponseDto>.Ok(MapToDto(arrangement), "Collection arrangement created successfully."));
+            await transaction.RollbackAsync();
+            _logger.LogWarning(ex, "Duplicate arrangement prevented by database constraint for request {RequestId}", dto.RequestId);
+            return BadRequest(ApiResponse<DeliveryTrackingResponseDto>.Fail(
+                $"A collection arrangement has already been created for donation request {dto.RequestId}."));
+        }
+        catch (Exception ex)
+        {
+            await transaction.RollbackAsync();
+            _logger.LogError(ex, "Error creating collection arrangement for request {RequestId}", dto.RequestId);
+            return StatusCode(StatusCodes.Status500InternalServerError,
+                ApiResponse<DeliveryTrackingResponseDto>.Fail("An internal error occurred while creating collection arrangement."));
+        }
     }
 
     /// <summary>
     /// Story 2: Record that a donation has been collected.
+    /// Authorized for Donor (DonorId) or Organization (OrganizationId) associated with the donation.
     /// </summary>
     [HttpPost("{id:int}/collect")]
     [ProducesResponseType(typeof(ApiResponse<DeliveryTrackingResponseDto>), StatusCodes.Status200OK)]
@@ -126,7 +147,6 @@ public class DeliveriesController : ControllerBase
         var (userId, userRole) = GetCallerIdentity();
 
         var arrangement = await _context.DeliveryArrangements
-            .Include(d => d.History)
             .FirstOrDefaultAsync(d => d.Id == id);
 
         if (arrangement == null)
@@ -134,52 +154,85 @@ public class DeliveriesController : ControllerBase
             return NotFound(ApiResponse<DeliveryTrackingResponseDto>.Fail($"Delivery arrangement with ID {id} not found."));
         }
 
-        // Authorization Check (Story 2 Scenario 4)
-        if (userId != arrangement.DonorId && userId != arrangement.OrganizationId && !userRole.Equals("ADMIN", StringComparison.OrdinalIgnoreCase))
+        // Strict Authorization Check (Story 2: Donor or Organization ONLY)
+        if (userId != arrangement.DonorId && userId != arrangement.OrganizationId)
         {
             return StatusCode(StatusCodes.Status403Forbidden,
                 ApiResponse<DeliveryTrackingResponseDto>.Fail("You are not authorized to record collection for this donation."));
         }
 
-        // Duplicate Check (Story 2 Scenario 2)
-        if (arrangement.Status.Equals("Collected", StringComparison.OrdinalIgnoreCase))
+        // Duplicate Check using exact stored string
+        if (arrangement.Status == "Collected")
         {
             return BadRequest(ApiResponse<DeliveryTrackingResponseDto>.Fail("Collection has already been recorded for this donation."));
         }
 
-        // Invalid Transition Check (Story 2 Scenario 3)
-        if (!arrangement.Status.Equals("CollectionArranged", StringComparison.OrdinalIgnoreCase))
+        // Invalid Transition Check using exact stored string
+        if (arrangement.Status != "CollectionArranged")
         {
             return BadRequest(ApiResponse<DeliveryTrackingResponseDto>.Fail(
                 $"Cannot record collection. Donation is currently in status '{arrangement.Status}', but must be 'CollectionArranged'."));
         }
 
-        var previousStatus = arrangement.Status;
-        arrangement.Status = "Collected";
-        arrangement.CollectedAt = DateTime.UtcNow;
-        arrangement.UpdatedAt = DateTime.UtcNow;
-
-        var history = new DeliveryStatusHistory
+        // Atomic Concurrency Guard & History Entry inside a single Database Transaction
+        using var transaction = await _context.Database.BeginTransactionAsync();
+        try
         {
-            DeliveryArrangementId = arrangement.Id,
-            PreviousStatus = previousStatus,
-            NewStatus = "Collected",
-            ChangedByUserId = userId,
-            ChangedByRole = userRole,
-            Notes = dto?.Notes?.Trim(),
-            Timestamp = DateTime.UtcNow
-        };
-        arrangement.History.Add(history);
+            var now = DateTime.UtcNow;
+            var previousStatus = arrangement.Status;
 
-        await _context.SaveChangesAsync();
+            // Conditional update at database execution level checking exact status "CollectionArranged"
+            var updatedRows = await _context.DeliveryArrangements
+                .Where(d => d.Id == id && d.Status == "CollectionArranged")
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(d => d.Status, "Collected")
+                    .SetProperty(d => d.CollectedAt, now)
+                    .SetProperty(d => d.UpdatedAt, now));
 
-        _logger.LogInformation("User {UserId} recorded collection for Delivery {DeliveryId}", userId, arrangement.Id);
+            if (updatedRows == 0)
+            {
+                await transaction.RollbackAsync();
+                return BadRequest(ApiResponse<DeliveryTrackingResponseDto>.Fail(
+                    "Action rejected. The donation status has already been updated or modified concurrently."));
+            }
 
-        return Ok(ApiResponse<DeliveryTrackingResponseDto>.Ok(MapToDto(arrangement), "Donation collection recorded successfully."));
+            // Insert status history entry in the exact same transaction
+            var history = new DeliveryStatusHistory
+            {
+                DeliveryArrangementId = arrangement.Id,
+                PreviousStatus = previousStatus,
+                NewStatus = "Collected",
+                ChangedByUserId = userId,
+                ChangedByRole = userRole,
+                Notes = dto?.Notes?.Trim(),
+                Timestamp = now
+            };
+
+            _context.DeliveryStatusHistories.Add(history);
+            await _context.SaveChangesAsync();
+
+            await transaction.CommitAsync();
+
+            _logger.LogInformation("User {UserId} recorded collection for Delivery {DeliveryId}", userId, arrangement.Id);
+
+            var updatedArrangement = await _context.DeliveryArrangements
+                .Include(d => d.History)
+                .FirstOrDefaultAsync(d => d.Id == id);
+
+            return Ok(ApiResponse<DeliveryTrackingResponseDto>.Ok(MapToDto(updatedArrangement!), "Donation collection recorded successfully."));
+        }
+        catch (Exception ex)
+        {
+            await transaction.RollbackAsync();
+            _logger.LogError(ex, "Error recording collection for delivery {DeliveryId}", id);
+            return StatusCode(StatusCodes.Status500InternalServerError,
+                ApiResponse<DeliveryTrackingResponseDto>.Fail("An internal error occurred while recording collection."));
+        }
     }
 
     /// <summary>
     /// Story 3: Intended receiving organization confirms receipt of a collected donation.
+    /// Authorized STRICTLY for the receiving Organization (OrganizationId ONLY).
     /// </summary>
     [HttpPost("{id:int}/receive")]
     [ProducesResponseType(typeof(ApiResponse<DeliveryTrackingResponseDto>), StatusCodes.Status200OK)]
@@ -191,7 +244,6 @@ public class DeliveriesController : ControllerBase
         var (userId, userRole) = GetCallerIdentity();
 
         var arrangement = await _context.DeliveryArrangements
-            .Include(d => d.History)
             .FirstOrDefaultAsync(d => d.Id == id);
 
         if (arrangement == null)
@@ -199,53 +251,85 @@ public class DeliveriesController : ControllerBase
             return NotFound(ApiResponse<DeliveryTrackingResponseDto>.Fail($"Delivery arrangement with ID {id} not found."));
         }
 
-        // Strict Recipient Authorization Check (Story 3 Scenario 3)
-        if (userId != arrangement.OrganizationId && !userRole.Equals("ADMIN", StringComparison.OrdinalIgnoreCase))
+        // Strict Recipient Authorization Check (Story 3 Scenario 3: Receiving Organization ONLY)
+        if (userId != arrangement.OrganizationId)
         {
             return StatusCode(StatusCodes.Status403Forbidden,
                 ApiResponse<DeliveryTrackingResponseDto>.Fail("Only the designated receiving organization is authorized to confirm receipt of this donation."));
         }
 
-        // Duplicate Check (Story 3 Scenario 4)
-        if (arrangement.Status.Equals("Received", StringComparison.OrdinalIgnoreCase) ||
-            arrangement.Status.Equals("Completed", StringComparison.OrdinalIgnoreCase))
+        // Duplicate Check using exact stored strings
+        if (arrangement.Status == "Received" || arrangement.Status == "Completed")
         {
             return BadRequest(ApiResponse<DeliveryTrackingResponseDto>.Fail("Receipt has already been confirmed for this donation."));
         }
 
-        // Invalid Transition Check (Story 3 Scenario 2)
-        if (!arrangement.Status.Equals("Collected", StringComparison.OrdinalIgnoreCase))
+        // Invalid Transition Check using exact stored string
+        if (arrangement.Status != "Collected")
         {
             return BadRequest(ApiResponse<DeliveryTrackingResponseDto>.Fail(
                 $"Cannot confirm receipt. Donation is currently in status '{arrangement.Status}', but must be 'Collected'."));
         }
 
-        var previousStatus = arrangement.Status;
-        arrangement.Status = "Received";
-        arrangement.ReceivedAt = DateTime.UtcNow;
-        arrangement.UpdatedAt = DateTime.UtcNow;
-
-        var history = new DeliveryStatusHistory
+        // Atomic Concurrency Guard & History Entry inside a single Database Transaction
+        using var transaction = await _context.Database.BeginTransactionAsync();
+        try
         {
-            DeliveryArrangementId = arrangement.Id,
-            PreviousStatus = previousStatus,
-            NewStatus = "Received",
-            ChangedByUserId = userId,
-            ChangedByRole = userRole,
-            Notes = dto?.Notes?.Trim(),
-            Timestamp = DateTime.UtcNow
-        };
-        arrangement.History.Add(history);
+            var now = DateTime.UtcNow;
+            var previousStatus = arrangement.Status;
 
-        await _context.SaveChangesAsync();
+            // Conditional update at database execution level checking exact status "Collected"
+            var updatedRows = await _context.DeliveryArrangements
+                .Where(d => d.Id == id && d.Status == "Collected")
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(d => d.Status, "Received")
+                    .SetProperty(d => d.ReceivedAt, now)
+                    .SetProperty(d => d.UpdatedAt, now));
 
-        _logger.LogInformation("Organization {UserId} confirmed receipt for Delivery {DeliveryId}", userId, arrangement.Id);
+            if (updatedRows == 0)
+            {
+                await transaction.RollbackAsync();
+                return BadRequest(ApiResponse<DeliveryTrackingResponseDto>.Fail(
+                    "Action rejected. The donation status has already been updated or modified concurrently."));
+            }
 
-        return Ok(ApiResponse<DeliveryTrackingResponseDto>.Ok(MapToDto(arrangement), "Donation receipt confirmed successfully."));
+            // Insert status history entry in the exact same transaction
+            var history = new DeliveryStatusHistory
+            {
+                DeliveryArrangementId = arrangement.Id,
+                PreviousStatus = previousStatus,
+                NewStatus = "Received",
+                ChangedByUserId = userId,
+                ChangedByRole = userRole,
+                Notes = dto?.Notes?.Trim(),
+                Timestamp = now
+            };
+
+            _context.DeliveryStatusHistories.Add(history);
+            await _context.SaveChangesAsync();
+
+            await transaction.CommitAsync();
+
+            _logger.LogInformation("Organization {UserId} confirmed receipt for Delivery {DeliveryId}", userId, arrangement.Id);
+
+            var updatedArrangement = await _context.DeliveryArrangements
+                .Include(d => d.History)
+                .FirstOrDefaultAsync(d => d.Id == id);
+
+            return Ok(ApiResponse<DeliveryTrackingResponseDto>.Ok(MapToDto(updatedArrangement!), "Donation receipt confirmed successfully."));
+        }
+        catch (Exception ex)
+        {
+            await transaction.RollbackAsync();
+            _logger.LogError(ex, "Error confirming receipt for delivery {DeliveryId}", id);
+            return StatusCode(StatusCodes.Status500InternalServerError,
+                ApiResponse<DeliveryTrackingResponseDto>.Fail("An internal error occurred while confirming receipt."));
+        }
     }
 
     /// <summary>
-    /// Story 4: Retrieve current tracking status and complete timestamped status history for a delivery.
+    /// Story 4: Retrieve current tracking status and complete timestamped status history by delivery ID.
+    /// Authorized for Donor (DonorId), Organization (OrganizationId), or ADMIN.
     /// </summary>
     [HttpGet("{id:int}")]
     [ProducesResponseType(typeof(ApiResponse<DeliveryTrackingResponseDto>), StatusCodes.Status200OK)]
@@ -264,7 +348,7 @@ public class DeliveriesController : ControllerBase
             return NotFound(ApiResponse<DeliveryTrackingResponseDto>.Fail($"Delivery tracking with ID {id} not found."));
         }
 
-        // Authorization Check (Story 4 Scenario 3)
+        // Authorization Check (Story 4: Donor, Organization, or ADMIN)
         if (userId != arrangement.DonorId && userId != arrangement.OrganizationId && !userRole.Equals("ADMIN", StringComparison.OrdinalIgnoreCase))
         {
             return StatusCode(StatusCodes.Status403Forbidden,
@@ -276,6 +360,7 @@ public class DeliveriesController : ControllerBase
 
     /// <summary>
     /// Story 4: Retrieve current tracking status and complete timestamped status history by food request ID.
+    /// Authorized for Donor (DonorId), Organization (OrganizationId), or ADMIN.
     /// </summary>
     [HttpGet("request/{requestId:int}")]
     [ProducesResponseType(typeof(ApiResponse<DeliveryTrackingResponseDto>), StatusCodes.Status200OK)]
@@ -294,7 +379,7 @@ public class DeliveriesController : ControllerBase
             return NotFound(ApiResponse<DeliveryTrackingResponseDto>.Fail($"Tracking information for food request {requestId} was not found."));
         }
 
-        // Authorization Check (Story 4 Scenario 3)
+        // Authorization Check (Story 4: Donor, Organization, or ADMIN)
         if (userId != arrangement.DonorId && userId != arrangement.OrganizationId && !userRole.Equals("ADMIN", StringComparison.OrdinalIgnoreCase))
         {
             return StatusCode(StatusCodes.Status403Forbidden,
@@ -306,6 +391,7 @@ public class DeliveriesController : ControllerBase
 
     /// <summary>
     /// Story 5: Mark a received donation as completed.
+    /// Authorized for Donor (DonorId) or Organization (OrganizationId) associated with the donation.
     /// </summary>
     [HttpPost("{id:int}/complete")]
     [ProducesResponseType(typeof(ApiResponse<DeliveryTrackingResponseDto>), StatusCodes.Status200OK)]
@@ -317,7 +403,6 @@ public class DeliveriesController : ControllerBase
         var (userId, userRole) = GetCallerIdentity();
 
         var arrangement = await _context.DeliveryArrangements
-            .Include(d => d.History)
             .FirstOrDefaultAsync(d => d.Id == id);
 
         if (arrangement == null)
@@ -325,48 +410,80 @@ public class DeliveriesController : ControllerBase
             return NotFound(ApiResponse<DeliveryTrackingResponseDto>.Fail($"Delivery arrangement with ID {id} not found."));
         }
 
-        // Authorization Check (Story 5 Scenario 4)
-        if (userId != arrangement.DonorId && userId != arrangement.OrganizationId && !userRole.Equals("ADMIN", StringComparison.OrdinalIgnoreCase))
+        // Strict Authorization Check (Story 5: Donor or Organization ONLY)
+        if (userId != arrangement.DonorId && userId != arrangement.OrganizationId)
         {
             return StatusCode(StatusCodes.Status403Forbidden,
                 ApiResponse<DeliveryTrackingResponseDto>.Fail("You are not authorized to mark this donation as complete."));
         }
 
-        // Duplicate Check (Story 5 Scenario 3)
-        if (arrangement.Status.Equals("Completed", StringComparison.OrdinalIgnoreCase))
+        // Duplicate Check using exact stored string
+        if (arrangement.Status == "Completed")
         {
             return BadRequest(ApiResponse<DeliveryTrackingResponseDto>.Fail("Donation lifecycle has already been completed."));
         }
 
-        // Invalid Transition Check (Story 5 Scenario 2)
-        if (!arrangement.Status.Equals("Received", StringComparison.OrdinalIgnoreCase))
+        // Invalid Transition Check using exact stored string
+        if (arrangement.Status != "Received")
         {
             return BadRequest(ApiResponse<DeliveryTrackingResponseDto>.Fail(
                 $"Cannot complete donation. Current status is '{arrangement.Status}', but must be 'Received'."));
         }
 
-        var previousStatus = arrangement.Status;
-        arrangement.Status = "Completed";
-        arrangement.CompletedAt = DateTime.UtcNow;
-        arrangement.UpdatedAt = DateTime.UtcNow;
-
-        var history = new DeliveryStatusHistory
+        // Atomic Concurrency Guard & History Entry inside a single Database Transaction
+        using var transaction = await _context.Database.BeginTransactionAsync();
+        try
         {
-            DeliveryArrangementId = arrangement.Id,
-            PreviousStatus = previousStatus,
-            NewStatus = "Completed",
-            ChangedByUserId = userId,
-            ChangedByRole = userRole,
-            Notes = dto?.Notes?.Trim(),
-            Timestamp = DateTime.UtcNow
-        };
-        arrangement.History.Add(history);
+            var now = DateTime.UtcNow;
+            var previousStatus = arrangement.Status;
 
-        await _context.SaveChangesAsync();
+            // Conditional update at database execution level checking exact status "Received"
+            var updatedRows = await _context.DeliveryArrangements
+                .Where(d => d.Id == id && d.Status == "Received")
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(d => d.Status, "Completed")
+                    .SetProperty(d => d.CompletedAt, now)
+                    .SetProperty(d => d.UpdatedAt, now));
 
-        _logger.LogInformation("User {UserId} completed donation lifecycle for Delivery {DeliveryId}", userId, arrangement.Id);
+            if (updatedRows == 0)
+            {
+                await transaction.RollbackAsync();
+                return BadRequest(ApiResponse<DeliveryTrackingResponseDto>.Fail(
+                    "Action rejected. The donation status has already been updated or modified concurrently."));
+            }
 
-        return Ok(ApiResponse<DeliveryTrackingResponseDto>.Ok(MapToDto(arrangement), "Donation lifecycle completed successfully."));
+            // Insert status history entry in the exact same transaction
+            var history = new DeliveryStatusHistory
+            {
+                DeliveryArrangementId = arrangement.Id,
+                PreviousStatus = previousStatus,
+                NewStatus = "Completed",
+                ChangedByUserId = userId,
+                ChangedByRole = userRole,
+                Notes = dto?.Notes?.Trim(),
+                Timestamp = now
+            };
+
+            _context.DeliveryStatusHistories.Add(history);
+            await _context.SaveChangesAsync();
+
+            await transaction.CommitAsync();
+
+            _logger.LogInformation("User {UserId} completed donation lifecycle for Delivery {DeliveryId}", userId, arrangement.Id);
+
+            var updatedArrangement = await _context.DeliveryArrangements
+                .Include(d => d.History)
+                .FirstOrDefaultAsync(d => d.Id == id);
+
+            return Ok(ApiResponse<DeliveryTrackingResponseDto>.Ok(MapToDto(updatedArrangement!), "Donation lifecycle completed successfully."));
+        }
+        catch (Exception ex)
+        {
+            await transaction.RollbackAsync();
+            _logger.LogError(ex, "Error completing donation lifecycle for delivery {DeliveryId}", id);
+            return StatusCode(StatusCodes.Status500InternalServerError,
+                ApiResponse<DeliveryTrackingResponseDto>.Fail("An internal error occurred while completing donation."));
+        }
     }
 
     private (string userId, string role) GetCallerIdentity()
@@ -388,7 +505,6 @@ public class DeliveriesController : ControllerBase
     {
         try
         {
-            // Execute database query against Requests table in shared PostgreSQL RescuePlateDB
             using var command = _context.Database.GetDbConnection().CreateCommand();
             command.CommandText = @"
                 SELECT ""Id"", ""DonationId"", ""DonationTitle"", ""OrganizationId"", ""OrganizationName"", ""DonorId"", ""Status""
