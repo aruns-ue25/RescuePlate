@@ -39,6 +39,15 @@ public class DeliveriesController : ControllerBase
             return BadRequest(ApiResponse<DeliveryTrackingResponseDto>.Fail("Validation failed.", errors));
         }
 
+        // Collection time validation: Must be non-null, non-default, and in the future
+        if (!dto.ScheduledCollectionTime.HasValue ||
+            dto.ScheduledCollectionTime.Value == default ||
+            dto.ScheduledCollectionTime.Value.UtcDateTime <= DateTime.UtcNow)
+        {
+            return BadRequest(ApiResponse<DeliveryTrackingResponseDto>.Fail(
+                "ScheduledCollectionTime must be a valid future timestamp."));
+        }
+
         var (userId, userRole) = GetCallerIdentity();
 
         // 1. Authoritative verification of Request acceptance from PostgreSQL database
@@ -63,6 +72,7 @@ public class DeliveriesController : ControllerBase
 
         // 3. Duplicate arrangement check (Concurrency & Unique Index guard)
         var existingArrangement = await _context.DeliveryArrangements
+            .AsNoTracking()
             .AnyAsync(d => d.RequestId == dto.RequestId);
         if (existingArrangement)
         {
@@ -88,7 +98,7 @@ public class DeliveriesController : ControllerBase
                 DeliveryAddress = dto.DeliveryAddress.Trim(),
                 ContactName = dto.ContactName.Trim(),
                 ContactPhone = dto.ContactPhone.Trim(),
-                ScheduledCollectionTime = dto.ScheduledCollectionTime.ToUniversalTime(),
+                ScheduledCollectionTime = dto.ScheduledCollectionTime.Value.UtcDateTime,
                 Notes = dto.Notes?.Trim(),
                 Status = "CollectionArranged",
                 ArrangedAt = now,
@@ -147,6 +157,7 @@ public class DeliveriesController : ControllerBase
         var (userId, userRole) = GetCallerIdentity();
 
         var arrangement = await _context.DeliveryArrangements
+            .AsNoTracking()
             .FirstOrDefaultAsync(d => d.Id == id);
 
         if (arrangement == null)
@@ -215,7 +226,9 @@ public class DeliveriesController : ControllerBase
 
             _logger.LogInformation("User {UserId} recorded collection for Delivery {DeliveryId}", userId, arrangement.Id);
 
+            // Fetch fresh database row bypassing EF change tracker cache
             var updatedArrangement = await _context.DeliveryArrangements
+                .AsNoTracking()
                 .Include(d => d.History)
                 .FirstOrDefaultAsync(d => d.Id == id);
 
@@ -244,6 +257,7 @@ public class DeliveriesController : ControllerBase
         var (userId, userRole) = GetCallerIdentity();
 
         var arrangement = await _context.DeliveryArrangements
+            .AsNoTracking()
             .FirstOrDefaultAsync(d => d.Id == id);
 
         if (arrangement == null)
@@ -312,7 +326,9 @@ public class DeliveriesController : ControllerBase
 
             _logger.LogInformation("Organization {UserId} confirmed receipt for Delivery {DeliveryId}", userId, arrangement.Id);
 
+            // Fetch fresh database row bypassing EF change tracker cache
             var updatedArrangement = await _context.DeliveryArrangements
+                .AsNoTracking()
                 .Include(d => d.History)
                 .FirstOrDefaultAsync(d => d.Id == id);
 
@@ -340,6 +356,7 @@ public class DeliveriesController : ControllerBase
         var (userId, userRole) = GetCallerIdentity();
 
         var arrangement = await _context.DeliveryArrangements
+            .AsNoTracking()
             .Include(d => d.History)
             .FirstOrDefaultAsync(d => d.Id == id);
 
@@ -371,6 +388,7 @@ public class DeliveriesController : ControllerBase
         var (userId, userRole) = GetCallerIdentity();
 
         var arrangement = await _context.DeliveryArrangements
+            .AsNoTracking()
             .Include(d => d.History)
             .FirstOrDefaultAsync(d => d.RequestId == requestId);
 
@@ -403,6 +421,7 @@ public class DeliveriesController : ControllerBase
         var (userId, userRole) = GetCallerIdentity();
 
         var arrangement = await _context.DeliveryArrangements
+            .AsNoTracking()
             .FirstOrDefaultAsync(d => d.Id == id);
 
         if (arrangement == null)
@@ -471,7 +490,9 @@ public class DeliveriesController : ControllerBase
 
             _logger.LogInformation("User {UserId} completed donation lifecycle for Delivery {DeliveryId}", userId, arrangement.Id);
 
+            // Fetch fresh database row bypassing EF change tracker cache
             var updatedArrangement = await _context.DeliveryArrangements
+                .AsNoTracking()
                 .Include(d => d.History)
                 .FirstOrDefaultAsync(d => d.Id == id);
 

@@ -24,7 +24,7 @@ public class ArrangeCollectionDto
     public string ContactPhone { get; set; } = string.Empty;
 
     [Required(ErrorMessage = "ScheduledCollectionTime is required.")]
-    public DateTime ScheduledCollectionTime { get; set; }
+    public DateTimeOffset? ScheduledCollectionTime { get; set; }
 
     [StringLength(500, ErrorMessage = "Notes cannot exceed 500 characters.")]
     public string? Notes { get; set; }
