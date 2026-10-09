@@ -20,19 +20,26 @@ env:
 
   BACKEND_APP: rescueplate-userservice
   DONATION_APP: rescueplate-donationservice
+  DELIVERY_APP: rescueplate-deliveryservice
   FRONTEND_APP: rescueplate-frontend
   REQUEST_APP: rescueplate-requestservice
 
   BACKEND_API_URL: https://rescueplate-userservice.wittyrock-ff20867a.southeastasia.azurecontainerapps.io/api
   DONATION_API_URL: https://rescueplate-donationservice.wittyrock-ff20867a.southeastasia.azurecontainerapps.io/api
   REQUEST_API_URL: https://rescueplate-requestservice.wittyrock-ff20867a.southeastasia.azurecontainerapps.io/api
+  DELIVERY_API_URL: https://rescueplate-deliveryservice.wittyrock-ff20867a.southeastasia.azurecontainerapps.io/api
 
 jobs:
   deploy:
     name: Build and Deploy
     runs-on: ubuntu-latest
 
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    if: >-
+      ${{
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.event == 'push' &&
+        github.event.workflow_run.head_branch == 'main'
+      }}
 
     steps:
 
@@ -94,6 +101,16 @@ jobs:
             ${{ env.ACR_LOGIN_SERVER }}/rescueplate-requestservice:${{ github.event.workflow_run.head_sha }}
             ${{ env.ACR_LOGIN_SERVER }}/rescueplate-requestservice:latest
 
+      - name: Build and push DeliveryWorkflowService image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend/DeliveryWorkflowService
+          file: ./backend/DeliveryWorkflowService/Dockerfile
+          push: true
+          tags: |
+            ${{ env.ACR_LOGIN_SERVER }}/rescueplate-deliveryworkflowservice:${{ github.event.workflow_run.head_sha }}
+            ${{ env.ACR_LOGIN_SERVER }}/rescueplate-deliveryworkflowservice:latest
+
       # --------------------------------------------------
       # 5. Build and push frontend image
       # --------------------------------------------------
@@ -107,6 +124,7 @@ jobs:
             VITE_API_BASE_URL=${{ env.BACKEND_API_URL }}
             VITE_DONATION_API_BASE_URL=${{ env.DONATION_API_URL }}
             VITE_REQUEST_API_BASE_URL=${{ env.REQUEST_API_URL }}
+            VITE_DELIVERY_API_BASE_URL=${{ env.DELIVERY_API_URL }}
           tags: |
             ${{ env.ACR_LOGIN_SERVER }}/rescueplate-frontend:${{ github.event.workflow_run.head_sha }}
             ${{ env.ACR_LOGIN_SERVER }}/rescueplate-frontend:latest
@@ -121,14 +139,12 @@ jobs:
             --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
             --image ${{ env.ACR_LOGIN_SERVER }}/rescueplate-userservice:${{ github.event.workflow_run.head_sha }}
 
-
       - name: Deploy DonationService
         run: |
           az containerapp update \
             --name ${{ env.DONATION_APP }} \
             --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
             --image ${{ env.ACR_LOGIN_SERVER }}/rescueplate-donationservice:${{ github.event.workflow_run.head_sha }}
-
 
       - name: Deploy RequestWorkflowService
         run: |
@@ -149,6 +165,60 @@ jobs:
               Kafka__SaslMechanism=PLAIN \
               Kafka__SaslUsername='$ConnectionString' \
               Kafka__SaslPassword=secretref:kafka-connection-string
+
+      - name: Deploy DeliveryWorkflowService
+        run: |
+          az containerapp update \
+            --name ${{ env.DELIVERY_APP }} \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --image ${{ env.ACR_LOGIN_SERVER }}/rescueplate-deliveryworkflowservice:${{ github.event.workflow_run.head_sha }}
+
+      - name: Configure DeliveryWorkflowService ingress
+        run: |
+          current_external="$(az containerapp show \
+            --name ${{ env.DELIVERY_APP }} \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --query "properties.configuration.ingress.external" \
+            --output tsv)"
+
+          if [ -z "$current_external" ] || [ "$current_external" = "None" ]; then
+            az containerapp ingress enable \
+              --name ${{ env.DELIVERY_APP }} \
+              --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+              --type external \
+              --target-port 8080
+          elif [ "$current_external" = "true" ]; then
+            current_port="$(az containerapp show \
+              --name ${{ env.DELIVERY_APP }} \
+              --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+              --query "properties.configuration.ingress.targetPort" \
+              --output tsv)"
+
+            if [ "$current_port" != "8080" ]; then
+              echo "DeliveryWorkflowService ingress is external but target port is not 8080."
+              exit 1
+            fi
+          else
+            echo "DeliveryWorkflowService ingress exists but is not external. Stopping deployment for review."
+            exit 1
+          fi
+
+      - name: Verify DeliveryWorkflowService health
+        run: |
+          delivery_fqdn="$(az containerapp show \
+            --name ${{ env.DELIVERY_APP }} \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --query "properties.configuration.ingress.fqdn" \
+            --output tsv)"
+
+          if [ -z "$delivery_fqdn" ] || [ "$delivery_fqdn" = "None" ]; then
+            echo "DeliveryWorkflowService has no ingress FQDN."
+            exit 1
+          fi
+
+          curl --fail --silent --show-error \
+            --retry 12 --retry-delay 10 --retry-connrefused \
+            "https://${delivery_fqdn}/health"
 
       # --------------------------------------------------
       # 7. Deploy frontend Container App
