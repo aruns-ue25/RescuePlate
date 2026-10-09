@@ -1,9 +1,6 @@
 name: RescuePlate Sprint 4 - Delivery Workflow CI
 
 on:
-  push:
-    branches:
-      - sprint-4-deployment
   pull_request:
     branches:
       - main
