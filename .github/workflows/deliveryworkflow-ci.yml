@@ -1,0 +1,61 @@
+name: RescuePlate Sprint 4 - Delivery Workflow CI
+
+on:
+  push:
+    branches:
+      - sprint-4-deployment
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  delivery-workflow-build-and-test:
+    name: Build and test DeliveryWorkflowService
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore backend solution
+        run: dotnet restore backend/RescuePlate.slnx
+
+      - name: Restore DeliveryWorkflowService test projects
+        run: |
+          dotnet restore backend/DeliveryWorkflowService.UnitTests/DeliveryWorkflowService.UnitTests.csproj
+          dotnet restore backend/DeliveryWorkflowService.IntegrationTests/DeliveryWorkflowService.IntegrationTests.csproj
+
+      - name: Build backend solution
+        run: dotnet build backend/RescuePlate.slnx --no-restore --configuration Release
+
+      - name: Build DeliveryWorkflowService unit tests
+        run: dotnet build backend/DeliveryWorkflowService.UnitTests/DeliveryWorkflowService.UnitTests.csproj --no-restore --configuration Release
+
+      - name: Build DeliveryWorkflowService integration tests
+        run: dotnet build backend/DeliveryWorkflowService.IntegrationTests/DeliveryWorkflowService.IntegrationTests.csproj --no-restore --configuration Release
+
+      - name: Run DeliveryWorkflowService unit tests
+        run: dotnet test backend/DeliveryWorkflowService.UnitTests/DeliveryWorkflowService.UnitTests.csproj --no-build --no-restore --configuration Release --logger "trx;LogFileName=delivery-unit-tests.trx"
+
+      - name: Run DeliveryWorkflowService integration tests
+        run: dotnet test backend/DeliveryWorkflowService.IntegrationTests/DeliveryWorkflowService.IntegrationTests.csproj --no-build --no-restore --configuration Release --logger "trx;LogFileName=delivery-integration-tests.trx"
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sprint4-delivery-test-results
+          path: |
+            backend/DeliveryWorkflowService.UnitTests/TestResults/*.trx
+            backend/DeliveryWorkflowService.IntegrationTests/TestResults/*.trx
+          if-no-files-found: warn
+          retention-days: 14
