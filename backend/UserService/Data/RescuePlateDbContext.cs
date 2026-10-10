@@ -13,6 +13,7 @@ public class RescuePlateDbContext : DbContext
     public DbSet<User> Users => Set<User>();
     public DbSet<DonorProfile> DonorProfiles => Set<DonorProfile>();
     public DbSet<OrganizationProfile> OrganizationProfiles => Set<OrganizationProfile>();
+    public DbSet<AdminActivityLog> AdminActivityLogs => Set<AdminActivityLog>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

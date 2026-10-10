@@ -1,9 +1,10 @@
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Npgsql;
+using Microsoft.Extensions.Hosting;
 using UserService.Data;
 using UserService.Models;
 
@@ -11,19 +12,22 @@ namespace UserService.IntegrationTests.Helpers;
 
 public class CustomWebApplicationFactory : WebApplicationFactory<Program>
 {
-    // Dedicated isolated test database name - NEVER touches RescuePlateDB
-    public const string TestDatabaseName = "RescuePlate_IntegrationTestDB";
-    public const string TestConnectionString = "Host=localhost;Port=5432;Database=RescuePlate_IntegrationTestDB;Username=postgres;Password=postgres";
+    private SqliteConnection? _sqliteConnection;
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
-        TryEnsurePostgresTestDb();
+        _sqliteConnection = new SqliteConnection("DataSource=:memory:");
+        _sqliteConnection.Open();
 
         builder.ConfigureAppConfiguration((context, configBuilder) =>
         {
             configBuilder.AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["ConnectionStrings:PostgreSQLConnection"] = TestConnectionString,
+                ["AdminSettings:Email"] = "admin@rescueplate.org",
+                ["AdminSettings:AccessKey"] = "ADMIN-SECURE-KEY-2026",
+                ["AdminSettings:ChallengeTokenExpiryMinutes"] = "5",
+                ["AdminSettings:MaxFailedAttempts"] = "5",
+                ["AdminSettings:LockoutMinutes"] = "15",
                 ["Jwt:SecretKey"] = "RescuePlate_Super_Secret_Key_For_Jwt_Authentication_2026_Sprint1_RescueFood",
                 ["Jwt:Issuer"] = "RescuePlate.UserService",
                 ["Jwt:Audience"] = "RescuePlate.Client"
@@ -32,45 +36,43 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
 
         builder.ConfigureServices(services =>
         {
-            // Remove existing DbContext registration
-            var descriptor = services.SingleOrDefault(d => d.ServiceType == typeof(DbContextOptions<RescuePlateDbContext>));
-            if (descriptor != null)
+            var efDescriptors = services.Where(d =>
+                (d.ServiceType.Namespace != null && d.ServiceType.Namespace.StartsWith("Microsoft.EntityFrameworkCore")) ||
+                d.ServiceType == typeof(DbContextOptions) ||
+                d.ServiceType == typeof(DbContextOptions<RescuePlateDbContext>) ||
+                d.ServiceType == typeof(RescuePlateDbContext)).ToList();
+
+            foreach (var descriptor in efDescriptors)
             {
                 services.Remove(descriptor);
             }
 
             services.AddDbContext<RescuePlateDbContext>(options =>
             {
-                options.UseNpgsql(TestConnectionString);
+                options.UseSqlite(_sqliteConnection);
             });
-        });
-    }
 
-    private static bool TryEnsurePostgresTestDb()
-    {
-        try
-        {
-            var masterConnStr = "Host=localhost;Port=5432;Database=postgres;Username=postgres;Password=postgres";
-            using var conn = new NpgsqlConnection(masterConnStr);
-            conn.Open();
+            // Ensure schema and admin user are initialized
+            var sp = services.BuildServiceProvider();
+            using var scope = sp.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<RescuePlateDbContext>();
+            db.Database.EnsureCreated();
 
-            using var checkCmd = conn.CreateCommand();
-            checkCmd.CommandText = $"SELECT 1 FROM pg_database WHERE datname = '{TestDatabaseName}'";
-            var exists = checkCmd.ExecuteScalar() != null;
-
-            if (!exists)
+            if (!db.Users.Any(u => u.Email == "admin@rescueplate.org"))
             {
-                using var createCmd = conn.CreateCommand();
-                createCmd.CommandText = $"CREATE DATABASE \"{TestDatabaseName}\"";
-                createCmd.ExecuteNonQuery();
+                db.Users.Add(new User
+                {
+                    Id = Guid.NewGuid(),
+                    Email = "admin@rescueplate.org",
+                    PasswordHash = BCrypt.Net.BCrypt.HashPassword("Admin@123", workFactor: 11),
+                    Role = UserRole.ADMIN,
+                    IsActive = true,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                });
+                db.SaveChanges();
             }
-
-            return true;
-        }
-        catch
-        {
-            return false;
-        }
+        });
     }
 
     public async Task ResetDatabaseAsync()
@@ -78,12 +80,41 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
         using var scope = Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<RescuePlateDbContext>();
         
-        // Remove non-admin users and associated profiles
-        var nonAdminUsers = await db.Users.Where(u => u.Role != UserRole.ADMIN).ToListAsync();
-        if (nonAdminUsers.Count > 0)
+        // Ensure Database created
+        db.Database.EnsureCreated();
+
+        // Remove all extra users except the default admin account
+        var extraUsers = await db.Users.Where(u => u.Email != "admin@rescueplate.org").ToListAsync();
+        if (extraUsers.Count > 0)
         {
-            db.Users.RemoveRange(nonAdminUsers);
-            await db.SaveChangesAsync();
+            db.Users.RemoveRange(extraUsers);
+        }
+
+        // Ensure default admin user exists
+        if (!await db.Users.AnyAsync(u => u.Email == "admin@rescueplate.org"))
+        {
+            db.Users.Add(new User
+            {
+                Id = Guid.NewGuid(),
+                Email = "admin@rescueplate.org",
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword("Admin@123", workFactor: 11),
+                Role = UserRole.ADMIN,
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            });
+        }
+
+        await db.SaveChangesAsync();
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        base.Dispose(disposing);
+        if (disposing)
+        {
+            _sqliteConnection?.Close();
+            _sqliteConnection?.Dispose();
         }
     }
 }

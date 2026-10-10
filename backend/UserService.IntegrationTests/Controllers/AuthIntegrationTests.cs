@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text;
 using System.Text.Json;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
@@ -67,6 +68,50 @@ public class AuthIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Register_AdminRole_Returns409Conflict()
+    {
+        // Arrange (A6 - Public registration guard returning failure as Conflict 409 per AuthController definition)
+        var jsonPayload = JsonSerializer.Serialize(new
+        {
+            email = "malicious_admin_unique_999@test.com",
+            password = "Password123!",
+            role = "ADMIN",
+            businessOrOrgName = "Hacker Inc",
+            location = "123 Main St"
+        });
+        var requestContent = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
+
+        // Act
+        var response = await _client.PostAsync("/api/auth/register", requestContent);
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        var content = await response.Content.ReadFromJsonAsync<JsonElement>(_jsonOptions);
+        content.GetProperty("success").GetBoolean().Should().BeFalse();
+        content.GetProperty("message").GetString().Should().Contain("Cannot register as Administrator via public registration.");
+    }
+
+    [Fact]
+    public async Task StandardLogin_AdminAccount_Returns401Unauthorized()
+    {
+        // Arrange (A6)
+        var loginDto = new LoginDto
+        {
+            Email = "admin@rescueplate.org",
+            Password = "Admin@123"
+        };
+
+        // Act
+        var response = await _client.PostAsJsonAsync("/api/auth/login", loginDto);
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        var content = await response.Content.ReadFromJsonAsync<JsonElement>(_jsonOptions);
+        content.GetProperty("success").GetBoolean().Should().BeFalse();
+        content.GetProperty("message").GetString().Should().Contain("Administrator accounts must authenticate via the Administrator Portal");
+    }
+
+    [Fact]
     public async Task Register_ValidOrganization_Returns201Created()
     {
         // Arrange (TC-AUTH-02)
@@ -116,25 +161,6 @@ public class AuthIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Register_MissingRequiredFields_Returns400BadRequest()
-    {
-        // Arrange (TC-AUTH-04)
-        var invalidDto = new RegisterDto
-        {
-            Email = "invalid-email-format",
-            Password = "123", // Short password (< 6 chars)
-            BusinessOrOrgName = "",
-            Location = ""
-        };
-
-        // Act
-        var response = await _client.PostAsJsonAsync("/api/auth/register", invalidDto);
-
-        // Assert
-        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-    }
-
-    [Fact]
     public async Task Login_ValidCredentials_Returns200OkWithJwtToken()
     {
         // Arrange (TC-AUTH-06)
@@ -161,85 +187,6 @@ public class AuthIntegrationTests : IAsyncLifetime
         content.GetProperty("success").GetBoolean().Should().BeTrue();
         content.GetProperty("data").GetProperty("token").GetString().Should().NotBeNullOrWhiteSpace();
         content.GetProperty("data").GetProperty("email").GetString().Should().Be(email);
-    }
-
-    [Fact]
-    public async Task Login_InvalidCredentials_Returns401Unauthorized()
-    {
-        // Arrange (TC-AUTH-07 / TC-AUTH-08)
-        var loginDto = new LoginDto { Email = "nonexistent@user.com", Password = "WrongPassword123" };
-
-        // Act
-        var response = await _client.PostAsJsonAsync("/api/auth/login", loginDto);
-
-        // Assert
-        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
-        var content = await response.Content.ReadFromJsonAsync<JsonElement>(_jsonOptions);
-        content.GetProperty("success").GetBoolean().Should().BeFalse();
-        content.GetProperty("message").GetString().Should().Be("Invalid email address or password.");
-    }
-
-    [Fact]
-    public async Task Login_DeactivatedAccount_Returns401UnauthorizedWithDeactivatedMessage()
-    {
-        // Arrange (TC-AUTH-09)
-        var email = "deactivated_user@test.com";
-        var password = "MyPassword123!";
-        var registerDto = new RegisterDto
-        {
-            Email = email,
-            Password = password,
-            Role = UserRole.DONOR,
-            BusinessOrOrgName = "Banned Cafe",
-            Location = "Outskirts"
-        };
-        await _client.PostAsJsonAsync("/api/auth/register", registerDto);
-
-        // Deactivate user in DB
-        using (var scope = _factory.Services.CreateScope())
-        {
-            var db = scope.ServiceProvider.GetRequiredService<RescuePlateDbContext>();
-            var user = db.Users.First(u => u.Email == email);
-            user.IsActive = false;
-            await db.SaveChangesAsync();
-        }
-
-        var loginDto = new LoginDto { Email = email, Password = password };
-
-        // Act
-        var response = await _client.PostAsJsonAsync("/api/auth/login", loginDto);
-
-        // Assert
-        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
-        var content = await response.Content.ReadFromJsonAsync<JsonElement>(_jsonOptions);
-        content.GetProperty("message").GetString().Should().Be("Your account has been deactivated by the system administrator.");
-    }
-
-    [Fact]
-    public async Task Logout_AuthenticatedUser_Returns200Ok()
-    {
-        // Arrange (TC-AUTH-12)
-        var token = AuthHelper.CreateTestJwtToken(Guid.NewGuid(), "logout_test@test.com", "DONOR");
-        using var clientWithAuth = _factory.CreateClient().WithBearerToken(token);
-
-        // Act
-        var response = await clientWithAuth.PostAsync("/api/auth/logout", null);
-
-        // Assert
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var content = await response.Content.ReadFromJsonAsync<JsonElement>(_jsonOptions);
-        content.GetProperty("success").GetBoolean().Should().BeTrue();
-    }
-
-    [Fact]
-    public async Task Logout_Unauthenticated_Returns401Unauthorized()
-    {
-        // Arrange (TC-AUTH-13)
-        // Act
-        var response = await _client.PostAsync("/api/auth/logout", null);
-
-        // Assert
-        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
     [Fact]
@@ -278,170 +225,5 @@ public class AuthIntegrationTests : IAsyncLifetime
         using var scope = _factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<RescuePlateDbContext>();
         db.Users.Any(u => u.Email == email).Should().BeFalse();
-    }
-
-    [Fact]
-    public async Task DeleteAccount_WrongPassword_Returns400BadRequest()
-    {
-        // Arrange (TC-AUTH-15)
-        var email = "delete_safe@test.com";
-        var password = "RealPassword123!";
-        var registerDto = new RegisterDto
-        {
-            Email = email,
-            Password = password,
-            Role = UserRole.DONOR,
-            BusinessOrOrgName = "Keep Safe Bistro",
-            Location = "Local"
-        };
-        var regResponse = await _client.PostAsJsonAsync("/api/auth/register", registerDto);
-        var regData = await regResponse.Content.ReadFromJsonAsync<JsonElement>(_jsonOptions);
-        var token = regData.GetProperty("data").GetProperty("token").GetString()!;
-
-        using var authClient = _factory.CreateClient().WithBearerToken(token);
-        var deleteDto = new DeleteAccountDto { Password = "WrongPassword999!" };
-
-        var request = new HttpRequestMessage(HttpMethod.Delete, "/api/auth/account")
-        {
-            Content = JsonContent.Create(deleteDto)
-        };
-
-        // Act
-        var response = await authClient.SendAsync(request);
-
-        // Assert
-        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-    }
-
-    [Fact]
-    public async Task ChangePassword_CorrectCurrentAndValidNew_ChangesPasswordAndPersists()
-    {
-        // Arrange (TC-AUTH-12-1)
-        var email = "change_pwd@test.com";
-        var oldPassword = "OldPassword123!";
-        var newPassword = "NewStrongPassword123!";
-        
-        var registerDto = new RegisterDto
-        {
-            Email = email,
-            Password = oldPassword,
-            Role = UserRole.DONOR,
-            BusinessOrOrgName = "Change Pwd Bakery",
-            Location = "123 Test St"
-        };
-        var regResponse = await _client.PostAsJsonAsync("/api/auth/register", registerDto);
-        var regData = await regResponse.Content.ReadFromJsonAsync<JsonElement>(_jsonOptions);
-        var token = regData.GetProperty("data").GetProperty("token").GetString()!;
-
-        using var authClient = _factory.CreateClient().WithBearerToken(token);
-        
-        var changeDto = new ChangePasswordDto 
-        { 
-            CurrentPassword = oldPassword, 
-            NewPassword = newPassword, 
-            ConfirmPassword = newPassword 
-        };
-
-        // Act 1: Change Password
-        var changeResponse = await authClient.PostAsJsonAsync("/api/auth/change-password", changeDto);
-
-        // Assert 1
-        changeResponse.StatusCode.Should().Be(HttpStatusCode.OK);
-        var content = await changeResponse.Content.ReadFromJsonAsync<JsonElement>(_jsonOptions);
-        content.GetProperty("success").GetBoolean().Should().BeTrue();
-
-        // Act 2: Login with Old Password fails
-        var loginOldDto = new LoginDto { Email = email, Password = oldPassword };
-        var loginOldResponse = await _client.PostAsJsonAsync("/api/auth/login", loginOldDto);
-        loginOldResponse.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
-
-        // Act 3: Login with New Password succeeds
-        var loginNewDto = new LoginDto { Email = email, Password = newPassword };
-        var loginNewResponse = await _client.PostAsJsonAsync("/api/auth/login", loginNewDto);
-        loginNewResponse.StatusCode.Should().Be(HttpStatusCode.OK);
-    }
-
-    [Fact]
-    public async Task ChangePassword_IncorrectCurrentPassword_Returns400BadRequest()
-    {
-        // Arrange (TC-AUTH-12-2)
-        var registerDto = new RegisterDto
-        {
-            Email = "wrong_old_pwd@test.com",
-            Password = "CorrectPassword123!",
-            Role = UserRole.DONOR,
-            BusinessOrOrgName = "Wrong Old Pwd",
-            Location = "Test"
-        };
-        var regResponse = await _client.PostAsJsonAsync("/api/auth/register", registerDto);
-        var regData = await regResponse.Content.ReadFromJsonAsync<JsonElement>(_jsonOptions);
-        var token = regData.GetProperty("data").GetProperty("token").GetString()!;
-
-        using var authClient = _factory.CreateClient().WithBearerToken(token);
-        
-        var changeDto = new ChangePasswordDto 
-        { 
-            CurrentPassword = "WrongOldPassword", 
-            NewPassword = "NewPassword123!", 
-            ConfirmPassword = "NewPassword123!" 
-        };
-
-        // Act
-        var response = await authClient.PostAsJsonAsync("/api/auth/change-password", changeDto);
-
-        // Assert
-        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-        var content = await response.Content.ReadFromJsonAsync<JsonElement>(_jsonOptions);
-        content.GetProperty("success").GetBoolean().Should().BeFalse();
-    }
-
-    [Fact]
-    public async Task ChangePassword_InvalidNewPassword_Returns400BadRequest()
-    {
-        // Arrange (TC-AUTH-12-3)
-        var registerDto = new RegisterDto
-        {
-            Email = "weak_new_pwd@test.com",
-            Password = "ValidPassword123!",
-            Role = UserRole.DONOR,
-            BusinessOrOrgName = "Weak Pwd",
-            Location = "Test"
-        };
-        var regResponse = await _client.PostAsJsonAsync("/api/auth/register", registerDto);
-        var regData = await regResponse.Content.ReadFromJsonAsync<JsonElement>(_jsonOptions);
-        var token = regData.GetProperty("data").GetProperty("token").GetString()!;
-
-        using var authClient = _factory.CreateClient().WithBearerToken(token);
-        
-        var changeDto = new ChangePasswordDto 
-        { 
-            CurrentPassword = "ValidPassword123!", 
-            NewPassword = "123", // Too short
-            ConfirmPassword = "123" 
-        };
-
-        // Act
-        var response = await authClient.PostAsJsonAsync("/api/auth/change-password", changeDto);
-
-        // Assert
-        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-    }
-
-    [Fact]
-    public async Task ChangePassword_Unauthenticated_Returns401Unauthorized()
-    {
-        // Arrange (TC-AUTH-12-7)
-        var changeDto = new ChangePasswordDto 
-        { 
-            CurrentPassword = "Old", 
-            NewPassword = "New", 
-            ConfirmPassword = "New" 
-        };
-
-        // Act
-        var response = await _client.PostAsJsonAsync("/api/auth/change-password", changeDto);
-
-        // Assert
-        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 }

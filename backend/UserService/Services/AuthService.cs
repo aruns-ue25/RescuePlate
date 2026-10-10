@@ -26,6 +26,12 @@ public class AuthService : IAuthService
 
     public async Task<(bool Success, string Message, AuthResponseDto? Data)> RegisterAsync(RegisterDto dto)
     {
+        // 0. Public Registration Guard - Rejects ADMIN role creation
+        if (dto.Role == UserRole.ADMIN)
+        {
+            return (false, "Cannot register as Administrator via public registration.", null);
+        }
+
         // 1. Unique Email Validation (SRS Acceptance Criteria)
         var normalizedEmail = dto.Email.Trim().ToLowerInvariant();
         var emailExists = await _db.Users.AnyAsync(u => u.Email.ToLower() == normalizedEmail);
@@ -138,6 +144,12 @@ public class AuthService : IAuthService
             return (false, "Your account has been deactivated by the system administrator.", null);
         }
 
+        // Prevent Administrator accounts from using standard user login (Fix 3)
+        if (user.Role == UserRole.ADMIN)
+        {
+            return (false, "Administrator accounts must authenticate via the Administrator Portal at /admin/login.", null);
+        }
+
         string businessName = user.Role switch
         {
             UserRole.DONOR => user.DonorProfile?.BusinessName ?? "Donor Business",
@@ -211,6 +223,11 @@ public class AuthService : IAuthService
         if (user == null)
         {
             return (false, "User account not found.");
+        }
+
+        if (user.Role == UserRole.ADMIN)
+        {
+            return (false, "Administrator accounts cannot be deleted.");
         }
 
         bool isPasswordValid = BCrypt.Net.BCrypt.Verify(password, user.PasswordHash);

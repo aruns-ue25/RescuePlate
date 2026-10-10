@@ -1025,6 +1025,41 @@ public class DonationServiceImpl : IDonationService
         }
     }
 
+    public async Task<ApiResponse<object>> GetAdminDonationSummaryAsync()
+    {
+        try
+        {
+            var allDonations = await _context.Donations.ToListAsync();
+            var totalCount = allDonations.Count;
+            var availableCount = allDonations.Count(d => d.Status == "Available" || d.Status == "Posted");
+            var claimedCount = allDonations.Count(d => d.Status == "FullyClaimed" || d.Status == "PartiallyClaimed" || d.Status == "Completed");
+            var expiredCount = allDonations.Count(d => d.Status == "Expired" || (d.Status != "Completed" && d.Status != "Cancelled" && DateTime.UtcNow > d.ExpiryTime));
+            var cancelledCount = allDonations.Count(d => d.Status == "Cancelled");
+
+            var totalPortionsRescued = allDonations.Sum(d => d.ClaimedQuantity);
+            var totalPortionsListed = allDonations.Sum(d => d.TotalQuantity);
+
+            var summary = new
+            {
+                totalCount,
+                availableCount,
+                claimedCount,
+                expiredCount,
+                cancelledCount,
+                totalPortionsRescued,
+                totalPortionsListed,
+                recentDonations = allDonations.OrderByDescending(d => d.CreatedAt).Take(10).Select(MapToResponseDto)
+            };
+
+            return ApiResponse<object>.Ok(summary, "Admin donation monitoring summary retrieved.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error generating admin donation monitoring summary.");
+            return ApiResponse<object>.Fail($"Failed to generate donation summary: {ex.Message}");
+        }
+    }
+
     private static DonationResponseDto MapToResponseDto(Donation d)
     {
         var effectiveStatus = d.Status;

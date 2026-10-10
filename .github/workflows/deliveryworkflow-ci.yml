@@ -4,6 +4,11 @@ on:
   pull_request:
     branches:
       - main
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - closed
   workflow_dispatch:
 
 permissions:
@@ -13,6 +18,8 @@ jobs:
   delivery-workflow-build-and-test:
     name: Build and test DeliveryWorkflowService
     runs-on: ubuntu-latest
+
+    if: ${{ github.event.action != 'closed' || github.event.pull_request.merged == true }}
 
     steps:
       - name: Checkout repository

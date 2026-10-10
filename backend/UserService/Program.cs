@@ -27,9 +27,23 @@ builder.Services.AddHealthChecks()
         tags: new[] { "db", "data" });
 
 // 2. Dependency Injection Services
+builder.Services.AddMemoryCache();
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddHttpClient("DonationService", client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["Services:DonationServiceUrl"] ?? "http://localhost:5001");
+    client.Timeout = TimeSpan.FromSeconds(5);
+});
+builder.Services.AddHttpClient("RequestService", client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["Services:RequestServiceUrl"] ?? "http://localhost:5002");
+    client.Timeout = TimeSpan.FromSeconds(5);
+});
 builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IProfileService, ProfileService>();
+builder.Services.AddScoped<IAdminService, AdminService>();
+builder.Services.AddScoped<Microsoft.AspNetCore.Authorization.IAuthorizationHandler, VerifiedAdminRequirementHandler>();
 
 // 3. JWT Authentication & Authorization
 var secretKey = builder.Configuration["Jwt:SecretKey"] ?? "RescuePlate_Super_Secret_Key_For_Jwt_Authentication_2026_Sprint1_RescueFood";
@@ -60,6 +74,11 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("DonorOnly", policy => policy.RequireRole("DONOR"));
     options.AddPolicy("OrganizationOnly", policy => policy.RequireRole("ORGANIZATION"));
     options.AddPolicy("AdminOnly", policy => policy.RequireRole("ADMIN"));
+    options.AddPolicy("VerifiedAdminOnly", policy =>
+    {
+        policy.RequireRole("ADMIN");
+        policy.Requirements.Add(new VerifiedAdminRequirement());
+    });
 });
 
 // 4. CORS Policy for Frontend (http://localhost:5173)
