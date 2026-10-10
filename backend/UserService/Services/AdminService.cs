@@ -188,20 +188,10 @@ public class AdminService : IAdminService
             return (false, "User not found.");
         }
 
-        // Prevent admin self-deactivation
-        if (user.Id == adminUserId && !isActive)
+        // Prevent status modification for administrator accounts
+        if (user.Role == UserRole.ADMIN)
         {
-            return (false, "You cannot deactivate your own administrator account.");
-        }
-
-        // Prevent deactivating the only active admin account
-        if (user.Role == UserRole.ADMIN && !isActive)
-        {
-            var activeAdminCount = await _db.Users.CountAsync(u => u.Role == UserRole.ADMIN && u.IsActive);
-            if (activeAdminCount <= 1)
-            {
-                return (false, "Cannot deactivate the only active system administrator account.");
-            }
+            return (false, "Administrator account status cannot be modified.");
         }
 
         user.IsActive = isActive;

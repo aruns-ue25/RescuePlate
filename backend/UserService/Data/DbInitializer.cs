@@ -40,17 +40,30 @@ public static class DbInitializer
             try
             {
                 db.Database.ExecuteSqlRaw("ALTER TABLE \"Users\" ADD COLUMN IF NOT EXISTS \"ProfilePictureUrl\" VARCHAR(500);");
+                db.Database.ExecuteSqlRaw(@"
+                    CREATE TABLE IF NOT EXISTS ""AdminActivityLogs"" (
+                        ""Id"" uuid PRIMARY KEY,
+                        ""Action"" character varying(100) NOT NULL,
+                        ""PerformedByUserId"" uuid,
+                        ""PerformedByEmail"" character varying(256) NOT NULL,
+                        ""TargetUserId"" uuid,
+                        ""ClientIp"" character varying(50) NOT NULL,
+                        ""Details"" character varying(1000) NOT NULL,
+                        ""Timestamp"" timestamp with time zone NOT NULL
+                    );
+                    CREATE INDEX IF NOT EXISTS ""IX_AdminActivityLogs_Timestamp"" ON ""AdminActivityLogs"" (""Timestamp"");
+                ");
             }
             catch (Exception ex)
             {
-                logger.LogWarning(ex, "ProfilePictureUrl column check notice.");
+                logger.LogWarning(ex, "Schema initialization notice.");
             }
 
             var config = scope.ServiceProvider.GetService<Microsoft.Extensions.Configuration.IConfiguration>();
             var adminEmail = config?["AdminSettings:Email"] ?? "admin@rescueplate.org";
             var initialPassword = config?["AdminSettings:InitialPassword"];
 
-            if (!db.Users.Any(u => u.Email.ToLower() == adminEmail.ToLower()))
+            if (!db.Users.Any(u => u.Role == UserRole.ADMIN))
             {
                 if (string.IsNullOrWhiteSpace(initialPassword))
                 {
