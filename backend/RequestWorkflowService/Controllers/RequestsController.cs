@@ -210,6 +210,33 @@ public class RequestsController : ControllerBase
     }
 
     /// <summary>
+    /// Admin monitoring endpoint exposing complete platform request activity metrics.
+    /// </summary>
+    [HttpGet("admin/summary")]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetAdminRequestSummary()
+    {
+        var allRequests = await _context.Requests.ToListAsync();
+        var totalCount = allRequests.Count;
+        var pendingCount = allRequests.Count(r => r.Status.ToUpper() == "PENDING");
+        var acceptedCount = allRequests.Count(r => r.Status.ToUpper() == "ACCEPTED");
+        var rejectedCount = allRequests.Count(r => r.Status.ToUpper() == "REJECTED");
+        var totalAcceptedQuantity = allRequests.Where(r => r.Status.ToUpper() == "ACCEPTED").Sum(r => r.AcceptedQuantity ?? r.RequestedQuantity);
+
+        var summary = new
+        {
+            totalCount,
+            pendingCount,
+            acceptedCount,
+            rejectedCount,
+            totalAcceptedQuantity,
+            recentRequests = allRequests.OrderByDescending(r => r.CreatedAt).Take(10).Select(MapToResponseDto)
+        };
+
+        return Ok(ApiResponse<object>.Ok(summary, "Admin request monitoring summary retrieved."));
+    }
+
+    /// <summary>
     /// Retrieves a single request by ID.
     /// </summary>
     [HttpGet("{id:int}")]

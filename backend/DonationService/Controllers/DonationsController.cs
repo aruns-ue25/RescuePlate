@@ -184,6 +184,17 @@ public class DonationsController : ControllerBase
     }
 
     /// <summary>
+    /// Admin monitoring endpoint exposing complete platform donation activity metrics.
+    /// </summary>
+    [HttpGet("admin/summary")]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetAdminDonationSummary()
+    {
+        var result = await _donationService.GetAdminDonationSummaryAsync();
+        return Ok(result);
+    }
+
+    /// <summary>
     /// Updates the availability period / expiry deadline for a donation.
     /// Scenario 1: Set Availability Period.
     /// </summary>
