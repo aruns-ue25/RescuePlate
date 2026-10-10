@@ -30,6 +30,41 @@ export function AuthProvider({ children }) {
     }
   };
 
+  const adminLogin = async (email, password) => {
+    setLoading(true);
+    try {
+      const res = await authApi.adminLogin({ email, password });
+      if (res.success && res.data) {
+        return { success: true, message: res.message, data: res.data };
+      }
+      throw new Error(res.message || 'Admin authentication failed.');
+    } catch (err) {
+      const errorMsg = err.message || err.error || 'Admin login failed.';
+      throw new Error(errorMsg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const verifyAdminAccessKey = async (challengeToken, accessKey) => {
+    setLoading(true);
+    try {
+      const res = await authApi.verifyAccessKey({ challengeToken, accessKey });
+      if (res.success && res.data) {
+        localStorage.setItem('rescueplate_token', res.data.token);
+        localStorage.setItem('rescueplate_user', JSON.stringify(res.data));
+        setCurrentUser(res.data);
+        return { success: true, message: res.message || 'Administrator access granted!', user: res.data };
+      }
+      throw new Error(res.message || 'Invalid access key.');
+    } catch (err) {
+      const errorMsg = err.message || err.error || 'Access key verification failed.';
+      throw new Error(errorMsg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const register = async (registerData) => {
     setLoading(true);
     try {
@@ -138,7 +173,7 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ currentUser, login, register, logout, updateProfile, updateProfilePicture, removeProfilePicture, changePassword, deleteAccount, loading }}>
+    <AuthContext.Provider value={{ currentUser, login, adminLogin, verifyAdminAccessKey, register, logout, updateProfile, updateProfilePicture, removeProfilePicture, changePassword, deleteAccount, loading }}>
       {children}
     </AuthContext.Provider>
   );

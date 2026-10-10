@@ -114,6 +114,30 @@ export const authApi = {
     }
   },
 
+  adminLogin: async (loginData) => {
+    try {
+      const response = await api.post('/admin/login', loginData);
+      return response.data;
+    } catch (error) {
+      if (error.response?.data) {
+        throw error.response.data;
+      }
+      throw { message: error.message || 'Network Error', isNetworkError: !error.response };
+    }
+  },
+
+  verifyAccessKey: async (verifyData) => {
+    try {
+      const response = await api.post('/admin/verify-access-key', verifyData);
+      return response.data;
+    } catch (error) {
+      if (error.response?.data) {
+        throw error.response.data;
+      }
+      throw { message: error.message || 'Network Error', isNetworkError: !error.response };
+    }
+  },
+
   getAdminUsers: async () => {
     try {
       const response = await api.get('/admin/users');

@@ -19,6 +19,7 @@ import OrganizationDiscoveryPage from './pages/OrganizationDiscoveryPage';
 import ProfilePage from './pages/ProfilePage';
 import RequestsPage from './pages/RequestsPage';
 import FoodNeedsPage from './pages/FoodNeedsPage';
+import AdminLoginPage from './pages/AdminLoginPage';
 
 import './App.css';
 
@@ -36,6 +37,7 @@ export default function App() {
               {/* Public Pages */}
               <Route path="/" element={<HomePage />} />
               <Route path="/login" element={<LoginPage />} />
+              <Route path="/admin/login" element={<AdminLoginPage />} />
               <Route path="/register" element={<RegisterPage />} />
               <Route path="/about" element={<AboutPage />} />
               <Route path="/how-it-works" element={<HowItWorksPage />} />
