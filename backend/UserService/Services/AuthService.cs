@@ -144,6 +144,12 @@ public class AuthService : IAuthService
             return (false, "Your account has been deactivated by the system administrator.", null);
         }
 
+        // Prevent Administrator accounts from using standard user login (Fix 3)
+        if (user.Role == UserRole.ADMIN)
+        {
+            return (false, "Administrator accounts must authenticate via the Administrator Portal at /admin/login.", null);
+        }
+
         string businessName = user.Role switch
         {
             UserRole.DONOR => user.DonorProfile?.BusinessName ?? "Donor Business",

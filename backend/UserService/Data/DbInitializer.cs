@@ -46,13 +46,17 @@ public static class DbInitializer
                 logger.LogWarning(ex, "ProfilePictureUrl column check notice.");
             }
 
-            if (!db.Users.Any(u => u.Email == "admin@rescueplate.org"))
+            var config = scope.ServiceProvider.GetService<Microsoft.Extensions.Configuration.IConfiguration>();
+            var adminEmail = config?["AdminSettings:Email"] ?? "admin@rescueplate.org";
+            var initialPassword = config?["AdminSettings:InitialPassword"] ?? "Admin@123";
+
+            if (!db.Users.Any(u => u.Email.ToLower() == adminEmail.ToLower()))
             {
                 var adminUser = new User
                 {
                     Id = Guid.NewGuid(),
-                    Email = "admin@rescueplate.org",
-                    PasswordHash = BCrypt.Net.BCrypt.HashPassword("Admin@123", workFactor: 11),
+                    Email = adminEmail.Trim().ToLower(),
+                    PasswordHash = BCrypt.Net.BCrypt.HashPassword(initialPassword, workFactor: 11),
                     Role = UserRole.ADMIN,
                     IsActive = true,
                     CreatedAt = DateTime.UtcNow,
@@ -60,7 +64,7 @@ public static class DbInitializer
                 };
                 db.Users.Add(adminUser);
                 db.SaveChanges();
-                logger.LogInformation("Admin account seeded (admin@rescueplate.org / Admin@123).");
+                logger.LogInformation("Administrator account provisioned ({AdminEmail}).", adminEmail);
             }
         }
         catch (Exception ex)
