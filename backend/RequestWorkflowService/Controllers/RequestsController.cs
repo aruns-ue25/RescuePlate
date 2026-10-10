@@ -213,6 +213,7 @@ public class RequestsController : ControllerBase
     /// Admin monitoring endpoint exposing complete platform request activity metrics.
     /// </summary>
     [HttpGet("admin/summary")]
+    [Authorize(Roles = "ADMIN")]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetAdminRequestSummary()
     {

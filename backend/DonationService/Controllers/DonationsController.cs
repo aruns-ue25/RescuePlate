@@ -187,6 +187,7 @@ public class DonationsController : ControllerBase
     /// Admin monitoring endpoint exposing complete platform donation activity metrics.
     /// </summary>
     [HttpGet("admin/summary")]
+    [Authorize(Roles = "ADMIN")]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetAdminDonationSummary()
     {

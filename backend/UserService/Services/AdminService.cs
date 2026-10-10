@@ -24,6 +24,7 @@ public class AdminService : IAdminService
     private readonly IConfiguration _config;
     private readonly IMemoryCache _cache;
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly ILogger<AdminService> _logger;
 
     public AdminService(
@@ -32,6 +33,7 @@ public class AdminService : IAdminService
         IConfiguration config,
         IMemoryCache cache,
         IHttpClientFactory httpClientFactory,
+        IHttpContextAccessor httpContextAccessor,
         ILogger<AdminService> logger)
     {
         _db = db;
@@ -39,6 +41,7 @@ public class AdminService : IAdminService
         _config = config;
         _cache = cache;
         _httpClientFactory = httpClientFactory;
+        _httpContextAccessor = httpContextAccessor;
         _logger = logger;
     }
 
@@ -232,10 +235,16 @@ public class AdminService : IAdminService
             })
             .ToListAsync();
 
+        string? authHeader = _httpContextAccessor.HttpContext?.Request.Headers["Authorization"].ToString();
+
         object? donationData = null;
         try
         {
             var donationClient = _httpClientFactory.CreateClient("DonationService");
+            if (!string.IsNullOrEmpty(authHeader))
+            {
+                donationClient.DefaultRequestHeaders.TryAddWithoutValidation("Authorization", authHeader);
+            }
             var response = await donationClient.GetAsync("/api/donations/admin/summary");
             if (response.IsSuccessStatusCode)
             {
@@ -257,6 +266,10 @@ public class AdminService : IAdminService
         try
         {
             var requestClient = _httpClientFactory.CreateClient("RequestService");
+            if (!string.IsNullOrEmpty(authHeader))
+            {
+                requestClient.DefaultRequestHeaders.TryAddWithoutValidation("Authorization", authHeader);
+            }
             var response = await requestClient.GetAsync("/api/requests/admin/summary");
             if (response.IsSuccessStatusCode)
             {

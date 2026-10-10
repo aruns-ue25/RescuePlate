@@ -28,6 +28,7 @@ builder.Services.AddHealthChecks()
 
 // 2. Dependency Injection Services
 builder.Services.AddMemoryCache();
+builder.Services.AddHttpContextAccessor();
 builder.Services.AddHttpClient("DonationService", client =>
 {
     client.BaseAddress = new Uri(builder.Configuration["Services:DonationServiceUrl"] ?? "http://localhost:5001");

@@ -48,23 +48,30 @@ public static class DbInitializer
 
             var config = scope.ServiceProvider.GetService<Microsoft.Extensions.Configuration.IConfiguration>();
             var adminEmail = config?["AdminSettings:Email"] ?? "admin@rescueplate.org";
-            var initialPassword = config?["AdminSettings:InitialPassword"] ?? "Admin@123";
+            var initialPassword = config?["AdminSettings:InitialPassword"];
 
             if (!db.Users.Any(u => u.Email.ToLower() == adminEmail.ToLower()))
             {
-                var adminUser = new User
+                if (string.IsNullOrWhiteSpace(initialPassword))
                 {
-                    Id = Guid.NewGuid(),
-                    Email = adminEmail.Trim().ToLower(),
-                    PasswordHash = BCrypt.Net.BCrypt.HashPassword(initialPassword, workFactor: 11),
-                    Role = UserRole.ADMIN,
-                    IsActive = true,
-                    CreatedAt = DateTime.UtcNow,
-                    UpdatedAt = DateTime.UtcNow
-                };
-                db.Users.Add(adminUser);
-                db.SaveChanges();
-                logger.LogInformation("Administrator account provisioned ({AdminEmail}).", adminEmail);
+                    logger.LogWarning("AdminSettings:InitialPassword configuration is missing or empty. Skipping initial admin provisioning.");
+                }
+                else
+                {
+                    var adminUser = new User
+                    {
+                        Id = Guid.NewGuid(),
+                        Email = adminEmail.Trim().ToLower(),
+                        PasswordHash = BCrypt.Net.BCrypt.HashPassword(initialPassword, workFactor: 11),
+                        Role = UserRole.ADMIN,
+                        IsActive = true,
+                        CreatedAt = DateTime.UtcNow,
+                        UpdatedAt = DateTime.UtcNow
+                    };
+                    db.Users.Add(adminUser);
+                    db.SaveChanges();
+                    logger.LogInformation("Administrator account provisioned ({AdminEmail}).", adminEmail);
+                }
             }
         }
         catch (Exception ex)
