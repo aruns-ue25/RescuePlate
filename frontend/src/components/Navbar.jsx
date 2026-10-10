@@ -202,6 +202,11 @@ export default function Navbar() {
               </NavLink>
             </>
           )}
+          {currentUser?.role === 'ADMIN' && (
+            <NavLink to="/admin/dashboard" className={({ isActive }) => `nav-link ${isActive ? 'nav-link-active' : ''}`} style={{ color: '#ef4444', fontWeight: 800 }}>
+              🛡️ Admin Hub
+            </NavLink>
+          )}
           {!currentUser && (
             <>
               <NavLink to="/how-it-works" className={({ isActive }) => `nav-link ${isActive ? 'nav-link-active' : ''}`}>

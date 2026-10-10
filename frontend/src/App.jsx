@@ -4,6 +4,7 @@ import { AuthProvider } from './context/AuthContext';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import ProtectedRoute from './components/ProtectedRoute';
+import AdminProtectedRoute from './components/AdminProtectedRoute';
 
 // Dedicated Pages
 import HomePage from './pages/HomePage';
@@ -20,6 +21,7 @@ import ProfilePage from './pages/ProfilePage';
 import RequestsPage from './pages/RequestsPage';
 import FoodNeedsPage from './pages/FoodNeedsPage';
 import AdminLoginPage from './pages/AdminLoginPage';
+import AdminDashboardPage from './pages/AdminDashboardPage';
 
 import './App.css';
 
@@ -73,6 +75,16 @@ export default function App() {
                   <ProtectedRoute>
                     <FoodNeedsPage />
                   </ProtectedRoute>
+                }
+              />
+
+              {/* Protected Admin Console Portal */}
+              <Route
+                path="/admin/dashboard"
+                element={
+                  <AdminProtectedRoute>
+                    <AdminDashboardPage />
+                  </AdminProtectedRoute>
                 }
               />
 
