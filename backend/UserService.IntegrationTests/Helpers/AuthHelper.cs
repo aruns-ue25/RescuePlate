@@ -28,6 +28,11 @@ public static class AuthHelper
             new("IsActive", "True")
         };
 
+        if (role == "ADMIN")
+        {
+            claims.Add(new Claim("admin_verified", "true"));
+        }
+
         var token = new JwtSecurityToken(
             issuer: TestIssuer,
             audience: TestAudience,

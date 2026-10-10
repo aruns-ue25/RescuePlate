@@ -1,9 +1,12 @@
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Moq;
 using UserService.Controllers;
 using UserService.Data;
+using UserService.DTOs;
 using UserService.Models;
+using UserService.Services;
 using Xunit;
 
 namespace UserService.UnitTests.Controllers;
@@ -11,6 +14,7 @@ namespace UserService.UnitTests.Controllers;
 public class AdminControllerTests : IDisposable
 {
     private readonly RescuePlateDbContext _dbContext;
+    private readonly Mock<IAdminService> _adminServiceMock;
     private readonly AdminController _controller;
 
     public AdminControllerTests()
@@ -20,7 +24,8 @@ public class AdminControllerTests : IDisposable
             .Options;
 
         _dbContext = new RescuePlateDbContext(options);
-        _controller = new AdminController(_dbContext);
+        _adminServiceMock = new Mock<IAdminService>();
+        _controller = new AdminController(_dbContext, _adminServiceMock.Object);
     }
 
     public void Dispose()
@@ -91,7 +96,7 @@ public class AdminControllerTests : IDisposable
         _dbContext.Users.Add(user);
         await _dbContext.SaveChangesAsync();
 
-        var statusDto = new StatusUpdateDto { IsActive = false };
+        var statusDto = new UserStatusUpdateDto { IsActive = false };
 
         // Act
         var result = await _controller.ToggleUserStatus(user.Id, statusDto);
@@ -110,7 +115,7 @@ public class AdminControllerTests : IDisposable
     {
         // Arrange (TC-ADM-05)
         var nonExistentId = Guid.NewGuid();
-        var statusDto = new StatusUpdateDto { IsActive = false };
+        var statusDto = new UserStatusUpdateDto { IsActive = false };
 
         // Act
         var result = await _controller.ToggleUserStatus(nonExistentId, statusDto);
