@@ -185,6 +185,22 @@ public class AdminService : IAdminService
             return (false, "User not found.");
         }
 
+        // Prevent admin self-deactivation
+        if (user.Id == adminUserId && !isActive)
+        {
+            return (false, "You cannot deactivate your own administrator account.");
+        }
+
+        // Prevent deactivating the only active admin account
+        if (user.Role == UserRole.ADMIN && !isActive)
+        {
+            var activeAdminCount = await _db.Users.CountAsync(u => u.Role == UserRole.ADMIN && u.IsActive);
+            if (activeAdminCount <= 1)
+            {
+                return (false, "Cannot deactivate the only active system administrator account.");
+            }
+        }
+
         user.IsActive = isActive;
         user.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
@@ -220,7 +236,7 @@ public class AdminService : IAdminService
         try
         {
             var donationClient = _httpClientFactory.CreateClient("DonationService");
-            var response = await donationClient.GetAsync("/api/donations");
+            var response = await donationClient.GetAsync("/api/donations/admin/summary");
             if (response.IsSuccessStatusCode)
             {
                 var json = await response.Content.ReadFromJsonAsync<JsonElement>();
@@ -241,7 +257,7 @@ public class AdminService : IAdminService
         try
         {
             var requestClient = _httpClientFactory.CreateClient("RequestService");
-            var response = await requestClient.GetAsync("/api/requests/my-requests");
+            var response = await requestClient.GetAsync("/api/requests/admin/summary");
             if (response.IsSuccessStatusCode)
             {
                 var json = await response.Content.ReadFromJsonAsync<JsonElement>();
