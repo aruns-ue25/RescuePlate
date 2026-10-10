@@ -26,6 +26,12 @@ public class AuthService : IAuthService
 
     public async Task<(bool Success, string Message, AuthResponseDto? Data)> RegisterAsync(RegisterDto dto)
     {
+        // 0. Public Registration Guard - Rejects ADMIN role creation
+        if (dto.Role == UserRole.ADMIN)
+        {
+            return (false, "Cannot register as Administrator via public registration.", null);
+        }
+
         // 1. Unique Email Validation (SRS Acceptance Criteria)
         var normalizedEmail = dto.Email.Trim().ToLowerInvariant();
         var emailExists = await _db.Users.AnyAsync(u => u.Email.ToLower() == normalizedEmail);
