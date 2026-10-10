@@ -225,6 +225,11 @@ public class AuthService : IAuthService
             return (false, "User account not found.");
         }
 
+        if (user.Role == UserRole.ADMIN)
+        {
+            return (false, "Administrator accounts cannot be deleted.");
+        }
+
         bool isPasswordValid = BCrypt.Net.BCrypt.Verify(password, user.PasswordHash);
         if (!isPasswordValid)
         {

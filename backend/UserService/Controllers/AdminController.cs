@@ -113,7 +113,11 @@ public class AdminController : ControllerBase
         var (success, message) = await _adminService.UpdateUserStatusAsync(userId, dto.IsActive, adminGuid, adminEmail, clientIp);
         if (!success)
         {
-            return NotFound(new { success = false, message });
+            if (message.Contains("not found", StringComparison.OrdinalIgnoreCase))
+            {
+                return NotFound(new { success = false, message });
+            }
+            return BadRequest(new { success = false, message });
         }
 
         return Ok(new { success = true, message });
