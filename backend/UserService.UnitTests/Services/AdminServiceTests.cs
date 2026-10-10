@@ -1,4 +1,8 @@
+using System.Net;
+using System.Security.Claims;
+using System.Text.Json;
 using FluentAssertions;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
@@ -18,6 +22,8 @@ public class AdminServiceTests : IDisposable
     private readonly Mock<ITokenService> _tokenServiceMock;
     private readonly IConfiguration _configuration;
     private readonly IMemoryCache _memoryCache;
+    private readonly Mock<IHttpClientFactory> _httpClientFactoryMock;
+    private readonly Mock<IHttpContextAccessor> _httpContextAccessorMock;
     private readonly Mock<ILogger<AdminService>> _loggerMock;
     private readonly AdminService _adminService;
 
@@ -30,6 +36,8 @@ public class AdminServiceTests : IDisposable
         _dbContext = new RescuePlateDbContext(options);
         _tokenServiceMock = new Mock<ITokenService>();
         _memoryCache = new MemoryCache(new MemoryCacheOptions());
+        _httpClientFactoryMock = new Mock<IHttpClientFactory>();
+        _httpContextAccessorMock = new Mock<IHttpContextAccessor>();
         _loggerMock = new Mock<ILogger<AdminService>>();
 
         var configValues = new Dictionary<string, string?>
@@ -53,6 +61,8 @@ public class AdminServiceTests : IDisposable
             _tokenServiceMock.Object,
             _configuration,
             _memoryCache,
+            _httpClientFactoryMock.Object,
+            _httpContextAccessorMock.Object,
             _loggerMock.Object);
     }
 
@@ -64,9 +74,9 @@ public class AdminServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task AdminLoginAsync_ValidAdminCredentials_ReturnsChallengeToken()
+    public async Task AdminLoginAsync_ValidAdminCredentials_ReturnsChallengeTokenNoFullJwt()
     {
-        // Arrange (Story 1 — Scenario 1)
+        // Arrange (A2)
         var password = "Admin@123";
         var adminUser = new User
         {
@@ -104,7 +114,7 @@ public class AdminServiceTests : IDisposable
     [Fact]
     public async Task AdminLoginAsync_InvalidPassword_ReturnsFailure()
     {
-        // Arrange (Story 1 — Scenario 2)
+        // Arrange (A3)
         var adminUser = new User
         {
             Id = Guid.NewGuid(),
@@ -134,7 +144,7 @@ public class AdminServiceTests : IDisposable
     [Fact]
     public async Task AdminLoginAsync_InactiveAdmin_ReturnsRejection()
     {
-        // Arrange (Story 1 — Scenario 3)
+        // Arrange (A3)
         var password = "AdminPassword123!";
         var inactiveAdmin = new User
         {
@@ -161,7 +171,7 @@ public class AdminServiceTests : IDisposable
     [Fact]
     public async Task AdminLoginAsync_NonAdminUser_ReturnsAccessDenied()
     {
-        // Arrange (Story 1 — Scenario 4)
+        // Arrange (A3)
         var password = "DonorPassword123!";
         var donorUser = new User
         {
@@ -188,7 +198,7 @@ public class AdminServiceTests : IDisposable
     [Fact]
     public async Task VerifyAccessKeyAsync_ValidKey_ReturnsVerifiedAdminJwt()
     {
-        // Arrange (Story 2 — Scenario 1)
+        // Arrange (A4)
         var adminUser = new User
         {
             Id = Guid.NewGuid(),
@@ -202,12 +212,12 @@ public class AdminServiceTests : IDisposable
 
         var challengeToken = "valid-challenge-token-xyz";
 
-        var claimsPrincipal = new System.Security.Claims.ClaimsPrincipal(
-            new System.Security.Claims.ClaimsIdentity(new[]
+        var claimsPrincipal = new ClaimsPrincipal(
+            new ClaimsIdentity(new[]
             {
-                new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.NameIdentifier, adminUser.Id.ToString()),
-                new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Email, adminUser.Email),
-                new System.Security.Claims.Claim("purpose", "admin_access_key_challenge")
+                new Claim(ClaimTypes.NameIdentifier, adminUser.Id.ToString()),
+                new Claim(ClaimTypes.Email, adminUser.Email),
+                new Claim("purpose", "admin_access_key_challenge")
             })
         );
 
@@ -242,7 +252,7 @@ public class AdminServiceTests : IDisposable
     [Fact]
     public async Task VerifyAccessKeyAsync_InvalidKey_FailsAndIncrementsCount()
     {
-        // Arrange (Story 2 — Scenario 2)
+        // Arrange (A4)
         var adminUser = new User
         {
             Id = Guid.NewGuid(),
@@ -256,12 +266,12 @@ public class AdminServiceTests : IDisposable
 
         var challengeToken = "valid-challenge-token-xyz";
 
-        var claimsPrincipal = new System.Security.Claims.ClaimsPrincipal(
-            new System.Security.Claims.ClaimsIdentity(new[]
+        var claimsPrincipal = new ClaimsPrincipal(
+            new ClaimsIdentity(new[]
             {
-                new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.NameIdentifier, adminUser.Id.ToString()),
-                new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Email, adminUser.Email),
-                new System.Security.Claims.Claim("purpose", "admin_access_key_challenge")
+                new Claim(ClaimTypes.NameIdentifier, adminUser.Id.ToString()),
+                new Claim(ClaimTypes.Email, adminUser.Email),
+                new Claim("purpose", "admin_access_key_challenge")
             })
         );
 
@@ -288,9 +298,32 @@ public class AdminServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task VerifyAccessKeyAsync_ExpiredChallenge_ReturnsFailure()
+    {
+        // Arrange (A4)
+        _tokenServiceMock
+            .Setup(t => t.ValidateChallengeToken("expired-challenge"))
+            .Returns((ClaimsPrincipal?)null);
+
+        var dto = new VerifyAccessKeyDto
+        {
+            ChallengeToken = "expired-challenge",
+            AccessKey = "ADMIN-SECURE-KEY-2026"
+        };
+
+        // Act
+        var (success, message, data) = await _adminService.VerifyAccessKeyAsync(dto, "127.0.0.1");
+
+        // Assert
+        success.Should().BeFalse();
+        message.Should().Contain("Invalid or expired pre-authentication challenge");
+        data.Should().BeNull();
+    }
+
+    [Fact]
     public async Task VerifyAccessKeyAsync_5FailedAttempts_LocksOutAccountAndIP()
     {
-        // Arrange (Global Rate Limiting across challenges)
+        // Arrange (A5)
         var adminUser = new User
         {
             Id = Guid.NewGuid(),
@@ -304,12 +337,12 @@ public class AdminServiceTests : IDisposable
 
         var challengeToken = "challenge-token-for-bruteforce";
 
-        var claimsPrincipal = new System.Security.Claims.ClaimsPrincipal(
-            new System.Security.Claims.ClaimsIdentity(new[]
+        var claimsPrincipal = new ClaimsPrincipal(
+            new ClaimsIdentity(new[]
             {
-                new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.NameIdentifier, adminUser.Id.ToString()),
-                new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Email, adminUser.Email),
-                new System.Security.Claims.Claim("purpose", "admin_access_key_challenge")
+                new Claim(ClaimTypes.NameIdentifier, adminUser.Id.ToString()),
+                new Claim(ClaimTypes.Email, adminUser.Email),
+                new Claim("purpose", "admin_access_key_challenge")
             })
         );
 
@@ -339,5 +372,61 @@ public class AdminServiceTests : IDisposable
 
         var lockoutAudit = await _dbContext.AdminActivityLogs.FirstOrDefaultAsync(a => a.Action == "ACCESS_KEY_LOCKOUT");
         lockoutAudit.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task GetMonitoringOverviewAsync_DownstreamServiceUnavailable_DegradesGracefully()
+    {
+        // Arrange (A10)
+        _dbContext.Users.Add(new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "donor1@test.com",
+            Role = UserRole.DONOR,
+            IsActive = true
+        });
+        await _dbContext.SaveChangesAsync();
+
+        _httpClientFactoryMock
+            .Setup(f => f.CreateClient(It.IsAny<string>()))
+            .Throws(new HttpRequestException("Connection refused"));
+
+        // Act
+        var (success, message, data) = await _adminService.GetMonitoringOverviewAsync("127.0.0.1");
+
+        // Assert
+        success.Should().BeTrue();
+        data.Should().NotBeNull();
+        data!.TotalUsers.Should().Be(1);
+        data.ActiveDonors.Should().Be(1);
+        data.DonationSummary.Should().NotBeNull();
+        data.RequestSummary.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task GetActivityLogsAsync_SanitizesSensitiveInfo()
+    {
+        // Arrange (A11)
+        _dbContext.AdminActivityLogs.Add(new AdminActivityLog
+        {
+            Id = Guid.NewGuid(),
+            Action = "ADMIN_LOGIN_SUCCESS",
+            PerformedByEmail = "admin@rescueplate.org",
+            ClientIp = "127.0.0.1",
+            Details = "Step 1 admin credential authentication succeeded.",
+            Timestamp = DateTime.UtcNow
+        });
+        await _dbContext.SaveChangesAsync();
+
+        // Act
+        var (success, message, data) = await _adminService.GetActivityLogsAsync(1, 10);
+
+        // Assert
+        success.Should().BeTrue();
+        data.Should().HaveCount(1);
+        var log = data.First();
+        log.Details.Should().NotContain("Password");
+        log.Details.Should().NotContain("ADMIN-SECURE-KEY");
+        log.Details.Should().NotContain("Bearer");
     }
 }

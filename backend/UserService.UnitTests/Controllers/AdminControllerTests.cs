@@ -1,4 +1,6 @@
+using System.Security.Claims;
 using FluentAssertions;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Moq;
@@ -26,6 +28,25 @@ public class AdminControllerTests : IDisposable
         _dbContext = new RescuePlateDbContext(options);
         _adminServiceMock = new Mock<IAdminService>();
         _controller = new AdminController(_dbContext, _adminServiceMock.Object);
+
+        SetUserContext(Guid.NewGuid());
+    }
+
+    private void SetUserContext(Guid userId, string email = "admin@rescueplate.org", string role = "ADMIN")
+    {
+        var claims = new List<Claim>
+        {
+            new(ClaimTypes.NameIdentifier, userId.ToString()),
+            new(ClaimTypes.Email, email),
+            new(ClaimTypes.Role, role)
+        };
+        var identity = new ClaimsIdentity(claims, "TestAuth");
+        var claimsPrincipal = new ClaimsPrincipal(identity);
+
+        _controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext { User = claimsPrincipal }
+        };
     }
 
     public void Dispose()
@@ -35,13 +56,14 @@ public class AdminControllerTests : IDisposable
     }
 
     [Fact]
-    public async Task GetAllUsers_ReturnsAllRegisteredUsersWithProfiles()
+    public async Task GetAllUsers_ReturnsAllRegisteredUsersExcludingPasswordHashes()
     {
-        // Arrange (TC-ADM-01)
+        // Arrange (A8)
         var donorUser = new User
         {
             Id = Guid.NewGuid(),
             Email = "donor@restaurant.com",
+            PasswordHash = "SuperSecretPasswordHash",
             Role = UserRole.DONOR,
             IsActive = true
         };
@@ -53,24 +75,8 @@ public class AdminControllerTests : IDisposable
             Address = "100 Ave"
         };
 
-        var orgUser = new User
-        {
-            Id = Guid.NewGuid(),
-            Email = "charity@shelter.org",
-            Role = UserRole.ORGANIZATION,
-            IsActive = true
-        };
-        var orgProfile = new OrganizationProfile
-        {
-            Id = Guid.NewGuid(),
-            UserId = orgUser.Id,
-            OrganizationName = "Hope Mission",
-            Address = "200 St"
-        };
-
-        _dbContext.Users.AddRange(donorUser, orgUser);
+        _dbContext.Users.Add(donorUser);
         _dbContext.DonorProfiles.Add(donorProfile);
-        _dbContext.OrganizationProfiles.Add(orgProfile);
         await _dbContext.SaveChangesAsync();
 
         // Act
@@ -80,12 +86,16 @@ public class AdminControllerTests : IDisposable
         var okResult = result as OkObjectResult;
         okResult.Should().NotBeNull();
         okResult!.StatusCode.Should().Be(200);
+
+        var json = System.Text.Json.JsonSerializer.Serialize(okResult.Value);
+        json.Should().NotContain("PasswordHash");
+        json.Should().NotContain("SuperSecretPasswordHash");
     }
 
     [Fact]
     public async Task ToggleUserStatus_ExistingUser_UpdatesActiveStatus()
     {
-        // Arrange (TC-ADM-04)
+        // Arrange (A8)
         var user = new User
         {
             Id = Guid.NewGuid(),
@@ -96,6 +106,10 @@ public class AdminControllerTests : IDisposable
         _dbContext.Users.Add(user);
         await _dbContext.SaveChangesAsync();
 
+        _adminServiceMock
+            .Setup(s => s.UpdateUserStatusAsync(user.Id, false, It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>()))
+            .ReturnsAsync((true, "User account has been deactivated."));
+
         var statusDto = new UserStatusUpdateDto { IsActive = false };
 
         // Act
@@ -105,17 +119,47 @@ public class AdminControllerTests : IDisposable
         var okResult = result as OkObjectResult;
         okResult.Should().NotBeNull();
         okResult!.StatusCode.Should().Be(200);
+    }
 
-        var updatedUser = await _dbContext.Users.FindAsync(user.Id);
-        updatedUser!.IsActive.Should().BeFalse();
+    [Fact]
+    public async Task ToggleUserStatus_AdminUser_ReturnsBadRequest()
+    {
+        // Arrange (A9)
+        var adminUser = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "admin@rescueplate.org",
+            Role = UserRole.ADMIN,
+            IsActive = true
+        };
+        _dbContext.Users.Add(adminUser);
+        await _dbContext.SaveChangesAsync();
+
+        _adminServiceMock
+            .Setup(s => s.UpdateUserStatusAsync(adminUser.Id, false, It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>()))
+            .ReturnsAsync((false, "Administrator account status cannot be modified."));
+
+        var statusDto = new UserStatusUpdateDto { IsActive = false };
+
+        // Act
+        var result = await _controller.ToggleUserStatus(adminUser.Id, statusDto);
+
+        // Assert
+        var badRequestResult = result as BadRequestObjectResult;
+        badRequestResult.Should().NotBeNull();
+        badRequestResult!.StatusCode.Should().Be(400);
     }
 
     [Fact]
     public async Task ToggleUserStatus_NonExistentUser_Returns404NotFound()
     {
-        // Arrange (TC-ADM-05)
+        // Arrange (A8)
         var nonExistentId = Guid.NewGuid();
         var statusDto = new UserStatusUpdateDto { IsActive = false };
+
+        _adminServiceMock
+            .Setup(s => s.UpdateUserStatusAsync(nonExistentId, false, It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>()))
+            .ReturnsAsync((false, "User not found."));
 
         // Act
         var result = await _controller.ToggleUserStatus(nonExistentId, statusDto);

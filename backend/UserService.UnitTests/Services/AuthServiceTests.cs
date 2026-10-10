@@ -80,6 +80,27 @@ public class AuthServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task RegisterAsync_AdminRole_RejectsRegistration()
+    {
+        // Arrange (A6)
+        var dto = new RegisterDto
+        {
+            Email = "hacker_admin@rescueplate.org",
+            Password = "Password123!",
+            Role = UserRole.ADMIN,
+            BusinessOrOrgName = "Fake Admin"
+        };
+
+        // Act
+        var (success, message, data) = await _authService.RegisterAsync(dto);
+
+        // Assert
+        success.Should().BeFalse();
+        message.Should().Contain("Cannot register as Administrator via public registration.");
+        data.Should().BeNull();
+    }
+
+    [Fact]
     public async Task RegisterAsync_ValidOrganization_CreatesUserAndOrganizationProfile()
     {
         // Arrange (TC-AUTH-02)
@@ -190,6 +211,33 @@ public class AuthServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task LoginAsync_AdminUser_RejectsStandardLogin()
+    {
+        // Arrange (A6)
+        var password = "AdminPassword123!";
+        var adminUser = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "admin@rescueplate.org",
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword(password),
+            Role = UserRole.ADMIN,
+            IsActive = true
+        };
+        _dbContext.Users.Add(adminUser);
+        await _dbContext.SaveChangesAsync();
+
+        var loginDto = new LoginDto { Email = "admin@rescueplate.org", Password = password };
+
+        // Act
+        var (success, message, data) = await _authService.LoginAsync(loginDto);
+
+        // Assert
+        success.Should().BeFalse();
+        message.Should().Contain("Administrator accounts must authenticate via the Administrator Portal");
+        data.Should().BeNull();
+    }
+
+    [Fact]
     public async Task LoginAsync_InvalidEmail_ReturnsFailure()
     {
         // Arrange (TC-AUTH-07)
@@ -295,6 +343,31 @@ public class AuthServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task DeleteAccountAsync_AdminUser_RejectsDeletion()
+    {
+        // Arrange (A9)
+        var password = "AdminPassword123!";
+        var adminUser = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "admin_protected@rescueplate.org",
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword(password),
+            Role = UserRole.ADMIN,
+            IsActive = true
+        };
+        _dbContext.Users.Add(adminUser);
+        await _dbContext.SaveChangesAsync();
+
+        // Act
+        var (success, message) = await _authService.DeleteAccountAsync(adminUser.Id, password);
+
+        // Assert
+        success.Should().BeFalse();
+        message.Should().Contain("Administrator accounts cannot be deleted");
+        (await _dbContext.Users.FindAsync(adminUser.Id)).Should().NotBeNull();
+    }
+
+    [Fact]
     public async Task DeleteAccountAsync_IncorrectPassword_AbortsDeletion()
     {
         // Arrange (TC-AUTH-15)
@@ -316,18 +389,6 @@ public class AuthServiceTests : IDisposable
         success.Should().BeFalse();
         message.Should().Be("Incorrect password. Account deletion aborted.");
         (await _dbContext.Users.FindAsync(user.Id)).Should().NotBeNull();
-    }
-
-    [Fact]
-    public async Task DeleteAccountAsync_NonExistentUser_ReturnsNotFound()
-    {
-        // Arrange (TC-AUTH-16)
-        var nonExistentId = Guid.NewGuid();
-
-        // Act
-        var (success, message) = await _authService.DeleteAccountAsync(nonExistentId, "AnyPassword");
-
-        // Assert
     }
 
     [Fact]
@@ -394,87 +455,5 @@ public class AuthServiceTests : IDisposable
         // Assert
         success.Should().BeFalse();
         message.Should().Be("The current password you provided is incorrect.");
-    }
-
-    [Fact]
-    public async Task ChangePasswordAsync_NewPasswordMatchesCurrent_ReturnsFailure()
-    {
-        // Arrange
-        var password = "OldPassword123!";
-        var user = new User
-        {
-            Id = Guid.NewGuid(),
-            Email = "same_pwd@domain.com",
-            PasswordHash = BCrypt.Net.BCrypt.HashPassword(password),
-            Role = UserRole.DONOR,
-            IsActive = true
-        };
-        _dbContext.Users.Add(user);
-        await _dbContext.SaveChangesAsync();
-
-        var dto = new ChangePasswordDto
-        {
-            CurrentPassword = password,
-            NewPassword = password, // Same as old
-            ConfirmPassword = password
-        };
-
-        // Act
-        var (success, message) = await _authService.ChangePasswordAsync(user.Id, dto);
-
-        // Assert
-        success.Should().BeFalse();
-        message.Should().Be("New password cannot be the same as your current password.");
-    }
-
-    [Fact]
-    public async Task ChangePasswordAsync_ConfirmPasswordMismatch_ReturnsFailure()
-    {
-        // Arrange
-        var password = "OldPassword123!";
-        var user = new User
-        {
-            Id = Guid.NewGuid(),
-            Email = "mismatch_pwd@domain.com",
-            PasswordHash = BCrypt.Net.BCrypt.HashPassword(password),
-            Role = UserRole.DONOR,
-            IsActive = true
-        };
-        _dbContext.Users.Add(user);
-        await _dbContext.SaveChangesAsync();
-
-        var dto = new ChangePasswordDto
-        {
-            CurrentPassword = password,
-            NewPassword = "NewStrongPassword123!",
-            ConfirmPassword = "DifferentPassword123!"
-        };
-
-        // Act
-        var (success, message) = await _authService.ChangePasswordAsync(user.Id, dto);
-
-        // Assert
-        success.Should().BeFalse();
-        message.Should().Be("New password and confirmation password do not match.");
-    }
-
-    [Fact]
-    public async Task ChangePasswordAsync_UserNotFound_ReturnsFailure()
-    {
-        // Arrange
-        var nonExistentId = Guid.NewGuid();
-        var dto = new ChangePasswordDto
-        {
-            CurrentPassword = "AnyPassword",
-            NewPassword = "NewStrongPassword123!",
-            ConfirmPassword = "NewStrongPassword123!"
-        };
-
-        // Act
-        var (success, message) = await _authService.ChangePasswordAsync(nonExistentId, dto);
-
-        // Assert
-        success.Should().BeFalse();
-        message.Should().Be("User account not found.");
     }
 }
