@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -104,21 +105,27 @@ public class AdminController : ControllerBase
     [Authorize(Policy = "VerifiedAdminOnly")]
     public async Task<IActionResult> ToggleUserStatus(Guid userId, [FromBody] UserStatusUpdateDto dto)
     {
-        var user = await _db.Users.FindAsync(userId);
-        if (user == null)
+        var adminIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var adminEmail = User.FindFirst(ClaimTypes.Email)?.Value ?? "admin@rescueplate.org";
+        var adminGuid = Guid.TryParse(adminIdClaim, out var g) ? g : Guid.Empty;
+        var clientIp = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
+
+        var (success, message) = await _adminService.UpdateUserStatusAsync(userId, dto.IsActive, adminGuid, adminEmail, clientIp);
+        if (!success)
         {
-            return NotFound(new { success = false, message = "User not found." });
+            return NotFound(new { success = false, message });
         }
 
-        user.IsActive = dto.IsActive;
-        user.UpdatedAt = DateTime.UtcNow;
-        await _db.SaveChangesAsync();
+        return Ok(new { success = true, message });
+    }
 
-        return Ok(new
-        {
-            success = true,
-            message = $"User account has been {(user.IsActive ? "activated" : "deactivated")}."
-        });
+    [HttpGet("monitoring/overview")]
+    [Authorize(Policy = "VerifiedAdminOnly")]
+    public async Task<IActionResult> GetMonitoringOverview()
+    {
+        var clientIp = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
+        var (success, message, data) = await _adminService.GetMonitoringOverviewAsync(clientIp);
+        return Ok(new { success = true, message, data });
     }
 
     [HttpGet("monitoring/activity")]
