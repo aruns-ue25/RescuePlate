@@ -1,3 +1,5 @@
+using System.Net.Http.Json;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using UserService.Data;
@@ -10,6 +12,8 @@ public interface IAdminService
 {
     Task<(bool Success, string Message, AdminPreAuthResponseDto? Data)> AdminLoginAsync(LoginDto dto, string clientIp);
     Task<(bool Success, string Message, AuthResponseDto? Data)> VerifyAccessKeyAsync(VerifyAccessKeyDto dto, string clientIp);
+    Task<(bool Success, string Message)> UpdateUserStatusAsync(Guid userId, bool isActive, Guid adminUserId, string adminEmail, string clientIp);
+    Task<(bool Success, string Message, MonitoringOverviewDto? Data)> GetMonitoringOverviewAsync(string clientIp);
     Task<(bool Success, string Message, List<ActivityLogDto> Data)> GetActivityLogsAsync(int page = 1, int pageSize = 50);
 }
 
@@ -19,6 +23,7 @@ public class AdminService : IAdminService
     private readonly ITokenService _tokenService;
     private readonly IConfiguration _config;
     private readonly IMemoryCache _cache;
+    private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<AdminService> _logger;
 
     public AdminService(
@@ -26,12 +31,14 @@ public class AdminService : IAdminService
         ITokenService tokenService,
         IConfiguration config,
         IMemoryCache cache,
+        IHttpClientFactory httpClientFactory,
         ILogger<AdminService> logger)
     {
         _db = db;
         _tokenService = tokenService;
         _config = config;
         _cache = cache;
+        _httpClientFactory = httpClientFactory;
         _logger = logger;
     }
 
@@ -168,6 +175,100 @@ public class AdminService : IAdminService
         };
 
         return (true, "Administrator access verified successfully!", responseData);
+    }
+
+    public async Task<(bool Success, string Message)> UpdateUserStatusAsync(Guid userId, bool isActive, Guid adminUserId, string adminEmail, string clientIp)
+    {
+        var user = await _db.Users.FindAsync(userId);
+        if (user == null)
+        {
+            return (false, "User not found.");
+        }
+
+        user.IsActive = isActive;
+        user.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+
+        string action = isActive ? "USER_REACTIVATED" : "USER_DEACTIVATED";
+        string details = $"User account '{user.Email}' status updated to {(isActive ? "ACTIVE" : "INACTIVE")}.";
+        await LogActivityAsync(action, adminUserId, adminEmail, user.Id, clientIp, details);
+
+        return (true, $"User account has been {(isActive ? "activated" : "deactivated")}.");
+    }
+
+    public async Task<(bool Success, string Message, MonitoringOverviewDto? Data)> GetMonitoringOverviewAsync(string clientIp)
+    {
+        var totalUsers = await _db.Users.CountAsync();
+        var activeDonors = await _db.Users.CountAsync(u => u.Role == UserRole.DONOR && u.IsActive);
+        var activeOrgs = await _db.Users.CountAsync(u => u.Role == UserRole.ORGANIZATION && u.IsActive);
+
+        var recentLogs = await _db.AdminActivityLogs
+            .OrderByDescending(l => l.Timestamp)
+            .Take(15)
+            .Select(l => new ActivityLogDto
+            {
+                Id = l.Id,
+                Action = l.Action,
+                PerformedByEmail = l.PerformedByEmail,
+                ClientIp = l.ClientIp,
+                Details = l.Details,
+                Timestamp = l.Timestamp
+            })
+            .ToListAsync();
+
+        object? donationData = null;
+        try
+        {
+            var donationClient = _httpClientFactory.CreateClient("DonationService");
+            var response = await donationClient.GetAsync("/api/donations");
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadFromJsonAsync<JsonElement>();
+                donationData = json;
+            }
+            else
+            {
+                donationData = new { status = "UNAVAILABLE", statusCode = (int)response.StatusCode };
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not fetch donation statistics from DonationService");
+            donationData = new { status = "UNAVAILABLE", error = ex.Message };
+        }
+
+        object? requestData = null;
+        try
+        {
+            var requestClient = _httpClientFactory.CreateClient("RequestService");
+            var response = await requestClient.GetAsync("/api/requests/my-requests");
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadFromJsonAsync<JsonElement>();
+                requestData = json;
+            }
+            else
+            {
+                requestData = new { status = "UNAVAILABLE", statusCode = (int)response.StatusCode };
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not fetch request statistics from RequestWorkflowService");
+            requestData = new { status = "UNAVAILABLE", error = ex.Message };
+        }
+
+        var overview = new MonitoringOverviewDto
+        {
+            TotalUsers = totalUsers,
+            ActiveDonors = activeDonors,
+            ActiveOrganizations = activeOrgs,
+            DonationSummary = donationData,
+            RequestSummary = requestData,
+            RecentActivities = recentLogs
+        };
+
+        return (true, "Platform monitoring overview retrieved successfully.", overview);
     }
 
     public async Task<(bool Success, string Message, List<ActivityLogDto> Data)> GetActivityLogsAsync(int page = 1, int pageSize = 50)

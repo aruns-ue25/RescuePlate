@@ -28,6 +28,16 @@ builder.Services.AddHealthChecks()
 
 // 2. Dependency Injection Services
 builder.Services.AddMemoryCache();
+builder.Services.AddHttpClient("DonationService", client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["Services:DonationServiceUrl"] ?? "http://localhost:5001");
+    client.Timeout = TimeSpan.FromSeconds(5);
+});
+builder.Services.AddHttpClient("RequestService", client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["Services:RequestServiceUrl"] ?? "http://localhost:5002");
+    client.Timeout = TimeSpan.FromSeconds(5);
+});
 builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IProfileService, ProfileService>();
