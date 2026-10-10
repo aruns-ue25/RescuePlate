@@ -154,6 +154,24 @@ export const authApi = {
     } catch (error) {
       throw error.response?.data || { message: 'Failed to update status' };
     }
+  },
+
+  getAdminMonitoringOverview: async () => {
+    try {
+      const response = await api.get('/admin/monitoring/overview');
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { message: 'Failed to fetch monitoring overview' };
+    }
+  },
+
+  getAdminActivityLogs: async (page = 1) => {
+    try {
+      const response = await api.get('/admin/monitoring/activity', { params: { page } });
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { message: 'Failed to fetch activity logs' };
+    }
   }
 };
 
