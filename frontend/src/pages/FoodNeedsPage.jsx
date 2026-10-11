@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { needRequestApi } from '../services/api';
+import { needRequestApi, deliveryApi } from '../services/api';
 import { 
   HeartHandshake, 
   PlusCircle, 
@@ -22,7 +22,12 @@ import {
   ChevronRight,
   X,
   MessageSquare,
-  HelpingHand
+  HelpingHand,
+  Truck,
+  PackageCheck,
+  ShieldCheck,
+  History,
+  Check
 } from 'lucide-react';
 
 export default function FoodNeedsPage() {
@@ -92,6 +97,43 @@ export default function FoodNeedsPage() {
   // My Submitted Offers State (Donor)
   const [myOffers, setMyOffers] = useState([]);
   const [myOffersLoading, setMyOffersLoading] = useState(false);
+  const [offerStatusFilter, setOfferStatusFilter] = useState('ALL');
+
+  // Delivery Workflow States (Task 4 & 5)
+  const [deliveriesMap, setDeliveriesMap] = useState({});
+  const [arrangeModalOpen, setArrangeModalOpen] = useState(false);
+  const [arrangeTargetOffer, setArrangeTargetOffer] = useState(null);
+  const [arrangeForm, setArrangeForm] = useState({
+    pickupAddress: '',
+    deliveryAddress: '',
+    contactName: '',
+    contactPhone: '',
+    scheduledCollectionTime: '',
+    notes: ''
+  });
+  const [notesModalOpen, setNotesModalOpen] = useState(false);
+  const [notesTargetAction, setNotesTargetAction] = useState(null);
+  const [actionNotes, setActionNotes] = useState('');
+  const [trackingModalOpen, setTrackingModalOpen] = useState(false);
+  const [activeTracking, setActiveTracking] = useState(null);
+
+  const fetchDeliveriesForOffers = async (offers) => {
+    if (!offers || offers.length === 0) return;
+    const accepted = offers.filter(o => o.status === 'ACCEPTED' || o.status === 'COMPLETED');
+    if (accepted.length === 0) return;
+    const map = {};
+    await Promise.all(accepted.map(async (o) => {
+      try {
+        const d = await deliveryApi.getTrackingByRequestId(o.id);
+        if (d && d.data) {
+          map[o.id] = d.data;
+        }
+      } catch (err) {
+        // No delivery arrangement yet
+      }
+    }));
+    setDeliveriesMap(prev => ({ ...prev, ...map }));
+  };
 
   const categories = ['ALL', 'Cooked Meals', 'Bakery', 'Fresh Produce', 'Dairy & Chilled', 'Packaged Dry', 'General'];
 
@@ -100,16 +142,20 @@ export default function FoodNeedsPage() {
       fetchMyNeedRequests();
     } else if (activeTab === 'browse-needs') {
       fetchActiveNeedRequests();
-    } else if (activeTab === 'my-offers' && isDonor) {
-      fetchMySubmittedOffers();
     }
   }, [activeTab, categoryFilter, statusFilter, currentUser]);
 
   useEffect(() => {
-    if (isCreateModalOpen || editingNeed || viewOffersNeed || targetOfferNeed || rejectAllOffersModalOpen) {
+    if (activeTab === 'my-offers' && isDonor) {
+      fetchMySubmittedOffers();
+    }
+  }, [activeTab, offerStatusFilter, currentUser]);
+
+  useEffect(() => {
+    if (isCreateModalOpen || editingNeed || viewOffersNeed || targetOfferNeed || rejectAllOffersModalOpen || arrangeModalOpen || notesModalOpen || trackingModalOpen) {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
-  }, [isCreateModalOpen, editingNeed, viewOffersNeed, targetOfferNeed, rejectAllOffersModalOpen]);
+  }, [isCreateModalOpen, editingNeed, viewOffersNeed, targetOfferNeed, rejectAllOffersModalOpen, arrangeModalOpen, notesModalOpen, trackingModalOpen]);
 
   useEffect(() => {
     document.body.style.overflow = 'unset';
@@ -162,9 +208,10 @@ export default function FoodNeedsPage() {
     setMyOffersLoading(true);
     setError(null);
     try {
-      const res = await needRequestApi.getMySubmittedOffers({ status: statusFilter });
+      const res = await needRequestApi.getMySubmittedOffers({ status: offerStatusFilter });
       if (res && res.data) {
         setMyOffers(res.data);
+        fetchDeliveriesForOffers(res.data);
       } else {
         setMyOffers([]);
       }
@@ -300,6 +347,7 @@ export default function FoodNeedsPage() {
       const res = await needRequestApi.getOffersForNeedRequest(need.id);
       if (res && res.data) {
         setOffersList(res.data);
+        fetchDeliveriesForOffers(res.data);
       } else {
         setOffersList([]);
       }
@@ -429,6 +477,175 @@ export default function FoodNeedsPage() {
       setOfferError(err.message || err.errors?.[0] || 'Error submitting food offer.');
     } finally {
       setOfferSubmitting(false);
+    }
+  };
+
+  // --- Delivery Workflow Handlers (Task 4 & 5) ---
+  const openArrangeModal = (offer) => {
+    setArrangeTargetOffer(offer);
+    const defaultTime = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString().slice(0, 16);
+    const defaultDonorAddr = currentUser?.address || currentUser?.location || '';
+    const defaultOrgAddr = (viewOffersNeed?.location) || currentUser?.address || currentUser?.location || '';
+    setArrangeForm({
+      pickupAddress: isDonor ? defaultDonorAddr : '',
+      deliveryAddress: !isDonor ? defaultOrgAddr : '',
+      contactName: currentUser?.businessName || currentUser?.name || currentUser?.contactName || '',
+      contactPhone: currentUser?.phone || currentUser?.phoneNumber || '',
+      scheduledCollectionTime: defaultTime,
+      notes: ''
+    });
+    setArrangeModalOpen(true);
+  };
+
+  const handleConfirmArrange = async (e) => {
+    e.preventDefault();
+    if (!arrangeTargetOffer) return;
+
+    const fallbackDonorLocation = currentUser?.location || currentUser?.address || (currentUser?.businessName ? `${currentUser.businessName} Facility` : 'Donor Facility');
+    const fallbackOrgLocation = (viewOffersNeed?.location) || currentUser?.location || currentUser?.address || (currentUser?.businessName ? `${currentUser.businessName} Facility` : 'Organization Facility');
+
+    const pickup = isDonor 
+      ? (arrangeForm.pickupAddress.trim() || fallbackDonorLocation) 
+      : arrangeForm.pickupAddress.trim();
+
+    const delivery = !isDonor 
+      ? (arrangeForm.deliveryAddress.trim() || fallbackOrgLocation) 
+      : arrangeForm.deliveryAddress.trim();
+
+    if (isDonor && !delivery) {
+      setError('Please specify where to deliver the donation.');
+      return;
+    }
+    if (!isDonor && !pickup) {
+      setError('Please specify the pickup address to collect from.');
+      return;
+    }
+    if (!arrangeForm.contactName.trim() || !arrangeForm.contactPhone.trim()) {
+      setError('Please provide contact name and phone number.');
+      return;
+    }
+
+    const scheduledDate = new Date(arrangeForm.scheduledCollectionTime);
+    if (isNaN(scheduledDate.getTime()) || scheduledDate <= new Date()) {
+      setError('Scheduled Collection Time must be a valid future date and time.');
+      return;
+    }
+
+    setOfferActionLoading(true);
+    setSuccessMsg(null);
+    setError(null);
+
+    try {
+      const payload = {
+        requestId: arrangeTargetOffer.id,
+        pickupAddress: pickup,
+        deliveryAddress: delivery,
+        contactName: arrangeForm.contactName.trim(),
+        contactPhone: arrangeForm.contactPhone.trim(),
+        scheduledCollectionTime: scheduledDate.toISOString(),
+        notes: arrangeForm.notes.trim() || null
+      };
+
+      const res = await deliveryApi.arrangeCollection(payload);
+      setSuccessMsg(res.message || 'Collection arrangement submitted successfully!');
+      setArrangeModalOpen(false);
+      setArrangeTargetOffer(null);
+
+      if (res.data) {
+        setDeliveriesMap(prev => ({ ...prev, [arrangeTargetOffer.id]: res.data }));
+      }
+      if (activeTab === 'my-offers') {
+        fetchMySubmittedOffers();
+      } else if (viewOffersNeed) {
+        openOffersModal(viewOffersNeed);
+      }
+    } catch (err) {
+      setError(err.message || 'Failed to arrange collection.');
+    } finally {
+      setOfferActionLoading(false);
+    }
+  };
+
+  const openNotesModal = (type, deliveryId) => {
+    setNotesTargetAction({ type, deliveryId });
+    setActionNotes('');
+    setNotesModalOpen(true);
+  };
+
+  const handleConfirmStatusAction = async (e) => {
+    e.preventDefault();
+    if (!notesTargetAction) return;
+
+    const { type, deliveryId } = notesTargetAction;
+    setOfferActionLoading(true);
+    setSuccessMsg(null);
+    setError(null);
+
+    try {
+      let res;
+      if (type === 'collect') {
+        res = await deliveryApi.recordCollection(deliveryId, actionNotes);
+      } else if (type === 'receive') {
+        res = await deliveryApi.confirmReceipt(deliveryId, actionNotes);
+      } else if (type === 'complete') {
+        res = await deliveryApi.completeDonation(deliveryId, actionNotes);
+      }
+
+      setSuccessMsg(res.message || 'Delivery status updated successfully!');
+      setNotesModalOpen(false);
+      setNotesTargetAction(null);
+
+      if (activeTab === 'my-offers') {
+        fetchMySubmittedOffers();
+      } else if (viewOffersNeed) {
+        openOffersModal(viewOffersNeed);
+        fetchMyNeedRequests();
+      }
+    } catch (err) {
+      setError(err.message || 'Failed to update delivery status.');
+    } finally {
+      setOfferActionLoading(false);
+    }
+  };
+
+  const openTrackingModal = (delivery) => {
+    setActiveTracking(delivery);
+    setTrackingModalOpen(true);
+  };
+
+  const getDeliveryStatusBadge = (delivery) => {
+    if (!delivery) return null;
+    switch (delivery.status) {
+      case 'CollectionArranged':
+        return (
+          <span className="badge" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: '#f3e8ff', color: '#6b21a8', border: '1px solid #d8b4fe' }}>
+            <Truck size={13} />
+            <span>Collection Arranged</span>
+          </span>
+        );
+      case 'Collected':
+        return (
+          <span className="badge" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: '#dbeafe', color: '#1e40af', border: '1px solid #93c5fd' }}>
+            <PackageCheck size={13} />
+            <span>Delivered</span>
+          </span>
+        );
+      case 'Received':
+        return (
+          <span className="badge" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: '#ccfbf1', color: '#0f766e', border: '1px solid #99f6e4' }}>
+            <CheckCircle2 size={13} />
+            <span>Received</span>
+          </span>
+        );
+      case 'Completed':
+        return (
+          <span className="badge" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: '#dcfce7', color: '#15803d', border: '1px solid #86efac' }}>
+            <Sparkles size={13} />
+            <span>Completed</span>
+          </span>
+        );
+      default:
+        return null;
     }
   };
 
@@ -892,6 +1109,48 @@ export default function FoodNeedsPage() {
         {/* --- TAB 3: Donor My Submitted Offers --- */}
         {activeTab === 'my-offers' && isDonor && (
           <div>
+            {/* Offer Status Filter Pills & Refresh */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', marginBottom: '20px' }}>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                {[
+                  { id: 'ALL', label: 'All Offers' },
+                  { id: 'PENDING', label: 'Pending Review' },
+                  { id: 'ACCEPTED', label: 'Accepted' },
+                  { id: 'REJECTED', label: 'Declined' },
+                  { id: 'COMPLETED', label: 'Completed' }
+                ].map((st) => (
+                  <button
+                    key={st.id}
+                    onClick={() => setOfferStatusFilter(st.id)}
+                    style={{
+                      padding: '6px 14px',
+                      borderRadius: '16px',
+                      fontSize: '0.825rem',
+                      fontWeight: 600,
+                      border: '1px solid',
+                      borderColor: offerStatusFilter === st.id ? '#10b981' : '#e5e7eb',
+                      background: offerStatusFilter === st.id ? '#10b981' : '#fff',
+                      color: offerStatusFilter === st.id ? '#fff' : '#4b5563',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    {st.label}
+                  </button>
+                ))}
+              </div>
+
+              <button
+                onClick={fetchMySubmittedOffers}
+                disabled={myOffersLoading}
+                className="btn btn-ghost btn-sm"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', color: '#6b7280' }}
+              >
+                <RefreshCw size={14} className={myOffersLoading ? 'spin-animation' : ''} />
+                <span>Refresh Offers</span>
+              </button>
+            </div>
+
             {myOffersLoading ? (
               <div style={{ padding: '60px 0', textAlign: 'center', color: '#6b7280' }}>
                 <RefreshCw size={28} className="spin-animation" style={{ margin: '0 auto 12px', color: '#10b981' }} />
@@ -901,71 +1160,151 @@ export default function FoodNeedsPage() {
               <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e5e7eb', padding: '60px 24px', textAlign: 'center' }}>
                 <Gift size={40} color="#9ca3af" style={{ margin: '0 auto 16px' }} />
                 <h3 style={{ fontSize: '1.25rem', fontWeight: 700, color: '#111827', margin: '0 0 8px' }}>
-                  No Submitted Food Offers Found
+                  {offerStatusFilter !== 'ALL' ? 'No Matching Food Offers Found' : 'No Submitted Food Offers Found'}
                 </h3>
                 <p style={{ color: '#6b7280', maxWidth: '460px', margin: '0 auto 20px', fontSize: '0.925rem' }}>
-                  Browse active charity food needs and step forward with an offer of surplus food portions.
+                  {offerStatusFilter !== 'ALL'
+                    ? 'No submitted food offers match your selected filter criteria. Try resetting the filter to view all offers.'
+                    : 'Browse active charity food needs and step forward with an offer of surplus food portions.'}
                 </p>
-                <button
-                  onClick={() => setActiveTab('browse-needs')}
-                  className="btn btn-primary"
-                  style={{ background: '#10b981', border: 'none' }}
-                >
-                  Browse Charity Needs
-                </button>
+                {offerStatusFilter !== 'ALL' ? (
+                  <button
+                    onClick={() => setOfferStatusFilter('ALL')}
+                    className="btn btn-outline"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '8px 18px' }}
+                  >
+                    <RefreshCw size={15} />
+                    <span>Reset Status Filter</span>
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => setActiveTab('browse-needs')}
+                    className="btn btn-primary"
+                    style={{ background: '#10b981', border: 'none' }}
+                  >
+                    Browse Charity Needs
+                  </button>
+                )}
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                {myOffers.map((off) => (
-                  <div
-                    key={off.id}
-                    style={{
-                      background: '#fff',
-                      borderRadius: '12px',
-                      border: '1px solid #e5e7eb',
-                      padding: '18px 22px',
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      flexWrap: 'wrap',
-                      gap: '16px'
-                    }}
-                  >
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
-                        {off.status === 'ACCEPTED' ? (
-                          <span className="badge badge-emerald"><CheckCircle2 size={13} /> Accepted</span>
-                        ) : off.status === 'REJECTED' ? (
-                          <span className="badge badge-rose" style={{ background: '#fee2e2', color: '#991b1b' }}><XCircle size={13} /> Declined</span>
-                        ) : (
-                          <span className="badge badge-amber"><Clock size={13} /> Pending Review</span>
-                        )}
-                        <span style={{ fontSize: '0.8rem', color: '#9ca3af' }}>
-                          Offer #{off.id} &bull; {new Date(off.createdAt).toLocaleDateString()}
-                        </span>
-                      </div>
+                {myOffers.map((off) => {
+                  const delivery = deliveriesMap[off.id];
 
-                      <h4 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#111827', margin: '0 0 4px' }}>
-                        Need: {off.orgFoodNeedRequestTitle}
-                      </h4>
-
-                      <div style={{ fontSize: '0.875rem', color: '#4b5563' }}>
-                        Offered: <strong>{off.offeredQuantity} {off.unit}</strong> of <em>{off.foodType}</em>
-                        {off.acceptedQuantity && (
-                          <span style={{ color: '#065f46', marginLeft: '10px', fontWeight: 600 }}>
-                            (Accepted: {off.acceptedQuantity} {off.unit})
+                  return (
+                    <div
+                      key={off.id}
+                      style={{
+                        background: '#fff',
+                        borderRadius: '12px',
+                        border: '1px solid #e5e7eb',
+                        padding: '18px 22px',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        flexWrap: 'wrap',
+                        gap: '16px'
+                      }}
+                    >
+                      <div style={{ flex: '1 1 300px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
+                          {getDeliveryStatusBadge(delivery) || (
+                            off.status === 'ACCEPTED' ? (
+                              <span className="badge badge-emerald"><CheckCircle2 size={13} /> Accepted</span>
+                            ) : off.status === 'COMPLETED' ? (
+                              <span className="badge" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: '#dcfce7', color: '#15803d', border: '1px solid #86efac' }}><Sparkles size={13} /> Completed</span>
+                            ) : off.status === 'REJECTED' ? (
+                              <span className="badge badge-rose" style={{ background: '#fee2e2', color: '#991b1b' }}><XCircle size={13} /> Declined</span>
+                            ) : (
+                              <span className="badge badge-amber"><Clock size={13} /> Pending Review</span>
+                            )
+                          )}
+                          <span style={{ fontSize: '0.8rem', color: '#9ca3af' }}>
+                            Offer #{off.id} &bull; {new Date(off.createdAt).toLocaleDateString()}
                           </span>
+                        </div>
+
+                        <h4 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#111827', margin: '0 0 4px' }}>
+                          Need: {off.orgFoodNeedRequestTitle}
+                        </h4>
+
+                        <div style={{ fontSize: '0.875rem', color: '#4b5563' }}>
+                          Offered: <strong>{off.offeredQuantity} {off.unit}</strong> of <em>{off.foodType}</em>
+                          {off.acceptedQuantity && (
+                            <span style={{ color: '#065f46', marginLeft: '10px', fontWeight: 600 }}>
+                              (Accepted: {off.acceptedQuantity} {off.unit})
+                            </span>
+                          )}
+                        </div>
+
+                        {delivery && (
+                          <div style={{ marginTop: '10px', padding: '8px 12px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.825rem', color: '#334155', display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+                            <div><strong>Delivery Address:</strong> {delivery.deliveryAddress}</div>
+                            <div><strong>Scheduled Collection:</strong> {new Date(delivery.scheduledCollectionTime).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</div>
+                          </div>
+                        )}
+
+                        {off.notes && (
+                          <div style={{ fontSize: '0.825rem', color: '#6b7280', marginTop: '6px' }}>
+                            <strong>Notes:</strong> {off.notes}
+                          </div>
                         )}
                       </div>
 
-                      {off.notes && (
-                        <div style={{ fontSize: '0.825rem', color: '#6b7280', marginTop: '6px' }}>
-                          <strong>Notes:</strong> {off.notes}
+                      {/* Delivery Action Buttons for Donor */}
+                      {off.status === 'ACCEPTED' && (
+                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                          {!delivery ? (
+                            <button
+                              onClick={() => openArrangeModal(off)}
+                              disabled={offerActionLoading}
+                              className="btn btn-sm"
+                              style={{ background: 'linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)', color: '#fff', border: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 600, padding: '8px 14px', borderRadius: '8px', boxShadow: '0 2px 6px rgba(124, 58, 237, 0.25)' }}
+                            >
+                              <Truck size={15} />
+                              <span>Arrange Delivery</span>
+                            </button>
+                          ) : (
+                            <>
+                              {delivery.status === 'CollectionArranged' && (
+                                <button
+                                  onClick={() => openNotesModal('collect', delivery.id)}
+                                  disabled={offerActionLoading}
+                                  className="btn btn-sm"
+                                  style={{ background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)', color: '#fff', border: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 600, padding: '8px 14px', borderRadius: '8px' }}
+                                >
+                                  <PackageCheck size={15} />
+                                  <span>Mark as Delivered</span>
+                                </button>
+                              )}
+
+                              {delivery.status === 'Received' && (
+                                <button
+                                  onClick={() => openNotesModal('complete', delivery.id)}
+                                  disabled={offerActionLoading}
+                                  className="btn btn-sm"
+                                  style={{ background: 'linear-gradient(135deg, #16a34a 0%, #15803d 100%)', color: '#fff', border: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 600, padding: '8px 14px', borderRadius: '8px' }}
+                                >
+                                  <Sparkles size={15} />
+                                  <span>Complete Donation</span>
+                                </button>
+                              )}
+
+                              <button
+                                onClick={() => openTrackingModal(delivery)}
+                                className="btn btn-outline btn-sm"
+                                style={{ borderColor: '#cbd5e1', color: '#334155', display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 600, padding: '8px 14px', borderRadius: '8px' }}
+                              >
+                                <History size={15} />
+                                <span>Track Delivery</span>
+                              </button>
+                            </>
+                          )}
                         </div>
                       )}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -1195,48 +1534,125 @@ export default function FoodNeedsPage() {
                     </button>
                   </div>
                 )}
-                {offersList.map((off) => (
-                  <div key={off.id} style={{ background: '#f9fafb', borderRadius: '10px', padding: '14px 18px', border: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
-                    <div>
-                      <div style={{ fontWeight: 700, color: '#111827', fontSize: '0.95rem' }}>
-                        {off.donorName}
-                      </div>
-                      <div style={{ fontSize: '0.85rem', color: '#4b5563', marginTop: '2px' }}>
-                        Offered: <strong>{off.offeredQuantity} {off.unit}</strong> of <em>{off.foodType}</em>
-                      </div>
-                      {off.notes && (
-                        <div style={{ fontSize: '0.8rem', color: '#6b7280', marginTop: '4px' }}>
-                          Notes: {off.notes}
-                        </div>
-                      )}
-                    </div>
+                {offersList.map((off) => {
+                  const delivery = deliveriesMap[off.id];
 
-                    <div>
-                      {off.status === 'PENDING' ? (
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                          <button
-                            onClick={() => handleAcceptOffer(off.id)}
-                            disabled={offerActionLoading}
-                            className="btn btn-primary btn-sm"
-                            style={{ background: '#10b981', border: 'none', padding: '6px 12px', fontSize: '0.78rem' }}
-                          >
-                            Accept Offer
-                          </button>
-                          <button
-                            onClick={() => handleRejectOffer(off.id)}
-                            disabled={offerActionLoading}
-                            className="btn btn-outline btn-sm"
-                            style={{ color: '#ef4444', borderColor: '#fca5a5', padding: '6px 12px', fontSize: '0.78rem' }}
-                          >
-                            Decline
-                          </button>
+                  return (
+                    <div key={off.id} style={{ background: '#f9fafb', borderRadius: '10px', padding: '14px 18px', border: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+                      <div style={{ flex: '1 1 240px' }}>
+                        <div style={{ fontWeight: 700, color: '#111827', fontSize: '0.95rem' }}>
+                          {off.donorName}
                         </div>
-                      ) : (
-                        getStatusBadge(off.status)
-                      )}
+                        <div style={{ fontSize: '0.85rem', color: '#4b5563', marginTop: '2px' }}>
+                          Offered: <strong>{off.offeredQuantity} {off.unit}</strong> of <em>{off.foodType}</em>
+                          {off.acceptedQuantity && (
+                            <span style={{ color: '#065f46', marginLeft: '8px', fontWeight: 600 }}>
+                              (Accepted: {off.acceptedQuantity} {off.unit})
+                            </span>
+                          )}
+                        </div>
+                        {off.notes && (
+                          <div style={{ fontSize: '0.8rem', color: '#6b7280', marginTop: '4px' }}>
+                            Notes: {off.notes}
+                          </div>
+                        )}
+
+                        {delivery && (
+                          <div style={{ marginTop: '8px', padding: '6px 10px', background: '#fff', borderRadius: '6px', border: '1px solid #e2e8f0', fontSize: '0.78rem', color: '#334155', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                            <span><strong>Pickup:</strong> {delivery.pickupAddress}</span>
+                            <span><strong>Collection:</strong> {new Date(delivery.scheduledCollectionTime).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      <div>
+                        {off.status === 'PENDING' ? (
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            <button
+                              onClick={() => handleAcceptOffer(off.id)}
+                              disabled={offerActionLoading}
+                              className="btn btn-primary btn-sm"
+                              style={{ background: '#10b981', border: 'none', padding: '6px 12px', fontSize: '0.78rem' }}
+                            >
+                              Accept Offer
+                            </button>
+                            <button
+                              onClick={() => handleRejectOffer(off.id)}
+                              disabled={offerActionLoading}
+                              className="btn btn-outline btn-sm"
+                              style={{ color: '#ef4444', borderColor: '#fca5a5', padding: '6px 12px', fontSize: '0.78rem' }}
+                            >
+                              Decline
+                            </button>
+                          </div>
+                        ) : (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                            {getDeliveryStatusBadge(delivery) || (
+                              off.status === 'ACCEPTED' ? (
+                                <span className="badge badge-emerald"><CheckCircle2 size={13} /> Accepted</span>
+                              ) : off.status === 'COMPLETED' ? (
+                                <span className="badge" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: '#dcfce7', color: '#15803d', border: '1px solid #86efac' }}><Sparkles size={13} /> Completed</span>
+                              ) : off.status === 'REJECTED' ? (
+                                <span className="badge badge-rose" style={{ background: '#fee2e2', color: '#991b1b' }}><XCircle size={13} /> Declined</span>
+                              ) : (
+                                <span className="badge badge-amber"><Clock size={13} /> Pending Review</span>
+                              )
+                            )}
+
+                            {off.status === 'ACCEPTED' && !delivery && (
+                              <button
+                                onClick={() => openArrangeModal(off)}
+                                disabled={offerActionLoading}
+                                className="btn btn-sm"
+                                style={{ background: 'linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)', color: '#fff', border: 'none', display: 'inline-flex', alignItems: 'center', gap: '5px', fontWeight: 600, padding: '6px 12px', fontSize: '0.78rem', borderRadius: '6px', boxShadow: '0 2px 6px rgba(124, 58, 237, 0.25)' }}
+                              >
+                                <Truck size={14} />
+                                <span>Arrange Delivery</span>
+                              </button>
+                            )}
+
+                            {delivery && (
+                              <>
+                                {delivery.status === 'Collected' && (
+                                  <button
+                                    onClick={() => openNotesModal('receive', delivery.id)}
+                                    disabled={offerActionLoading}
+                                    className="btn btn-sm"
+                                    style={{ background: 'linear-gradient(135deg, #0d9488 0%, #0f766e 100%)', color: '#fff', border: 'none', display: 'inline-flex', alignItems: 'center', gap: '5px', fontWeight: 600, padding: '6px 12px', fontSize: '0.78rem', borderRadius: '6px' }}
+                                  >
+                                    <ShieldCheck size={14} />
+                                    <span>Confirm Receipt</span>
+                                  </button>
+                                )}
+
+                                {delivery.status === 'Received' && (
+                                  <button
+                                    onClick={() => openNotesModal('complete', delivery.id)}
+                                    disabled={offerActionLoading}
+                                    className="btn btn-sm"
+                                    style={{ background: 'linear-gradient(135deg, #16a34a 0%, #15803d 100%)', color: '#fff', border: 'none', display: 'inline-flex', alignItems: 'center', gap: '5px', fontWeight: 600, padding: '6px 12px', fontSize: '0.78rem', borderRadius: '6px' }}
+                                  >
+                                    <Sparkles size={14} />
+                                    <span>Complete Donation</span>
+                                  </button>
+                                )}
+
+                                <button
+                                  onClick={() => openTrackingModal(delivery)}
+                                  className="btn btn-outline btn-sm"
+                                  style={{ borderColor: '#cbd5e1', color: '#334155', display: 'inline-flex', alignItems: 'center', gap: '5px', fontWeight: 600, padding: '6px 12px', fontSize: '0.78rem', borderRadius: '6px' }}
+                                >
+                                  <History size={14} />
+                                  <span>Track</span>
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -1366,6 +1782,297 @@ export default function FoodNeedsPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* --- MODAL 6: Arrange Delivery Collection --- */}
+      {arrangeModalOpen && arrangeTargetOffer && (
+        <div className="modal-overlay animate-fade-in" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)', zIndex: 1100, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '90px 1rem 2rem 1rem', overflowY: 'auto' }}>
+          <div className="modal-card animate-scale-up" style={{ margin: '0 auto', background: '#fff', borderRadius: '16px', maxWidth: '560px', width: '100%', padding: '28px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
+              <Truck size={22} color="#7c3aed" />
+              <h3 style={{ fontSize: '1.25rem', fontWeight: 700, color: '#111827', margin: 0 }}>
+                Arrange Food Delivery / Collection
+              </h3>
+            </div>
+            <p style={{ color: '#6b7280', fontSize: '0.875rem', margin: '0 0 20px' }}>
+              Enter collection details for <strong>{arrangeTargetOffer.orgFoodNeedRequestTitle || arrangeTargetOffer.title || 'Food Need Offer'}</strong> (Offer #{arrangeTargetOffer.id}).
+            </p>
+
+            <form onSubmit={handleConfirmArrange}>
+              {isDonor ? (
+                <div className="form-group" style={{ marginBottom: '14px' }}>
+                  <label className="form-label" style={{ fontWeight: 600, fontSize: '0.85rem' }}>Delivery Address (Where to deliver to charity) *</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="e.g. 456 Charity Center, Receiving Dock"
+                    value={arrangeForm.deliveryAddress}
+                    onChange={(e) => setArrangeForm({ ...arrangeForm, deliveryAddress: e.target.value })}
+                    required
+                  />
+                </div>
+              ) : (
+                <div className="form-group" style={{ marginBottom: '14px' }}>
+                  <label className="form-label" style={{ fontWeight: 600, fontSize: '0.85rem' }}>Pickup Address (Where to collect from donor) *</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="e.g. 123 Bakery St, Kitchen Entrance"
+                    value={arrangeForm.pickupAddress}
+                    onChange={(e) => setArrangeForm({ ...arrangeForm, pickupAddress: e.target.value })}
+                    required
+                  />
+                </div>
+              )}
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label className="form-label" style={{ fontWeight: 600, fontSize: '0.85rem' }}>Contact Name *</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="Full name of contact person"
+                    value={arrangeForm.contactName}
+                    onChange={(e) => setArrangeForm({ ...arrangeForm, contactName: e.target.value })}
+                    required
+                  />
+                </div>
+
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label className="form-label" style={{ fontWeight: 600, fontSize: '0.85rem' }}>Contact Phone *</label>
+                  <input
+                    type="tel"
+                    className="form-input"
+                    placeholder="e.g. +1 555-0199"
+                    value={arrangeForm.contactPhone}
+                    onChange={(e) => setArrangeForm({ ...arrangeForm, contactPhone: e.target.value })}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="form-group" style={{ marginBottom: '14px' }}>
+                <label className="form-label" style={{ fontWeight: 600, fontSize: '0.85rem' }}>Scheduled Collection Date & Time *</label>
+                <input
+                  type="datetime-local"
+                  className="form-input"
+                  value={arrangeForm.scheduledCollectionTime}
+                  onChange={(e) => setArrangeForm({ ...arrangeForm, scheduledCollectionTime: e.target.value })}
+                  required
+                />
+              </div>
+
+              <div className="form-group" style={{ marginBottom: '20px' }}>
+                <label className="form-label" style={{ fontWeight: 600, fontSize: '0.85rem' }}>Collection Instructions / Notes (Optional)</label>
+                <textarea
+                  className="form-input"
+                  rows="2"
+                  placeholder="e.g. Ring side doorbell upon arrival; thermal insulation packaging used."
+                  value={arrangeForm.notes}
+                  onChange={(e) => setArrangeForm({ ...arrangeForm, notes: e.target.value })}
+                  maxLength={500}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => setArrangeModalOpen(false)}
+                  disabled={offerActionLoading}
+                  className="btn btn-ghost btn-sm"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={offerActionLoading}
+                  className="btn btn-primary btn-sm"
+                  style={{ background: 'linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)', border: 'none' }}
+                >
+                  {offerActionLoading ? 'Saving...' : 'Confirm Arrangement'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* --- MODAL 7: Status Transition Notes Modal --- */}
+      {notesModalOpen && notesTargetAction && (
+        <div className="modal-overlay animate-fade-in" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)', zIndex: 1100, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '90px 1rem 2rem 1rem', overflowY: 'auto' }}>
+          <div className="modal-card animate-scale-up" style={{ margin: '0 auto', background: '#fff', borderRadius: '16px', maxWidth: '460px', width: '100%', padding: '28px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}>
+            <h3 style={{ fontSize: '1.2rem', fontWeight: 700, color: '#111827', margin: '0 0 8px' }}>
+              {notesTargetAction.type === 'collect' && 'Record Donation Delivery'}
+              {notesTargetAction.type === 'receive' && 'Confirm Receipt of Food'}
+              {notesTargetAction.type === 'complete' && 'Complete Food Donation'}
+            </h3>
+            <p style={{ color: '#6b7280', fontSize: '0.875rem', margin: '0 0 16px' }}>
+              Optionally provide notes for this status transition update.
+            </p>
+
+            <form onSubmit={handleConfirmStatusAction}>
+              <div className="form-group" style={{ marginBottom: '20px' }}>
+                <label className="form-label" style={{ fontWeight: 600, fontSize: '0.85rem' }}>Transition Notes (Optional)</label>
+                <textarea
+                  className="form-input"
+                  rows="3"
+                  placeholder="e.g. Verified food packaging condition and portion quantities upon handoff."
+                  value={actionNotes}
+                  onChange={(e) => setActionNotes(e.target.value)}
+                  maxLength={500}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => setNotesModalOpen(false)}
+                  disabled={offerActionLoading}
+                  className="btn btn-ghost btn-sm"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={offerActionLoading}
+                  className="btn btn-primary btn-sm"
+                  style={{
+                    background: notesTargetAction.type === 'collect' ? '#2563eb' : notesTargetAction.type === 'receive' ? '#0d9488' : '#16a34a',
+                    border: 'none'
+                  }}
+                >
+                  {offerActionLoading ? 'Updating...' : notesTargetAction.type === 'collect' ? 'Mark as Delivered' : notesTargetAction.type === 'receive' ? 'Confirm Receipt' : 'Complete Donation'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* --- MODAL 8: Delivery Tracking Timeline Modal --- */}
+      {trackingModalOpen && activeTracking && (
+        <div className="modal-overlay animate-fade-in" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)', zIndex: 1100, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '90px 1rem 2rem 1rem', overflowY: 'auto' }}>
+          <div className="modal-card animate-scale-up" style={{ margin: '0 auto', background: '#fff', borderRadius: '16px', maxWidth: '640px', width: '100%', padding: '28px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <div>
+                <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#6366f1', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  Delivery Tracking #{activeTracking.id}
+                </span>
+                <h3 style={{ fontSize: '1.3rem', fontWeight: 800, color: '#111827', margin: '2px 0 0' }}>
+                  {activeTracking.donationTitle || 'Charity Food Need Offer'}
+                </h3>
+              </div>
+              <button
+                onClick={() => setTrackingModalOpen(false)}
+                className="btn btn-ghost btn-sm"
+                style={{ fontSize: '1.2rem', lineHeight: 1 }}
+              >
+                &times;
+              </button>
+            </div>
+
+            {/* Stepper Progress Bar */}
+            <div style={{ background: '#f8fafc', padding: '18px', borderRadius: '12px', marginBottom: '20px', border: '1px solid #e2e8f0' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', position: 'relative' }}>
+                {[
+                  { key: 'CollectionArranged', label: 'Arranged' },
+                  { key: 'Collected', label: 'Delivered' },
+                  { key: 'Received', label: 'Received' },
+                  { key: 'Completed', label: 'Completed' }
+                ].map((step, idx) => {
+                  const statuses = ['CollectionArranged', 'Collected', 'Received', 'Completed'];
+                  const currentIdx = statuses.indexOf(activeTracking.status);
+                  const isDone = idx <= currentIdx;
+
+                  return (
+                    <div key={step.key} style={{ flex: 1, textAlign: 'center', zIndex: 1 }}>
+                      <div style={{
+                        width: '32px',
+                        height: '32px',
+                        borderRadius: '50%',
+                        background: isDone ? '#10b981' : '#e2e8f0',
+                        color: isDone ? '#fff' : '#64748b',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        margin: '0 auto 6px',
+                        fontWeight: 700,
+                        fontSize: '0.85rem'
+                      }}>
+                        {isDone ? <Check size={16} /> : idx + 1}
+                      </div>
+                      <span style={{ fontSize: '0.78rem', fontWeight: isDone ? 700 : 500, color: isDone ? '#065f46' : '#64748b' }}>
+                        {step.label}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Details Grid */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '20px', background: '#f9fafb', padding: '14px', borderRadius: '10px', fontSize: '0.85rem' }}>
+              <div>
+                <span style={{ color: '#6b7280' }}>Pickup Address:</span>
+                <p style={{ margin: '2px 0 0', fontWeight: 600, color: '#111827' }}>{activeTracking.pickupAddress}</p>
+              </div>
+              <div>
+                <span style={{ color: '#6b7280' }}>Delivery Address:</span>
+                <p style={{ margin: '2px 0 0', fontWeight: 600, color: '#111827' }}>{activeTracking.deliveryAddress}</p>
+              </div>
+              <div>
+                <span style={{ color: '#6b7280' }}>Contact Person:</span>
+                <p style={{ margin: '2px 0 0', fontWeight: 600, color: '#111827' }}>{activeTracking.contactName} ({activeTracking.contactPhone})</p>
+              </div>
+              <div>
+                <span style={{ color: '#6b7280' }}>Scheduled Time:</span>
+                <p style={{ margin: '2px 0 0', fontWeight: 600, color: '#111827' }}>{new Date(activeTracking.scheduledCollectionTime).toLocaleString()}</p>
+              </div>
+            </div>
+
+            {/* Status Transition History Timeline */}
+            <h4 style={{ fontSize: '0.95rem', fontWeight: 700, color: '#111827', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <History size={16} color="#6366f1" />
+              <span>Status Transition Log</span>
+            </h4>
+
+            {activeTracking.statusHistory && activeTracking.statusHistory.length > 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '200px', overflowY: 'auto' }}>
+                {activeTracking.statusHistory.map((h) => (
+                  <div key={h.id} style={{ padding: '10px 14px', background: '#fff', border: '1px solid #e5e7eb', borderRadius: '8px', fontSize: '0.825rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                      <span style={{ fontWeight: 700, color: '#4f46e5' }}>
+                        {h.previousStatus} &rarr; {h.newStatus}
+                      </span>
+                      <span style={{ color: '#9ca3af' }}>
+                        {new Date(h.timestamp).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
+                      </span>
+                    </div>
+                    <div style={{ color: '#6b7280', display: 'flex', justifyContent: 'space-between' }}>
+                      <span>Updated by: <strong>{h.changedByUserId}</strong> ({h.changedByRole})</span>
+                    </div>
+                    {h.notes && (
+                      <p style={{ margin: '4px 0 0', color: '#4b5563', fontStyle: 'italic' }}>
+                        "{h.notes}"
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p style={{ fontSize: '0.85rem', color: '#9ca3af', fontStyle: 'italic' }}>No transition history recorded yet.</p>
+            )}
+
+            <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setTrackingModalOpen(false)}
+                className="btn btn-ghost btn-sm"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}
