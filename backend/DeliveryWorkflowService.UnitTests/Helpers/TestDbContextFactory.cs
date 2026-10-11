@@ -32,6 +32,21 @@ public static class TestDbContextFactory
                 ""DonorId"" TEXT,
                 ""Status"" TEXT
             );
+            CREATE TABLE IF NOT EXISTS ""OrgNeedRequests"" (
+                ""Id"" INTEGER PRIMARY KEY,
+                ""Title"" TEXT,
+                ""OrganizationId"" TEXT,
+                ""OrganizationName"" TEXT,
+                ""Status"" TEXT
+            );
+            CREATE TABLE IF NOT EXISTS ""DonorOffers"" (
+                ""Id"" INTEGER PRIMARY KEY,
+                ""OrgFoodNeedRequestId"" INTEGER NOT NULL,
+                ""OrgFoodNeedRequestTitle"" TEXT,
+                ""DonorId"" TEXT,
+                ""DonorName"" TEXT,
+                ""Status"" TEXT
+            );
         ";
         cmd.ExecuteNonQuery();
 
@@ -69,6 +84,52 @@ public static class TestDbContextFactory
         AddParam(cmd, "@status", (object?)status ?? DBNull.Value);
 
         cmd.ExecuteNonQuery();
+    }
+
+    public static void SeedFoodOffer(
+        DeliveryDbContext context,
+        int offerId,
+        int orgFoodNeedRequestId,
+        string donorId,
+        string orgId,
+        string status = "ACCEPTED",
+        string? needTitle = "Fresh Bakery Buns for Shelter",
+        string? donorName = "Bakery Donor",
+        string? orgName = "Community Shelter")
+    {
+        var conn = context.Database.GetDbConnection();
+        if (conn.State != ConnectionState.Open)
+        {
+            conn.Open();
+        }
+
+        using (var cmd = conn.CreateCommand())
+        {
+            cmd.CommandText = @"
+                INSERT OR REPLACE INTO ""OrgNeedRequests"" (""Id"", ""Title"", ""OrganizationId"", ""OrganizationName"", ""Status"")
+                VALUES (@needId, @needTitle, @orgId, @orgName, 'OPEN');
+            ";
+            AddParam(cmd, "@needId", orgFoodNeedRequestId);
+            AddParam(cmd, "@needTitle", (object?)needTitle ?? DBNull.Value);
+            AddParam(cmd, "@orgId", (object?)orgId ?? DBNull.Value);
+            AddParam(cmd, "@orgName", (object?)orgName ?? DBNull.Value);
+            cmd.ExecuteNonQuery();
+        }
+
+        using (var cmd = conn.CreateCommand())
+        {
+            cmd.CommandText = @"
+                INSERT OR REPLACE INTO ""DonorOffers"" (""Id"", ""OrgFoodNeedRequestId"", ""OrgFoodNeedRequestTitle"", ""DonorId"", ""DonorName"", ""Status"")
+                VALUES (@offerId, @needId, @needTitle, @donorId, @donorName, @status);
+            ";
+            AddParam(cmd, "@offerId", offerId);
+            AddParam(cmd, "@needId", orgFoodNeedRequestId);
+            AddParam(cmd, "@needTitle", (object?)needTitle ?? DBNull.Value);
+            AddParam(cmd, "@donorId", (object?)donorId ?? DBNull.Value);
+            AddParam(cmd, "@donorName", (object?)donorName ?? DBNull.Value);
+            AddParam(cmd, "@status", (object?)status ?? DBNull.Value);
+            cmd.ExecuteNonQuery();
+        }
     }
 
     private static void AddParam(IDbCommand cmd, string name, object value)
