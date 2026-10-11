@@ -42,7 +42,7 @@ export default function FoodNeedsPage() {
   // Search & Filter
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
-  const [statusFilter, setStatusFilter] = useState('ALL');
+  const [statusFilter, setStatusFilter] = useState('OPEN');
 
   // Create Need Request Modal State (Org)
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -75,6 +75,9 @@ export default function FoodNeedsPage() {
   const [offersList, setOffersList] = useState([]);
   const [offersLoading, setOffersLoading] = useState(false);
   const [offerActionLoading, setOfferActionLoading] = useState(false);
+  const [rejectAllOffersModalOpen, setRejectAllOffersModalOpen] = useState(false);
+  const [rejectAllOffersReason, setRejectAllOffersReason] = useState('');
+  const [rejectAllTargetNeed, setRejectAllTargetNeed] = useState(null);
 
   // Submit Offer Modal State (Donor)
   const [targetOfferNeed, setTargetOfferNeed] = useState(null);
@@ -103,10 +106,10 @@ export default function FoodNeedsPage() {
   }, [activeTab, categoryFilter, statusFilter, currentUser]);
 
   useEffect(() => {
-    if (isCreateModalOpen || editingNeed || viewOffersNeed || targetOfferNeed) {
+    if (isCreateModalOpen || editingNeed || viewOffersNeed || targetOfferNeed || rejectAllOffersModalOpen) {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
-  }, [isCreateModalOpen, editingNeed, viewOffersNeed, targetOfferNeed]);
+  }, [isCreateModalOpen, editingNeed, viewOffersNeed, targetOfferNeed, rejectAllOffersModalOpen]);
 
   useEffect(() => {
     document.body.style.overflow = 'unset';
@@ -119,12 +122,13 @@ export default function FoodNeedsPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await needRequestApi.getMyNeedRequests({ status: statusFilter });
-      if (res && res.data) {
-        setNeedRequests(res.data);
-      } else {
-        setNeedRequests([]);
+      const apiStatus = statusFilter === 'COMPLETED' ? 'CLAIMED' : statusFilter;
+      const res = await needRequestApi.getMyNeedRequests({ status: apiStatus });
+      let list = (res && res.data) ? res.data : [];
+      if (statusFilter === 'COMPLETED') {
+        list = list.filter(r => r.status?.toUpperCase() === 'CLAIMED' || r.status?.toUpperCase() === 'COMPLETED');
       }
+      setNeedRequests(list);
     } catch (err) {
       setError(err.message || 'Failed to load your food need requests.');
       setNeedRequests([]);
@@ -339,6 +343,33 @@ export default function FoodNeedsPage() {
       }
     } catch (err) {
       setError(err.message || 'Failed to decline food offer.');
+    } finally {
+      setOfferActionLoading(false);
+    }
+  };
+
+  const openRejectAllOffersModal = (need) => {
+    setRejectAllTargetNeed(need);
+    setRejectAllOffersReason('This food need has been fully fulfilled.');
+    setRejectAllOffersModalOpen(true);
+  };
+
+  const handleConfirmRejectAllOffers = async (e) => {
+    e.preventDefault();
+    if (!rejectAllTargetNeed) return;
+
+    setOfferActionLoading(true);
+    try {
+      const res = await needRequestApi.rejectAllPendingOffers(rejectAllTargetNeed.id, rejectAllOffersReason);
+      setSuccessMsg(res.message || 'All pending offers declined.');
+      setRejectAllOffersModalOpen(false);
+      setRejectAllTargetNeed(null);
+      if (viewOffersNeed) {
+        openOffersModal(viewOffersNeed);
+        fetchMyNeedRequests();
+      }
+    } catch (err) {
+      setError(err.message || 'Failed to decline pending offers.');
     } finally {
       setOfferActionLoading(false);
     }
@@ -580,7 +611,7 @@ export default function FoodNeedsPage() {
           <div>
             {/* Filter pills */}
             <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', flexWrap: 'wrap' }}>
-              {['ALL', 'OPEN', 'PARTIALLY_FULFILLED', 'CLAIMED', 'CANCELLED', 'EXPIRED'].map((st) => (
+              {['ALL', 'OPEN', 'PARTIALLY_FULFILLED', 'CLAIMED', 'COMPLETED', 'CANCELLED', 'EXPIRED'].map((st) => (
                 <button
                   key={st}
                   onClick={() => setStatusFilter(st)}
@@ -1147,6 +1178,23 @@ export default function FoodNeedsPage() {
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {offersList.some(o => o.status === 'PENDING') && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px', background: '#fef2f2', padding: '10px 14px', borderRadius: '8px', border: '1px solid #fee2e2' }}>
+                    <span style={{ fontSize: '0.85rem', color: '#991b1b', fontWeight: 600 }}>
+                      {offersList.filter(o => o.status === 'PENDING').length} pending offer(s)
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => openRejectAllOffersModal(viewOffersNeed)}
+                      disabled={offerActionLoading}
+                      className="btn btn-outline btn-sm"
+                      style={{ color: '#ef4444', borderColor: '#fca5a5', fontSize: '0.8rem', padding: '5px 12px', background: '#fff', display: 'inline-flex', alignItems: 'center', gap: '5px', fontWeight: 600 }}
+                    >
+                      <Ban size={14} />
+                      <span>Reject All Pending Offers</span>
+                    </button>
+                  </div>
+                )}
                 {offersList.map((off) => (
                   <div key={off.id} style={{ background: '#f9fafb', borderRadius: '10px', padding: '14px 18px', border: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
                     <div>
@@ -1265,6 +1313,56 @@ export default function FoodNeedsPage() {
                 <button type="button" onClick={() => setTargetOfferNeed(null)} className="btn btn-ghost btn-sm">Cancel</button>
                 <button type="submit" disabled={offerSubmitting} className="btn btn-primary btn-sm" style={{ background: '#10b981', border: 'none' }}>
                   {offerSubmitting ? 'Submitting...' : 'Submit Food Offer'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* --- MODAL 5: Reject All Pending Offers (Org) --- */}
+      {rejectAllOffersModalOpen && rejectAllTargetNeed && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 1100, padding: '90px 1rem 2rem 1rem', overflowY: 'auto' }}>
+          <div style={{ margin: '0 auto', background: '#fff', borderRadius: '16px', maxWidth: '480px', width: '100%', padding: '28px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.2)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+              <Ban size={22} color="#dc2626" />
+              <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: '#111827' }}>
+                Reject All Pending Offers
+              </h3>
+            </div>
+            <p style={{ color: '#6b7280', fontSize: '0.875rem', margin: '0 0 16px' }}>
+              Decline all remaining pending donor offers for <strong>{rejectAllTargetNeed.title}</strong>. You can include an optional message.
+            </p>
+
+            <form onSubmit={handleConfirmRejectAllOffers}>
+              <div className="form-group" style={{ marginBottom: '20px' }}>
+                <label className="form-label" style={{ fontWeight: 600, fontSize: '0.85rem' }}>Decline Reason / Message (Optional)</label>
+                <textarea
+                  className="form-input"
+                  rows="3"
+                  placeholder="e.g. This food need has been fully fulfilled."
+                  value={rejectAllOffersReason}
+                  onChange={(e) => setRejectAllOffersReason(e.target.value)}
+                  maxLength={500}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => setRejectAllOffersModalOpen(false)}
+                  disabled={offerActionLoading}
+                  className="btn btn-ghost btn-sm"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={offerActionLoading}
+                  className="btn btn-primary btn-sm"
+                  style={{ background: '#dc2626', border: 'none' }}
+                >
+                  {offerActionLoading ? 'Processing...' : 'Confirm Reject All'}
                 </button>
               </div>
             </form>

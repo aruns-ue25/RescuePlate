@@ -24,7 +24,8 @@ import {
   History,
   Check,
   ChevronRight,
-  ShieldCheck
+  ShieldCheck,
+  Ban
 } from 'lucide-react';
 
 export default function RequestsPage() {
@@ -46,6 +47,11 @@ export default function RequestsPage() {
   const [targetRequestId, setTargetRequestId] = useState(null);
   const [rejectReason, setRejectReason] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
+
+  // Reject All Pending Modal state for Donor
+  const [rejectAllModalOpen, setRejectAllModalOpen] = useState(false);
+  const [targetRejectAllDonation, setTargetRejectAllDonation] = useState(null);
+  const [rejectAllReason, setRejectAllReason] = useState('');
 
   // Arrange Collection Modal State
   const [arrangeModalOpen, setArrangeModalOpen] = useState(false);
@@ -73,10 +79,10 @@ export default function RequestsPage() {
   }, [selectedStatus, currentUser]);
 
   useEffect(() => {
-    if (rejectModalOpen || arrangeModalOpen || trackingModalOpen || notesModalOpen) {
+    if (rejectModalOpen || rejectAllModalOpen || arrangeModalOpen || trackingModalOpen || notesModalOpen) {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
-  }, [rejectModalOpen, arrangeModalOpen, trackingModalOpen, notesModalOpen]);
+  }, [rejectModalOpen, rejectAllModalOpen, arrangeModalOpen, trackingModalOpen, notesModalOpen]);
 
   useEffect(() => {
     document.body.style.overflow = 'unset';
@@ -89,19 +95,38 @@ export default function RequestsPage() {
     setLoading(true);
     setError(null);
     try {
-      let res;
-      if (isDonor) {
-        res = await requestApi.getReceivedRequests({ status: selectedStatus });
+      let requestList = [];
+      if (selectedStatus === 'COMPLETED') {
+        const [compRes, accRes] = await Promise.all([
+          isDonor ? requestApi.getReceivedRequests({ status: 'COMPLETED' }) : requestApi.getMyRequests({ status: 'COMPLETED' }),
+          isDonor ? requestApi.getReceivedRequests({ status: 'ACCEPTED' }) : requestApi.getMyRequests({ status: 'ACCEPTED' })
+        ]);
+        const compData = (compRes && compRes.data) ? compRes.data : [];
+        const accData = (accRes && accRes.data) ? accRes.data : [];
+        const combined = [...compData];
+        const seenIds = new Set(compData.map(r => r.id));
+        for (const r of accData) {
+          if (!seenIds.has(r.id)) {
+            combined.push(r);
+            seenIds.add(r.id);
+          }
+        }
+        requestList = combined;
       } else {
-        res = await requestApi.getMyRequests({ status: selectedStatus });
+        let res;
+        if (isDonor) {
+          res = await requestApi.getReceivedRequests({ status: selectedStatus });
+        } else {
+          res = await requestApi.getMyRequests({ status: selectedStatus });
+        }
+        requestList = (res && res.data) ? res.data : [];
       }
 
-      const requestList = (res && res.data) ? res.data : [];
       setRequests(requestList);
 
-      // Fetch delivery tracking for all accepted requests
-      const acceptedReqs = requestList.filter(r => r.status?.toUpperCase() === 'ACCEPTED');
-      await fetchDeliveriesMap(acceptedReqs);
+      // Fetch delivery tracking for all accepted and completed requests
+      const eligibleReqs = requestList.filter(r => r.status?.toUpperCase() === 'ACCEPTED' || r.status?.toUpperCase() === 'COMPLETED');
+      await fetchDeliveriesMap(eligibleReqs);
     } catch (err) {
       setError(err.message || 'Failed to load requests.');
       setRequests([]);
@@ -191,14 +216,44 @@ export default function RequestsPage() {
     }
   };
 
+  const openRejectAllModal = (donationId, donationTitle) => {
+    setTargetRejectAllDonation({ donationId, donationTitle });
+    setRejectAllReason('This surplus food listing has been fully claimed.');
+    setRejectAllModalOpen(true);
+  };
+
+  const handleConfirmRejectAll = async (e) => {
+    e.preventDefault();
+    if (!targetRejectAllDonation) return;
+
+    setActionLoading(true);
+    setSuccessMsg(null);
+    setError(null);
+
+    try {
+      const res = await requestApi.rejectAllPendingForDonation(targetRejectAllDonation.donationId, rejectAllReason);
+      setSuccessMsg(res.message || 'All pending requests declined successfully.');
+      setRejectAllModalOpen(false);
+      setTargetRejectAllDonation(null);
+      fetchRequests();
+    } catch (err) {
+      setError(err.message || 'Failed to decline pending requests.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   // Open Arrange Collection Modal
   const openArrangeModal = (req) => {
     setArrangeTargetRequest(req);
     // Pre-fill contact details with local time 2 hours in the future
     const defaultTime = getLocalDatetimeLocalString(new Date(Date.now() + 2 * 3600 * 1000));
+    const fallbackDonorLocation = currentUser?.location || currentUser?.address || (currentUser?.businessName ? `${currentUser.businessName} Facility` : 'Donor Facility');
+    const fallbackOrgLocation = currentUser?.location || currentUser?.address || (currentUser?.businessName ? `${currentUser.businessName} Facility` : 'Organization Facility');
+
     setArrangeForm({
-      pickupAddress: '',
-      deliveryAddress: '',
+      pickupAddress: isDonor ? fallbackDonorLocation : '',
+      deliveryAddress: !isDonor ? fallbackOrgLocation : '',
       contactName: currentUser?.name || currentUser?.businessName || '',
       contactPhone: currentUser?.phone || '',
       scheduledCollectionTime: defaultTime,
@@ -211,9 +266,29 @@ export default function RequestsPage() {
     e.preventDefault();
     if (!arrangeTargetRequest) return;
 
-    // Validation
-    if (!arrangeForm.pickupAddress.trim() || !arrangeForm.deliveryAddress.trim() || !arrangeForm.contactName.trim() || !arrangeForm.contactPhone.trim()) {
-      setError('Please fill in all required collection fields.');
+    const fallbackDonorLocation = currentUser?.location || currentUser?.address || (currentUser?.businessName ? `${currentUser.businessName} Facility` : 'Donor Facility');
+    const fallbackOrgLocation = currentUser?.location || currentUser?.address || (currentUser?.businessName ? `${currentUser.businessName} Facility` : 'Organization Facility');
+
+    const pickup = isDonor 
+      ? (arrangeForm.pickupAddress.trim() || fallbackDonorLocation) 
+      : arrangeForm.pickupAddress.trim();
+
+    const delivery = !isDonor 
+      ? (arrangeForm.deliveryAddress.trim() || fallbackOrgLocation) 
+      : arrangeForm.deliveryAddress.trim();
+
+    // Validation based on role
+    if (isDonor && !delivery) {
+      setError('Please specify where to deliver the donation.');
+      return;
+    }
+    if (!isDonor && !pickup) {
+      setError('Please specify the pickup address to collect from.');
+      return;
+    }
+
+    if (!arrangeForm.contactName.trim() || !arrangeForm.contactPhone.trim()) {
+      setError('Please provide contact name and phone number.');
       return;
     }
 
@@ -230,8 +305,8 @@ export default function RequestsPage() {
     try {
       const payload = {
         requestId: arrangeTargetRequest.id,
-        pickupAddress: arrangeForm.pickupAddress.trim(),
-        deliveryAddress: arrangeForm.deliveryAddress.trim(),
+        pickupAddress: pickup,
+        deliveryAddress: delivery,
         contactName: arrangeForm.contactName.trim(),
         contactPhone: arrangeForm.contactPhone.trim(),
         scheduledCollectionTime: scheduledDate.toISOString(),
@@ -315,6 +390,15 @@ export default function RequestsPage() {
       );
     }
 
+    if (reqStatus === 'COMPLETED' || delivery?.status === 'Completed') {
+      return (
+        <span className="badge" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: '#dcfce7', color: '#15803d', border: '1px solid #86efac' }}>
+          <Sparkles size={13} />
+          <span>Completed</span>
+        </span>
+      );
+    }
+
     // Status is ACCEPTED -> Check Delivery Status
     if (delivery) {
       switch (delivery.status) {
@@ -329,7 +413,7 @@ export default function RequestsPage() {
           return (
             <span className="badge" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: '#dbeafe', color: '#1e40af', border: '1px solid #93c5fd' }}>
               <PackageCheck size={13} />
-              <span>Collected</span>
+              <span>Delivered</span>
             </span>
           );
         case 'Received':
@@ -358,6 +442,14 @@ export default function RequestsPage() {
       </span>
     );
   };
+
+  const displayedRequests = requests.filter(req => {
+    if (selectedStatus === 'COMPLETED') {
+      const rawDelivery = deliveriesMap[req.id];
+      return req.status?.toUpperCase() === 'COMPLETED' || rawDelivery?.status === 'Completed';
+    }
+    return true;
+  });
 
   return (
     <div className="requests-page animate-fade-in-up">
@@ -408,7 +500,7 @@ export default function RequestsPage() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px', marginBottom: '24px' }}>
           {/* Status Filter Tabs */}
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-            {['ALL', 'PENDING', 'ACCEPTED', 'REJECTED'].map((st) => (
+            {['ALL', 'PENDING', 'ACCEPTED', 'COMPLETED', 'REJECTED'].map((st) => (
               <button
                 key={st}
                 onClick={() => setSelectedStatus(st)}
@@ -447,7 +539,7 @@ export default function RequestsPage() {
             <RefreshCw size={28} className="spin-animation" style={{ margin: '0 auto 12px', color: '#10b981' }} />
             <p style={{ fontWeight: 600 }}>Loading requests & delivery workflows...</p>
           </div>
-        ) : requests.length === 0 ? (
+        ) : displayedRequests.length === 0 ? (
           <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e5e7eb', padding: '60px 24px', textAlign: 'center', boxShadow: '0 2px 10px rgba(0,0,0,0.02)' }}>
             <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: '#f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
               {isDonor ? <Inbox size={32} color="#9ca3af" /> : <Send size={32} color="#9ca3af" />}
@@ -463,7 +555,7 @@ export default function RequestsPage() {
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            {requests.map((req) => {
+            {displayedRequests.map((req) => {
               const rawDelivery = deliveriesMap[req.id];
               const deliveryError = rawDelivery?._error;
               const delivery = rawDelivery && !rawDelivery._error ? rawDelivery : null;
@@ -571,6 +663,17 @@ export default function RequestsPage() {
                           <XCircle size={16} />
                           <span>Decline</span>
                         </button>
+
+                        <button
+                          onClick={() => openRejectAllModal(req.donationId, req.donationTitle)}
+                          disabled={actionLoading}
+                          className="btn btn-outline btn-sm"
+                          title="Decline all pending requests for this surplus food listing"
+                          style={{ color: '#b91c1c', borderColor: '#fca5a5', display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 600, padding: '8px 14px' }}
+                        >
+                          <Ban size={15} />
+                          <span>Reject All Pending</span>
+                        </button>
                       </>
                     )}
 
@@ -596,17 +699,23 @@ export default function RequestsPage() {
 
                     {delivery && (
                       <>
-                        {/* Status: CollectionArranged -> Button: Mark as Collected */}
+                        {/* Status: CollectionArranged -> Donor Button: Mark as Delivered; Org sees awaiting message */}
                         {delivery.status === 'CollectionArranged' && (
-                          <button
-                            onClick={() => openNotesModal('collect', delivery.id)}
-                            disabled={actionLoading}
-                            className="btn btn-sm"
-                            style={{ background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)', color: '#fff', border: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 600, padding: '8px 16px' }}
-                          >
-                            <PackageCheck size={16} />
-                            <span>Mark as Collected</span>
-                          </button>
+                          isDonor ? (
+                            <button
+                              onClick={() => openNotesModal('collect', delivery.id)}
+                              disabled={actionLoading}
+                              className="btn btn-sm"
+                              style={{ background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)', color: '#fff', border: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 600, padding: '8px 16px' }}
+                            >
+                              <PackageCheck size={16} />
+                              <span>Mark as Delivered</span>
+                            </button>
+                          ) : (
+                            <span style={{ fontSize: '0.8rem', color: '#4b5563', background: '#eff6ff', padding: '6px 12px', borderRadius: '6px', fontStyle: 'italic' }}>
+                              Awaiting delivery by donor
+                            </span>
+                          )
                         )}
 
                         {/* Status: Collected -> Organization Button: Confirm Receipt */}
@@ -675,21 +784,9 @@ export default function RequestsPage() {
             </p>
 
             <form onSubmit={handleConfirmArrange}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
-                <div className="form-group" style={{ margin: 0 }}>
-                  <label className="form-label" style={{ fontWeight: 600, fontSize: '0.85rem' }}>Pickup Address *</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    placeholder="e.g. 123 Bakery St, Kitchen Entrance"
-                    value={arrangeForm.pickupAddress}
-                    onChange={(e) => setArrangeForm({ ...arrangeForm, pickupAddress: e.target.value })}
-                    required
-                  />
-                </div>
-
-                <div className="form-group" style={{ margin: 0 }}>
-                  <label className="form-label" style={{ fontWeight: 600, fontSize: '0.85rem' }}>Delivery Address *</label>
+              {isDonor ? (
+                <div className="form-group" style={{ marginBottom: '14px' }}>
+                  <label className="form-label" style={{ fontWeight: 600, fontSize: '0.85rem' }}>Delivery Address (Where to deliver) *</label>
                   <input
                     type="text"
                     className="form-input"
@@ -699,7 +796,19 @@ export default function RequestsPage() {
                     required
                   />
                 </div>
-              </div>
+              ) : (
+                <div className="form-group" style={{ marginBottom: '14px' }}>
+                  <label className="form-label" style={{ fontWeight: 600, fontSize: '0.85rem' }}>Pickup Address (Where to pick up) *</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="e.g. 123 Bakery St, Kitchen Entrance"
+                    value={arrangeForm.pickupAddress}
+                    onChange={(e) => setArrangeForm({ ...arrangeForm, pickupAddress: e.target.value })}
+                    required
+                  />
+                </div>
+              )}
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
                 <div className="form-group" style={{ margin: 0 }}>
@@ -778,7 +887,7 @@ export default function RequestsPage() {
         <div className="modal-overlay animate-fade-in" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '90px 1rem 2rem 1rem', overflowY: 'auto' }}>
           <div className="modal-card animate-scale-up" style={{ margin: '0 auto', background: '#fff', borderRadius: '16px', maxWidth: '460px', width: '100%', padding: '28px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}>
             <h3 style={{ fontSize: '1.2rem', fontWeight: 700, color: '#111827', margin: '0 0 8px' }}>
-              {notesTargetAction.type === 'collect' && 'Record Donation Collection'}
+              {notesTargetAction.type === 'collect' && 'Record Donation Delivery'}
               {notesTargetAction.type === 'receive' && 'Confirm Receipt of Donation'}
               {notesTargetAction.type === 'complete' && 'Complete Donation Lifecycle'}
             </h3>
@@ -817,7 +926,7 @@ export default function RequestsPage() {
                     border: 'none'
                   }}
                 >
-                  {actionLoading ? 'Updating...' : 'Submit Status Update'}
+                  {actionLoading ? 'Updating...' : notesTargetAction.type === 'collect' ? 'Mark as Delivered' : notesTargetAction.type === 'receive' ? 'Confirm Receipt' : 'Complete Donation'}
                 </button>
               </div>
             </form>
@@ -852,7 +961,7 @@ export default function RequestsPage() {
               <div style={{ display: 'flex', justifyContent: 'space-between', position: 'relative' }}>
                 {[
                   { key: 'CollectionArranged', label: 'Arranged' },
-                  { key: 'Collected', label: 'Collected' },
+                  { key: 'Collected', label: 'Delivered' },
                   { key: 'Received', label: 'Received' },
                   { key: 'Completed', label: 'Completed' }
                 ].map((step, idx) => {
@@ -991,6 +1100,56 @@ export default function RequestsPage() {
                   style={{ background: '#ef4444', border: 'none' }}
                 >
                   {actionLoading ? 'Processing...' : 'Confirm Decline'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Decline All Pending Modal for Donor */}
+      {rejectAllModalOpen && targetRejectAllDonation && (
+        <div className="modal-overlay animate-fade-in" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '90px 1rem 2rem 1rem', overflowY: 'auto' }}>
+          <div className="modal-card animate-scale-up" style={{ margin: '0 auto', background: '#fff', borderRadius: '16px', maxWidth: '480px', width: '100%', padding: '28px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+              <Ban size={22} color="#dc2626" />
+              <h3 style={{ fontSize: '1.2rem', fontWeight: 700, color: '#111827', margin: 0 }}>
+                Reject All Pending Requests
+              </h3>
+            </div>
+            <p style={{ color: '#6b7280', fontSize: '0.875rem', margin: '0 0 16px' }}>
+              Decline all remaining pending requests for <strong>{targetRejectAllDonation.donationTitle}</strong>. You can include an optional reason.
+            </p>
+
+            <form onSubmit={handleConfirmRejectAll}>
+              <div className="form-group" style={{ marginBottom: '20px' }}>
+                <label className="form-label" style={{ fontWeight: 600, fontSize: '0.85rem' }}>Decline Reason / Message (Optional)</label>
+                <textarea
+                  className="form-input"
+                  rows="3"
+                  placeholder="e.g. This surplus food listing has been fully claimed."
+                  value={rejectAllReason}
+                  onChange={(e) => setRejectAllReason(e.target.value)}
+                  maxLength={500}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => setRejectAllModalOpen(false)}
+                  disabled={actionLoading}
+                  className="btn btn-ghost btn-sm"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={actionLoading}
+                  className="btn btn-primary btn-sm"
+                  style={{ background: '#dc2626', border: 'none' }}
+                >
+                  {actionLoading ? 'Processing...' : 'Confirm Reject All'}
                 </button>
               </div>
             </form>
