@@ -86,7 +86,7 @@ public class RecordCollectionIntegrationTests : IClassFixture<CustomWebApplicati
     }
 
     [Fact]
-    public async Task C_I02_AuthorizedOrganizationRecordsCollection_Returns200()
+    public async Task C_I02_OrganizationAttemptsToRecordCollection_Returns403Forbidden()
     {
         // Arrange
         await _factory.ResetDatabaseAsync();
@@ -100,7 +100,7 @@ public class RecordCollectionIntegrationTests : IClassFixture<CustomWebApplicati
         var response = await client.PostAsJsonAsync($"/api/deliveries/{arrangement.Id}/collect", new RecordCollectionDto());
 
         // Assert
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
     [Fact]
