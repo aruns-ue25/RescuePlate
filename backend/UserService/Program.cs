@@ -39,6 +39,11 @@ builder.Services.AddHttpClient("RequestService", client =>
     client.BaseAddress = new Uri(builder.Configuration["Services:RequestServiceUrl"] ?? "http://localhost:5002");
     client.Timeout = TimeSpan.FromSeconds(5);
 });
+builder.Services.AddHttpClient("DeliveryService", client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["Services:DeliveryServiceUrl"] ?? "http://localhost:5003");
+    client.Timeout = TimeSpan.FromSeconds(5);
+});
 builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IProfileService, ProfileService>();

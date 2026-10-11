@@ -129,12 +129,21 @@ export default function AdminDashboardPage() {
     return '#3b82f6';
   };
 
+  const donationMetrics = overviewData?.donationSummary?.data || overviewData?.donationSummary;
+  const isDonationAvailable = Boolean(donationMetrics && donationMetrics.status !== 'UNAVAILABLE');
+
+  const requestMetrics = overviewData?.requestSummary?.data || overviewData?.requestSummary;
+  const isRequestAvailable = Boolean(requestMetrics && requestMetrics.status !== 'UNAVAILABLE');
+
+  const deliveryMetrics = overviewData?.deliverySummary?.data || overviewData?.deliverySummary;
+  const isDeliveryAvailable = Boolean(deliveryMetrics && deliveryMetrics.status !== 'UNAVAILABLE');
+
   return (
     <div style={{
       backgroundColor: '#0f172a',
       color: '#f8fafc',
       minHeight: '90vh',
-      padding: '2rem 1.5rem',
+      padding: '6.5rem 1.5rem 2rem',
       fontFamily: 'system-ui, -apple-system, sans-serif'
     }}>
       <div style={{ maxWidth: '1280px', margin: '0 auto' }}>
@@ -305,24 +314,253 @@ export default function AdminDashboardPage() {
               <h3 style={{ fontSize: '1.1rem', fontWeight: '700', marginBottom: '1rem', color: '#f8fafc' }}>
                 Microservices Telemetry & Domain Boundaries
               </h3>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1rem' }}>
                 <div style={{ backgroundColor: '#0f172a', padding: '1rem', borderRadius: '8px', borderLeft: '4px solid #10b981' }}>
-                  <div style={{ fontWeight: '700', color: '#ffffff' }}>UserService (Port 5000)</div>
-                  <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '0.2rem' }}>Status: Operational (Auth, Users, Audit)</div>
-                </div>
-
-                <div style={{ backgroundColor: '#0f172a', padding: '1rem', borderRadius: '8px', borderLeft: '4px solid #38bdf8' }}>
-                  <div style={{ fontWeight: '700', color: '#ffffff' }}>DonationService (Port 5001)</div>
-                  <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '0.2rem' }}>
-                    Status: {overviewData?.donationSummary?.status === 'UNAVAILABLE' ? '⚠️ Offline / Unreachable' : 'Operational (Surplus Food Listings)'}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ fontWeight: '700', color: '#ffffff' }}>UserService (Port 5000)</div>
+                    <span style={{ fontSize: '0.75rem', color: '#10b981', fontWeight: '700' }}>● Healthy</span>
+                  </div>
+                  <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '0.35rem' }}>
+                    Status: Operational (Auth, Users, Audit)
                   </div>
                 </div>
 
-                <div style={{ backgroundColor: '#0f172a', padding: '1rem', borderRadius: '8px', borderLeft: '4px solid #a855f7' }}>
-                  <div style={{ fontWeight: '700', color: '#ffffff' }}>RequestWorkflowService (Port 5002)</div>
-                  <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '0.2rem' }}>
-                    Status: {overviewData?.requestSummary?.status === 'UNAVAILABLE' ? '⚠️ Offline / Unreachable' : 'Operational (Food Claims & Workflow)'}
+                <div style={{ backgroundColor: '#0f172a', padding: '1rem', borderRadius: '8px', borderLeft: `4px solid ${isDonationAvailable ? '#38bdf8' : '#ef4444'}` }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ fontWeight: '700', color: '#ffffff' }}>DonationService (Port 5001)</div>
+                    <span style={{ fontSize: '0.75rem', color: isDonationAvailable ? '#38bdf8' : '#ef4444', fontWeight: '700' }}>
+                      {isDonationAvailable ? '● Healthy' : '⚠️ Offline / Unreachable'}
+                    </span>
                   </div>
+                  <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '0.35rem' }}>
+                    Status: {isDonationAvailable ? 'Operational (Surplus Food Listings)' : 'Offline / Unreachable'}
+                  </div>
+                </div>
+
+                <div style={{ backgroundColor: '#0f172a', padding: '1rem', borderRadius: '8px', borderLeft: `4px solid ${isRequestAvailable ? '#a855f7' : '#ef4444'}` }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ fontWeight: '700', color: '#ffffff' }}>RequestWorkflowService (Port 5002)</div>
+                    <span style={{ fontSize: '0.75rem', color: isRequestAvailable ? '#a855f7' : '#ef4444', fontWeight: '700' }}>
+                      {isRequestAvailable ? '● Healthy' : '⚠️ Offline / Unreachable'}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '0.35rem' }}>
+                    Status: {isRequestAvailable ? 'Operational (Food Claims & Workflow)' : 'Offline / Unreachable'}
+                  </div>
+                </div>
+
+                <div style={{ backgroundColor: '#0f172a', padding: '1rem', borderRadius: '8px', borderLeft: `4px solid ${isDeliveryAvailable ? '#f59e0b' : '#ef4444'}` }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ fontWeight: '700', color: '#ffffff' }}>DeliveryWorkflowService (Port 5003)</div>
+                    <span style={{ fontSize: '0.75rem', color: isDeliveryAvailable ? '#f59e0b' : '#ef4444', fontWeight: '700' }}>
+                      {isDeliveryAvailable ? '● Healthy' : '⚠️ Offline / Unreachable'}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '0.35rem' }}>
+                    Status: {isDeliveryAvailable ? 'Operational (Logistics & Deliveries)' : 'Offline / Unreachable'}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Platform Overview Statistics Grid */}
+            <div style={{ marginBottom: '2rem' }}>
+              <h3 style={{ fontSize: '1.1rem', fontWeight: '700', marginBottom: '1rem', color: '#f8fafc' }}>
+                Platform Operational Activity & Aggregated Telemetry
+              </h3>
+
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+                gap: '1.25rem'
+              }}>
+                {/* Donations Telemetry Summary */}
+                <div style={{
+                  backgroundColor: '#1e293b',
+                  borderRadius: '12px',
+                  border: '1px solid #334155',
+                  padding: '1.5rem'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                    <h4 style={{ margin: 0, fontSize: '1.05rem', color: '#38bdf8', fontWeight: '700' }}>
+                      🍲 Surplus Food Donations
+                    </h4>
+                    <span style={{
+                      fontSize: '0.75rem',
+                      padding: '0.2rem 0.5rem',
+                      borderRadius: '4px',
+                      backgroundColor: isDonationAvailable ? 'rgba(56, 189, 248, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                      color: isDonationAvailable ? '#38bdf8' : '#ef4444',
+                      fontWeight: '700'
+                    }}>
+                      {isDonationAvailable ? 'LIVE' : 'UNREACHABLE'}
+                    </span>
+                  </div>
+
+                  {isDonationAvailable ? (
+                    <div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1rem' }}>
+                        <div style={{ backgroundColor: '#0f172a', padding: '0.75rem', borderRadius: '8px' }}>
+                          <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Total Listings</span>
+                          <div style={{ fontSize: '1.4rem', fontWeight: '800', color: '#ffffff' }}>
+                            {donationMetrics.totalCount ?? 0}
+                          </div>
+                        </div>
+                        <div style={{ backgroundColor: '#0f172a', padding: '0.75rem', borderRadius: '8px' }}>
+                          <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Active / Available</span>
+                          <div style={{ fontSize: '1.4rem', fontWeight: '800', color: '#10b981' }}>
+                            {donationMetrics.availableCount ?? 0}
+                          </div>
+                        </div>
+                        <div style={{ backgroundColor: '#0f172a', padding: '0.75rem', borderRadius: '8px' }}>
+                          <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Claimed</span>
+                          <div style={{ fontSize: '1.4rem', fontWeight: '800', color: '#38bdf8' }}>
+                            {donationMetrics.claimedCount ?? 0}
+                          </div>
+                        </div>
+                        <div style={{ backgroundColor: '#0f172a', padding: '0.75rem', borderRadius: '8px' }}>
+                          <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Portions Rescued</span>
+                          <div style={{ fontSize: '1.4rem', fontWeight: '800', color: '#f59e0b' }}>
+                            {donationMetrics.totalPortionsRescued ?? 0}
+                          </div>
+                        </div>
+                      </div>
+                      <div style={{ fontSize: '0.8rem', color: '#94a3b8', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
+                        <span>Total Listed Portions: <strong style={{ color: '#e2e8f0' }}>{donationMetrics.totalPortionsListed ?? 0}</strong></span>
+                        <span>Expired / Cancelled: <strong style={{ color: '#e2e8f0' }}>{(donationMetrics.expiredCount ?? 0) + (donationMetrics.cancelledCount ?? 0)}</strong></span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ backgroundColor: '#0f172a', padding: '1rem', borderRadius: '8px', color: '#94a3b8', fontSize: '0.85rem' }}>
+                      ⚠️ Unable to query DonationService telemetry. Verify service deployment or network connectivity.
+                    </div>
+                  )}
+                </div>
+
+                {/* Requests Telemetry Summary */}
+                <div style={{
+                  backgroundColor: '#1e293b',
+                  borderRadius: '12px',
+                  border: '1px solid #334155',
+                  padding: '1.5rem'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                    <h4 style={{ margin: 0, fontSize: '1.05rem', color: '#a855f7', fontWeight: '700' }}>
+                      📋 Charity Claims & Requests
+                    </h4>
+                    <span style={{
+                      fontSize: '0.75rem',
+                      padding: '0.2rem 0.5rem',
+                      borderRadius: '4px',
+                      backgroundColor: isRequestAvailable ? 'rgba(168, 85, 247, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                      color: isRequestAvailable ? '#a855f7' : '#ef4444',
+                      fontWeight: '700'
+                    }}>
+                      {isRequestAvailable ? 'LIVE' : 'UNREACHABLE'}
+                    </span>
+                  </div>
+
+                  {isRequestAvailable ? (
+                    <div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1rem' }}>
+                        <div style={{ backgroundColor: '#0f172a', padding: '0.75rem', borderRadius: '8px' }}>
+                          <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Total Requests</span>
+                          <div style={{ fontSize: '1.4rem', fontWeight: '800', color: '#ffffff' }}>
+                            {requestMetrics.totalCount ?? 0}
+                          </div>
+                        </div>
+                        <div style={{ backgroundColor: '#0f172a', padding: '0.75rem', borderRadius: '8px' }}>
+                          <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Pending Review</span>
+                          <div style={{ fontSize: '1.4rem', fontWeight: '800', color: '#f59e0b' }}>
+                            {requestMetrics.pendingCount ?? 0}
+                          </div>
+                        </div>
+                        <div style={{ backgroundColor: '#0f172a', padding: '0.75rem', borderRadius: '8px' }}>
+                          <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Accepted Requests</span>
+                          <div style={{ fontSize: '1.4rem', fontWeight: '800', color: '#10b981' }}>
+                            {requestMetrics.acceptedCount ?? 0}
+                          </div>
+                        </div>
+                        <div style={{ backgroundColor: '#0f172a', padding: '0.75rem', borderRadius: '8px' }}>
+                          <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Portions Allocated</span>
+                          <div style={{ fontSize: '1.4rem', fontWeight: '800', color: '#a855f7' }}>
+                            {requestMetrics.totalAcceptedQuantity ?? 0}
+                          </div>
+                        </div>
+                      </div>
+                      <div style={{ fontSize: '0.8rem', color: '#94a3b8', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
+                        <span>Rejected Requests: <strong style={{ color: '#e2e8f0' }}>{requestMetrics.rejectedCount ?? 0}</strong></span>
+                        <span>Fulfillment: <strong style={{ color: '#e2e8f0' }}>{requestMetrics.totalCount > 0 ? Math.round(((requestMetrics.acceptedCount ?? 0) / requestMetrics.totalCount) * 100) : 0}%</strong></span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ backgroundColor: '#0f172a', padding: '1rem', borderRadius: '8px', color: '#94a3b8', fontSize: '0.85rem' }}>
+                      ⚠️ Unable to query RequestWorkflowService telemetry. Verify service deployment or network connectivity.
+                    </div>
+                  )}
+                </div>
+
+                {/* Delivery Telemetry Summary */}
+                <div style={{
+                  backgroundColor: '#1e293b',
+                  borderRadius: '12px',
+                  border: '1px solid #334155',
+                  padding: '1.5rem'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                    <h4 style={{ margin: 0, fontSize: '1.05rem', color: '#f59e0b', fontWeight: '700' }}>
+                      🚚 Logistics & Deliveries
+                    </h4>
+                    <span style={{
+                      fontSize: '0.75rem',
+                      padding: '0.2rem 0.5rem',
+                      borderRadius: '4px',
+                      backgroundColor: isDeliveryAvailable ? 'rgba(245, 158, 11, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                      color: isDeliveryAvailable ? '#f59e0b' : '#ef4444',
+                      fontWeight: '700'
+                    }}>
+                      {isDeliveryAvailable ? 'LIVE' : 'UNREACHABLE'}
+                    </span>
+                  </div>
+
+                  {isDeliveryAvailable ? (
+                    <div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1rem' }}>
+                        <div style={{ backgroundColor: '#0f172a', padding: '0.75rem', borderRadius: '8px' }}>
+                          <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Arrangements</span>
+                          <div style={{ fontSize: '1.4rem', fontWeight: '800', color: '#ffffff' }}>
+                            {deliveryMetrics.totalCount ?? 0}
+                          </div>
+                        </div>
+                        <div style={{ backgroundColor: '#0f172a', padding: '0.75rem', borderRadius: '8px' }}>
+                          <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Arranged</span>
+                          <div style={{ fontSize: '1.4rem', fontWeight: '800', color: '#38bdf8' }}>
+                            {deliveryMetrics.arrangedCount ?? 0}
+                          </div>
+                        </div>
+                        <div style={{ backgroundColor: '#0f172a', padding: '0.75rem', borderRadius: '8px' }}>
+                          <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Food Collected</span>
+                          <div style={{ fontSize: '1.4rem', fontWeight: '800', color: '#f59e0b' }}>
+                            {deliveryMetrics.collectedCount ?? 0}
+                          </div>
+                        </div>
+                        <div style={{ backgroundColor: '#0f172a', padding: '0.75rem', borderRadius: '8px' }}>
+                          <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Completed</span>
+                          <div style={{ fontSize: '1.4rem', fontWeight: '800', color: '#10b981' }}>
+                            {deliveryMetrics.completedCount ?? 0}
+                          </div>
+                        </div>
+                      </div>
+                      <div style={{ fontSize: '0.8rem', color: '#94a3b8', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
+                        <span>Food Received: <strong style={{ color: '#e2e8f0' }}>{deliveryMetrics.receivedCount ?? 0}</strong></span>
+                        <span>Cancelled: <strong style={{ color: '#e2e8f0' }}>{deliveryMetrics.cancelledCount ?? 0}</strong></span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ backgroundColor: '#0f172a', padding: '1rem', borderRadius: '8px', color: '#94a3b8', fontSize: '0.85rem' }}>
+                      ⚠️ Unable to query DeliveryWorkflowService telemetry. Verify service deployment or network connectivity.
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

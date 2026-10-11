@@ -638,6 +638,77 @@ public class OrgNeedRequestsController : ControllerBase
         return Ok(ApiResponse<DonorOfferResponseDto>.Ok(MapOfferToDto(offer), "Food offer rejected successfully."));
     }
 
+    /// <summary>
+    /// Organization rejects all pending offers for a specific food need request.
+    /// </summary>
+    [HttpPost("{id:int}/offers/reject-all-pending")]
+    [Authorize(Roles = "ORGANIZATION")]
+    [ProducesResponseType(typeof(ApiResponse<List<DonorOfferResponseDto>>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> RejectAllPendingOffers(int id, [FromBody] RejectRequestDto? dto = null)
+    {
+        var (orgId, orgName) = GetCallerIdentity();
+        var request = await _context.OrgNeedRequests.FindAsync(id);
+        if (request == null)
+        {
+            return NotFound(ApiResponse<List<DonorOfferResponseDto>>.Fail($"Food need request {id} not found."));
+        }
+
+        if (request.OrganizationId != orgId)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, ApiResponse<List<DonorOfferResponseDto>>.Fail("You do not have permission to manage offers for this request."));
+        }
+
+        var pendingOffers = await _context.DonorOffers
+            .Where(o => o.OrgFoodNeedRequestId == id && o.Status == "PENDING")
+            .ToListAsync();
+
+        if (pendingOffers.Count == 0)
+        {
+            return Ok(ApiResponse<List<DonorOfferResponseDto>>.Ok(new List<DonorOfferResponseDto>(), "No pending offers found for this request."));
+        }
+
+        var reason = !string.IsNullOrWhiteSpace(dto?.Reason)
+            ? dto.Reason.Trim()
+            : "This food need has been fully fulfilled.";
+
+        var now = DateTime.UtcNow;
+        var needTopic = _configuration["Kafka:NeedRequestTopic"] ?? "need-request-events";
+
+        foreach (var offer in pendingOffers)
+        {
+            offer.Status = "REJECTED";
+            offer.UpdatedAt = now;
+
+            var rejectNotif = new Notification
+            {
+                UserId = offer.DonorId,
+                Title = "Offer Declined",
+                Message = $"{orgName} declined your offer for '{request.Title}'." + (!string.IsNullOrWhiteSpace(reason) ? $" Reason: {reason}" : ""),
+                Type = "OFFER_REJECTED",
+                RelatedId = request.Id,
+                CreatedAt = now
+            };
+            _context.Notifications.Add(rejectNotif);
+
+            await _eventProducer.PublishEventAsync(needTopic, offer.Id.ToString(), new FoodOfferStatusChangedEvent
+            {
+                OfferId = offer.Id,
+                NeedRequestId = request.Id,
+                OrganizationId = request.OrganizationId,
+                DonorId = offer.DonorId,
+                Status = offer.Status,
+                RespondedAt = now
+            });
+        }
+
+        await _context.SaveChangesAsync();
+        _logger.LogInformation("Organization {OrgId} bulk rejected {Count} pending offers for NeedRequest {RequestId}", orgId, pendingOffers.Count, id);
+
+        return Ok(ApiResponse<List<DonorOfferResponseDto>>.Ok(pendingOffers.Select(MapOfferToDto).ToList(), $"Successfully declined {pendingOffers.Count} pending offer(s)."));
+    }
+
     private static void ResolveExpiration(OrgFoodNeedRequest r)
     {
         if (r.Status != "CANCELLED" && r.Status != "CLAIMED")

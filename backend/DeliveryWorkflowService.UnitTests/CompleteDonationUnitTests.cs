@@ -308,4 +308,37 @@ public class CompleteDonationUnitTests
             result!.StatusCode.Should().Be(500);
         }
     }
+
+    [Fact]
+    public async Task D_U12_CompleteDonation_SyncsRequestsTableStatusToCompleted()
+    {
+        // Arrange
+        var (controller, db, conn) = SetupTest();
+        using (conn)
+        {
+            var arrangement = await SeedArrangementAsync(db, "Received");
+            TestDbContextFactory.SeedRequest(
+                db,
+                arrangement.RequestId,
+                arrangement.DonationId,
+                arrangement.DonorId,
+                arrangement.OrganizationId,
+                "ACCEPTED");
+
+            controller.ControllerContext = ControllerTestHelper.CreateControllerContext("donor_d", "DONOR");
+
+            // Act
+            var result = await controller.CompleteDonation(arrangement.Id) as OkObjectResult;
+
+            // Assert
+            result.Should().NotBeNull();
+            result!.StatusCode.Should().Be(200);
+
+            // Verify Requests table was updated to COMPLETED via SQL sync
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "SELECT \"Status\" FROM \"Requests\" WHERE \"Id\" = " + arrangement.RequestId;
+            var statusInRequests = (string?)cmd.ExecuteScalar();
+            statusInRequests.Should().Be("COMPLETED");
+        }
+    }
 }

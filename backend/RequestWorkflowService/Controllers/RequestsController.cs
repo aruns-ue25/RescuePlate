@@ -409,6 +409,72 @@ public class RequestsController : ControllerBase
         return Ok(ApiResponse<FoodRequestResponseDto>.Ok(MapToResponseDto(request), "Donation request rejected successfully."));
     }
 
+    /// <summary>
+    /// Donor rejects all pending food requests for a specific surplus donation listing.
+    /// </summary>
+    [HttpPost("donations/{donationId:int}/reject-all-pending")]
+    [Authorize(Roles = "DONOR")]
+    [ProducesResponseType(typeof(ApiResponse<List<FoodRequestResponseDto>>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> RejectAllPendingRequestsForDonation(int donationId, [FromBody] RejectRequestDto? dto = null)
+    {
+        var (donorId, donorName) = GetCallerIdentity();
+        if (string.IsNullOrWhiteSpace(donorId))
+        {
+            return Unauthorized(ApiResponse<List<FoodRequestResponseDto>>.Fail("Invalid or missing Donor authentication claims."));
+        }
+
+        var pendingRequests = await _context.Requests
+            .Where(r => r.DonationId == donationId && r.DonorId == donorId && r.Status == "PENDING")
+            .ToListAsync();
+
+        if (pendingRequests.Count == 0)
+        {
+            return Ok(ApiResponse<List<FoodRequestResponseDto>>.Ok(new List<FoodRequestResponseDto>(), "No pending requests found for this donation."));
+        }
+
+        var reason = !string.IsNullOrWhiteSpace(dto?.Reason)
+            ? dto.Reason.Trim()
+            : "This surplus food listing has been fully claimed.";
+
+        var now = DateTime.UtcNow;
+        var requestTopic = _configuration["Kafka:RequestTopic"] ?? "request-events";
+
+        foreach (var req in pendingRequests)
+        {
+            req.Status = "REJECTED";
+            req.RejectionReason = reason;
+            req.UpdatedAt = now;
+
+            var rejectNotif = new Notification
+            {
+                UserId = req.OrganizationId,
+                Title = "Request Declined",
+                Message = $"{donorName} declined your request for '{req.DonationTitle}'." + (!string.IsNullOrWhiteSpace(reason) ? $" Reason: {reason}" : ""),
+                Type = "REQUEST_REJECTED",
+                RelatedId = req.Id,
+                CreatedAt = now
+            };
+            _context.Notifications.Add(rejectNotif);
+
+            await _eventProducer.PublishEventAsync(requestTopic, req.Id.ToString(), new DonationRequestRejectedEvent
+            {
+                RequestId = req.Id,
+                DonationId = req.DonationId,
+                DonationTitle = req.DonationTitle,
+                OrganizationId = req.OrganizationId,
+                DonorId = req.DonorId,
+                Reason = reason,
+                RejectedAt = now
+            });
+        }
+
+        await _context.SaveChangesAsync();
+        _logger.LogInformation("Donor {DonorId} bulk rejected {Count} pending requests for Donation {DonationId}", donorId, pendingRequests.Count, donationId);
+
+        return Ok(ApiResponse<List<FoodRequestResponseDto>>.Ok(pendingRequests.Select(MapToResponseDto).ToList(), $"Successfully declined {pendingRequests.Count} pending request(s)."));
+    }
+
     private (string id, string name) GetCallerIdentity()
     {
         var idClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value

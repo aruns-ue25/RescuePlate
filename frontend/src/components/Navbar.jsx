@@ -55,8 +55,9 @@ export default function Navbar() {
       const reqFailed = reqRes.status === 'rejected';
       const delFailed = delRes.status === 'rejected';
 
-      if (reqRes.status === 'fulfilled' && reqRes.value?.data) {
-        const reqNotifs = reqRes.value.data.map(n => ({
+      if (reqRes.status === 'fulfilled') {
+        const rawList = Array.isArray(reqRes.value) ? reqRes.value : (Array.isArray(reqRes.value?.data) ? reqRes.value.data : []);
+        const reqNotifs = rawList.map(n => ({
           ...n,
           source: 'request',
           compositeKey: `request-${n.id}`
@@ -64,8 +65,9 @@ export default function Navbar() {
         combined = [...combined, ...reqNotifs];
       }
 
-      if (delRes.status === 'fulfilled' && delRes.value?.data) {
-        const delNotifs = delRes.value.data.map(n => ({
+      if (delRes.status === 'fulfilled') {
+        const rawList = Array.isArray(delRes.value) ? delRes.value : (Array.isArray(delRes.value?.data) ? delRes.value.data : []);
+        const delNotifs = rawList.map(n => ({
           ...n,
           source: 'delivery',
           compositeKey: `delivery-${n.id}`
@@ -79,10 +81,6 @@ export default function Navbar() {
 
       if (reqFailed && delFailed) {
         setNotifError("Notification services temporarily unavailable.");
-      } else if (reqFailed) {
-        setNotifError("Request notifications unavailable.");
-      } else if (delFailed) {
-        setNotifError("Delivery notifications unavailable.");
       }
     } catch (e) {
       setNotifications([]);
@@ -93,7 +91,7 @@ export default function Navbar() {
   };
 
   useEffect(() => {
-    if (currentUser) {
+    if (currentUser && currentUser.role !== 'ADMIN') {
       fetchNotifications();
       const interval = setInterval(fetchNotifications, 15000); // refresh every 15s
       return () => clearInterval(interval);
@@ -156,7 +154,7 @@ export default function Navbar() {
     <header className={`navbar-header ${isScrolled ? 'navbar-scrolled' : ''}`}>
       <div className="container nav-container">
         {/* Brand Logo */}
-        <Link to="/" className="brand-logo" onClick={() => setMobileMenuOpen(false)}>
+        <Link to={currentUser?.role === 'ADMIN' ? "/admin/dashboard" : "/"} className="brand-logo" onClick={() => setMobileMenuOpen(false)}>
           <div className="logo-icon-wrapper">
             <Utensils className="logo-icon" size={22} />
             <div className="logo-pulse"></div>
@@ -169,55 +167,58 @@ export default function Navbar() {
 
         {/* Desktop Nav Links */}
         <nav className="desktop-nav">
-          <NavLink to="/" className={({ isActive }) => `nav-link ${isActive ? 'nav-link-active' : ''}`}>
-            Home
-          </NavLink>
-          {(!currentUser || currentUser?.role !== 'DONOR') && (
-            <NavLink to={currentUser ? "/browse-food" : "/login"} className={({ isActive }) => `nav-link ${isActive ? 'nav-link-active' : ''}`}>
-              Browse Food
-            </NavLink>
-          )}
-          {currentUser && (
-            <>
-              <NavLink to="/donors" className={({ isActive }) => `nav-link ${isActive ? 'nav-link-active' : ''}`}>
-                Donors
-              </NavLink>
-              <NavLink to="/organizations" className={({ isActive }) => `nav-link ${isActive ? 'nav-link-active' : ''}`}>
-                Charities
-              </NavLink>
-            </>
-          )}
-          {currentUser?.role !== 'ORGANIZATION' && (
-            <NavLink to="/donor-portal" className={({ isActive }) => `nav-link ${isActive ? 'nav-link-active' : ''}`}>
-              Post Surplus
-            </NavLink>
-          )}
-          {currentUser && (
-            <>
-              <NavLink to="/requests" className={({ isActive }) => `nav-link ${isActive ? 'nav-link-active' : ''}`}>
-                Requests
-              </NavLink>
-              <NavLink to="/food-needs" className={({ isActive }) => `nav-link ${isActive ? 'nav-link-active' : ''}`}>
-                Food Needs
-              </NavLink>
-            </>
-          )}
-          {currentUser?.role === 'ADMIN' && (
+          {currentUser?.role === 'ADMIN' ? (
             <NavLink to="/admin/dashboard" className={({ isActive }) => `nav-link ${isActive ? 'nav-link-active' : ''}`} style={{ color: '#ef4444', fontWeight: 800 }}>
               🛡️ Admin Hub
             </NavLink>
-          )}
-          {!currentUser && (
+          ) : (
             <>
-              <NavLink to="/how-it-works" className={({ isActive }) => `nav-link ${isActive ? 'nav-link-active' : ''}`}>
-                How It Works
+              <NavLink to="/" className={({ isActive }) => `nav-link ${isActive ? 'nav-link-active' : ''}`}>
+                Home
               </NavLink>
-              <NavLink to="/about" className={({ isActive }) => `nav-link ${isActive ? 'nav-link-active' : ''}`}>
-                About Us
-              </NavLink>
-              <NavLink to="/contact" className={({ isActive }) => `nav-link ${isActive ? 'nav-link-active' : ''}`}>
-                Contact
-              </NavLink>
+              {(!currentUser || currentUser?.role !== 'DONOR') && (
+                <NavLink to={currentUser ? "/browse-food" : "/login"} className={({ isActive }) => `nav-link ${isActive ? 'nav-link-active' : ''}`}>
+                  Browse Food
+                </NavLink>
+              )}
+              {currentUser && (
+                <>
+                  <NavLink to="/donors" className={({ isActive }) => `nav-link ${isActive ? 'nav-link-active' : ''}`}>
+                    Donors
+                  </NavLink>
+                  <NavLink to="/organizations" className={({ isActive }) => `nav-link ${isActive ? 'nav-link-active' : ''}`}>
+                    Charities
+                  </NavLink>
+                </>
+              )}
+              {currentUser?.role !== 'ORGANIZATION' && (
+                <NavLink to="/donor-portal" className={({ isActive }) => `nav-link ${isActive ? 'nav-link-active' : ''}`}>
+                  Post Surplus
+                </NavLink>
+              )}
+              {currentUser && (
+                <>
+                  <NavLink to="/requests" className={({ isActive }) => `nav-link ${isActive ? 'nav-link-active' : ''}`}>
+                    Requests
+                  </NavLink>
+                  <NavLink to="/food-needs" className={({ isActive }) => `nav-link ${isActive ? 'nav-link-active' : ''}`}>
+                    Food Needs
+                  </NavLink>
+                </>
+              )}
+              {!currentUser && (
+                <>
+                  <NavLink to="/how-it-works" className={({ isActive }) => `nav-link ${isActive ? 'nav-link-active' : ''}`}>
+                    How It Works
+                  </NavLink>
+                  <NavLink to="/about" className={({ isActive }) => `nav-link ${isActive ? 'nav-link-active' : ''}`}>
+                    About Us
+                  </NavLink>
+                  <NavLink to="/contact" className={({ isActive }) => `nav-link ${isActive ? 'nav-link-active' : ''}`}>
+                    Contact
+                  </NavLink>
+                </>
+              )}
             </>
           )}
         </nav>
@@ -227,7 +228,8 @@ export default function Navbar() {
           {currentUser ? (
             <div className="logged-user-strip">
               {/* Notification Bell Button & Popover */}
-              <div style={{ position: 'relative' }}>
+              {currentUser.role !== 'ADMIN' && (
+                <div style={{ position: 'relative' }}>
                 <button
                   onClick={() => {
                     setNotifOpen(!notifOpen);
@@ -370,20 +372,30 @@ export default function Navbar() {
                   </div>
                 )}
               </div>
+              )}
 
-              <Link to="/profile" className="user-profile-badge" title="View Profile">
-                {currentUser.profilePictureUrl ? (
-                  <img
-                    src={getProfileImageUrl(currentUser.profilePictureUrl)}
-                    alt="Avatar"
-                    className="nav-avatar-img"
-                  />
-                ) : (
-                  <span className="user-role-dot"></span>
-                )}
-                <span className="user-business-name">{currentUser.businessName || currentUser.name}</span>
-                <span className="user-role-tag">{currentUser.role}</span>
-              </Link>
+              {/* User Profile Panel: non-clickable display for ADMIN, Link to profile for others */}
+              {currentUser.role === 'ADMIN' ? (
+                <div className="user-profile-badge" style={{ cursor: 'default' }} title="RescuePlate System Administrator">
+                  <span className="user-role-dot" style={{ backgroundColor: '#10b981' }}></span>
+                  <span className="user-business-name">{currentUser.businessName || currentUser.name || 'System Admin'}</span>
+                  <span className="user-role-tag" style={{ backgroundColor: '#10b981', color: '#fff' }}>ADMIN</span>
+                </div>
+              ) : (
+                <Link to="/profile" className="user-profile-badge" title="View Profile">
+                  {currentUser.profilePictureUrl ? (
+                    <img
+                      src={getProfileImageUrl(currentUser.profilePictureUrl)}
+                      alt="Avatar"
+                      className="nav-avatar-img"
+                    />
+                  ) : (
+                    <span className="user-role-dot"></span>
+                  )}
+                  <span className="user-business-name">{currentUser.businessName || currentUser.name}</span>
+                  <span className="user-role-tag">{currentUser.role}</span>
+                </Link>
+              )}
               <button onClick={handleSignOut} className="btn btn-ghost btn-sm" title="Sign Out">
                 <LogOut size={16} />
               </button>
@@ -416,76 +428,85 @@ export default function Navbar() {
       {mobileMenuOpen && (
         <div className="mobile-drawer animate-fade-in-up">
           <nav className="mobile-nav-links">
-            <Link to="/" className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>
-              <span>Home</span>
-              <ChevronRight size={16} />
-            </Link>
-            {(!currentUser || currentUser?.role !== 'DONOR') && (
-              <Link to={currentUser ? "/browse-food" : "/login"} className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>
-                <span>Browse Surplus Food</span>
+            {currentUser?.role === 'ADMIN' ? (
+              <Link to="/admin/dashboard" className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)} style={{ color: '#ef4444', fontWeight: 800 }}>
+                <span>🛡️ Admin Hub</span>
                 <ChevronRight size={16} />
               </Link>
-            )}
-            {currentUser && (
+            ) : (
               <>
-                <Link to="/donors" className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>
-                  <span>Browse Donors</span>
+                <Link to="/" className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>
+                  <span>Home</span>
                   <ChevronRight size={16} />
                 </Link>
-                <Link to="/organizations" className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>
-                  <span>Browse Charities</span>
-                  <ChevronRight size={16} />
-                </Link>
+                {(!currentUser || currentUser?.role !== 'DONOR') && (
+                  <Link to={currentUser ? "/browse-food" : "/login"} className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>
+                    <span>Browse Surplus Food</span>
+                    <ChevronRight size={16} />
+                  </Link>
+                )}
+                {currentUser && (
+                  <>
+                    <Link to="/donors" className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>
+                      <span>Browse Donors</span>
+                      <ChevronRight size={16} />
+                    </Link>
+                    <Link to="/organizations" className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>
+                      <span>Browse Charities</span>
+                      <ChevronRight size={16} />
+                    </Link>
+                  </>
+                )}
+                {currentUser?.role !== 'ORGANIZATION' && (
+                  <Link to="/donor-portal" className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>
+                    <span>Donor Portal / Post Food</span>
+                    <ChevronRight size={16} />
+                  </Link>
+                )}
+                {currentUser && (
+                  <>
+                    <Link to="/requests" className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>
+                      <span>Food Requests</span>
+                      <ChevronRight size={16} />
+                    </Link>
+                    <Link to="/food-needs" className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>
+                      <span>Charity Food Needs</span>
+                      <ChevronRight size={16} />
+                    </Link>
+                  </>
+                )}
+                {!currentUser && (
+                  <>
+                    <Link to="/how-it-works" className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>
+                      <span>How It Works</span>
+                      <ChevronRight size={16} />
+                    </Link>
+                    <Link to="/about" className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>
+                      <span>About Us</span>
+                      <ChevronRight size={16} />
+                    </Link>
+                    <Link to="/contact" className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>
+                      <span>Contact Support</span>
+                      <ChevronRight size={16} />
+                    </Link>
+                  </>
+                )}
+                {currentUser && (
+                  <Link to="/profile" className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      {currentUser.profilePictureUrl && (
+                        <img
+                          src={getProfileImageUrl(currentUser.profilePictureUrl)}
+                          alt="Avatar"
+                          className="nav-avatar-img"
+                        />
+                      )}
+                      <span>My Profile</span>
+                    </div>
+                    <ChevronRight size={16} />
+                  </Link>
+                )}
               </>
-            )}
-            {currentUser?.role !== 'ORGANIZATION' && (
-              <Link to="/donor-portal" className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>
-                <span>Donor Portal / Post Food</span>
-                <ChevronRight size={16} />
-              </Link>
-            )}
-            {currentUser && (
-              <>
-                <Link to="/requests" className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>
-                  <span>Food Requests</span>
-                  <ChevronRight size={16} />
-                </Link>
-                <Link to="/food-needs" className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>
-                  <span>Charity Food Needs</span>
-                  <ChevronRight size={16} />
-                </Link>
-              </>
-            )}
-            {!currentUser && (
-              <>
-                <Link to="/how-it-works" className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>
-                  <span>How It Works</span>
-                  <ChevronRight size={16} />
-                </Link>
-                <Link to="/about" className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>
-                  <span>About Us</span>
-                  <ChevronRight size={16} />
-                </Link>
-                <Link to="/contact" className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>
-                  <span>Contact Support</span>
-                  <ChevronRight size={16} />
-                </Link>
-              </>
-            )}
-            {currentUser && (
-              <Link to="/profile" className="mobile-nav-link" onClick={() => setMobileMenuOpen(false)}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  {currentUser.profilePictureUrl && (
-                    <img
-                      src={getProfileImageUrl(currentUser.profilePictureUrl)}
-                      alt="Avatar"
-                      className="nav-avatar-img"
-                    />
-                  )}
-                  <span>My Profile</span>
-                </div>
-                <ChevronRight size={16} />
-              </Link>
             )}
           </nav>
 
@@ -493,7 +514,7 @@ export default function Navbar() {
             {currentUser ? (
               <button onClick={handleSignOut} className="btn btn-outline full-width">
                 <LogOut size={16} />
-                <span>Sign Out ({currentUser.name})</span>
+                <span>Sign Out ({currentUser.businessName || currentUser.name || 'Admin'})</span>
               </button>
             ) : (
               <>

@@ -70,6 +70,8 @@ export default function DonorDashboardPage() {
   const createModalContentRef = useRef(null);
   const detailModalOverlayRef = useRef(null);
   const detailModalContentRef = useRef(null);
+  const editModalOverlayRef = useRef(null);
+  const editModalContentRef = useRef(null);
 
   useEffect(() => {
     if (isCreateModalOpen) {
@@ -80,14 +82,27 @@ export default function DonorDashboardPage() {
 
   useEffect(() => {
     if (selectedDonation) {
-      if (detailModalOverlayRef.current) detailModalOverlayRef.current.scrollTop = 0;
-      if (detailModalContentRef.current) detailModalContentRef.current.scrollTop = 0;
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      setTimeout(() => {
+        if (detailModalOverlayRef.current) detailModalOverlayRef.current.scrollTop = 0;
+        if (detailModalContentRef.current) detailModalContentRef.current.scrollTop = 0;
+      }, 0);
     }
   }, [selectedDonation]);
 
+  useEffect(() => {
+    if (editDonation) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      setTimeout(() => {
+        if (editModalOverlayRef.current) editModalOverlayRef.current.scrollTop = 0;
+        if (editModalContentRef.current) editModalContentRef.current.scrollTop = 0;
+      }, 0);
+    }
+  }, [editDonation]);
+
   // Filter & Search States
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState('ALL');
+  const [statusFilter, setStatusFilter] = useState('Available');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
 
   // Form State for creating donation
@@ -186,6 +201,7 @@ export default function DonorDashboardPage() {
     }
 
     setEditDonation(item);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
     setEditFormData({
       foodTitle: item.foodTitle || '',
       category: item.category || 'Cooked Meals',
@@ -954,7 +970,10 @@ export default function DonorDashboardPage() {
 
                       {/* Details Button */}
                       <button
-                        onClick={() => setSelectedDonation(item)}
+                        onClick={() => {
+                          setSelectedDonation(item);
+                          window.scrollTo({ top: 0, behavior: 'smooth' });
+                        }}
                         className="btn btn-outline btn-sm"
                         style={{ 
                           display: 'flex', 
@@ -1128,6 +1147,7 @@ export default function DonorDashboardPage() {
       {/* EDIT DONATION MODAL (Task 4) */}
       {editDonation && (
         <div 
+          ref={editModalOverlayRef}
           style={{
             position: 'fixed',
             inset: 0,
@@ -1137,11 +1157,12 @@ export default function DonorDashboardPage() {
             alignItems: 'flex-start',
             justifyContent: 'center',
             zIndex: 9999,
-            padding: '2rem 1rem',
+            padding: '90px 1rem 2rem 1rem',
             overflowY: 'auto'
           }}
         >
           <div 
+            ref={editModalContentRef}
             className="animate-fade-in-up"
             style={{
               margin: '0 auto',
@@ -1149,7 +1170,7 @@ export default function DonorDashboardPage() {
               borderRadius: '16px',
               maxWidth: '620px',
               width: '100%',
-              maxHeight: 'calc(100vh - 4rem)',
+              maxHeight: 'calc(100vh - 120px)',
               overflowY: 'auto',
               boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.2)',
               padding: '28px'

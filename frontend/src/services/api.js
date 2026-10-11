@@ -408,6 +408,18 @@ export const requestApi = {
     }
   },
 
+  rejectAllPendingForDonation: async (donationId, reason) => {
+    try {
+      const response = await requestClient.post(`/requests/donations/${donationId}/reject-all-pending`, { reason });
+      return response.data;
+    } catch (error) {
+      if (error.response?.data) {
+        throw error.response.data;
+      }
+      throw { message: error.message || 'Network Error', isNetworkError: !error.response };
+    }
+  },
+
   getRequestById: async (id) => {
     try {
       const response = await requestClient.get(`/requests/${id}`);
@@ -538,6 +550,18 @@ export const needRequestApi = {
       }
       throw { message: error.message || 'Network Error', isNetworkError: !error.response };
     }
+  },
+
+  rejectAllPendingOffers: async (needId, reason) => {
+    try {
+      const response = await requestClient.post(`/need-requests/${needId}/offers/reject-all-pending`, { reason });
+      return response.data;
+    } catch (error) {
+      if (error.response?.data) {
+        throw error.response.data;
+      }
+      throw { message: error.message || 'Network Error', isNetworkError: !error.response };
+    }
   }
 };
 
@@ -661,6 +685,42 @@ export const deliveryApi = {
       return response.data;
     } catch (error) {
       throw error.response?.data || { message: 'Failed to fetch tracking by request ID' };
+    }
+  },
+
+  getMyNotifications: async () => {
+    try {
+      const response = await deliveryClient.get('/notifications');
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { message: 'Failed to fetch delivery notifications' };
+    }
+  },
+
+  markAsRead: async (id) => {
+    try {
+      const response = await deliveryClient.patch(`/notifications/${id}/read`);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { message: 'Failed to mark delivery notification as read' };
+    }
+  },
+
+  markAllAsRead: async () => {
+    try {
+      const response = await deliveryClient.patch('/notifications/read-all');
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { message: 'Failed to mark all delivery notifications as read' };
+    }
+  },
+
+  clearRead: async () => {
+    try {
+      const response = await deliveryClient.delete('/notifications/clear-read');
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { message: 'Failed to clear read delivery notifications' };
     }
   }
 };
