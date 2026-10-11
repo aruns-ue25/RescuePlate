@@ -137,7 +137,11 @@ jobs:
           az containerapp update \
             --name ${{ env.BACKEND_APP }} \
             --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-            --image ${{ env.ACR_LOGIN_SERVER }}/rescueplate-userservice:${{ github.event.workflow_run.head_sha }}
+            --image ${{ env.ACR_LOGIN_SERVER }}/rescueplate-userservice:${{ github.event.workflow_run.head_sha }} \
+            --set-env-vars \
+              Services__DonationServiceUrl=https://rescueplate-donationservice.wittyrock-ff20867a.southeastasia.azurecontainerapps.io \
+              Services__RequestServiceUrl=https://rescueplate-requestservice.wittyrock-ff20867a.southeastasia.azurecontainerapps.io \
+              Services__DeliveryServiceUrl=https://rescueplate-deliveryservice.wittyrock-ff20867a.southeastasia.azurecontainerapps.io
 
       - name: Deploy DonationService
         run: |
