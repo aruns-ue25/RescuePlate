@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { requestApi, deliveryApi } from '../services/api';
 import { 
@@ -451,6 +451,235 @@ export default function RequestsPage() {
     return true;
   });
 
+  // Group requests by surplus donation listing for donors
+  const donorGroupedRequests = useMemo(() => {
+    if (!isDonor) return [];
+    const groups = {};
+    displayedRequests.forEach((req) => {
+      const key = req.donationId || req.donationTitle || 'other';
+      if (!groups[key]) {
+        groups[key] = {
+          donationId: req.donationId,
+          donationTitle: req.donationTitle || 'Surplus Food Donation',
+          requests: []
+        };
+      }
+      groups[key].requests.push(req);
+    });
+    return Object.values(groups);
+  }, [displayedRequests, isDonor]);
+
+  const renderRequestCard = (req, isGrouped = false) => {
+    const rawDelivery = deliveriesMap[req.id];
+    const deliveryError = rawDelivery?._error;
+    const delivery = rawDelivery && !rawDelivery._error ? rawDelivery : null;
+    const isAccepted = req.status?.toUpperCase() === 'ACCEPTED';
+
+    return (
+      <div 
+        key={req.id}
+        style={{
+          background: '#fff',
+          borderRadius: isGrouped ? '12px' : '14px',
+          border: '1px solid #e5e7eb',
+          padding: isGrouped ? '18px 20px' : '20px 24px',
+          boxShadow: isGrouped ? '0 1px 3px rgba(0,0,0,0.02)' : '0 2px 8px rgba(0,0,0,0.03)',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: '16px'
+        }}
+      >
+        {/* Left Request & Delivery Info */}
+        <div style={{ flex: '1 1 340px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+            {getStatusBadge(req)}
+            <span style={{ fontSize: '0.8rem', color: '#9ca3af' }}>
+              Request #{req.id} &bull; {new Date(req.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+            </span>
+          </div>
+
+          {isGrouped ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+              <Building2 size={16} color="#047857" />
+              <h4 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#111827', margin: 0 }}>
+                {req.organizationName}
+              </h4>
+            </div>
+          ) : (
+            <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: '#111827', margin: '0 0 6px' }}>
+              {req.donationTitle || 'Surplus Food Donation'}
+            </h3>
+          )}
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px', fontSize: '0.875rem', color: '#4b5563', flexWrap: 'wrap' }}>
+            {!isGrouped && (
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                {isDonor ? <Building2 size={15} color="#047857" /> : <Store size={15} color="#d97706" />}
+                <span style={{ fontWeight: 600 }}>
+                  {isDonor ? req.organizationName : 'Donor Listing'}
+                </span>
+              </div>
+            )}
+
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: '#f3f4f6', padding: '4px 10px', borderRadius: '6px' }}>
+              <Utensils size={14} color="#6b7280" />
+              <span>
+                Requested: <strong>{req.requestedQuantity} {req.unit}</strong>
+              </span>
+            </div>
+
+            {req.status === 'ACCEPTED' && req.acceptedQuantity && (
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: '#ecfdf5', color: '#065f46', padding: '4px 10px', borderRadius: '6px' }}>
+                <CheckCircle2 size={14} />
+                <span>
+                  Accepted: <strong>{req.acceptedQuantity} {req.unit}</strong>
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* Delivery Quick Details Banner if Arranged */}
+          {delivery && (
+            <div style={{ marginTop: '12px', padding: '10px 14px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.85rem', color: '#334155' }}>
+              <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', alignItems: 'center' }}>
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                  <MapPin size={14} color="#6366f1" />
+                  <span><strong>Pickup:</strong> {delivery.pickupAddress}</span>
+                </div>
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                  <Calendar size={14} color="#8b5cf6" />
+                  <span><strong>Collection:</strong> {new Date(delivery.scheduledCollectionTime).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {req.notes && (
+            <div style={{ marginTop: '10px', padding: '8px 12px', background: '#f9fafb', borderRadius: '8px', border: '1px solid #f3f4f6', fontSize: '0.85rem', color: '#4b5563', display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+              <MessageSquare size={14} style={{ flexShrink: 0, marginTop: '2px', color: '#9ca3af' }} />
+              <span><strong>Notes:</strong> {req.notes}</span>
+            </div>
+          )}
+        </div>
+
+        {/* Right Action Buttons */}
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+          {/* Donor PENDING Actions */}
+          {isDonor && req.status === 'PENDING' && (
+            <>
+              <button
+                onClick={() => handleAcceptRequest(req.id)}
+                disabled={actionLoading}
+                className="btn btn-primary btn-sm"
+                style={{ background: '#10b981', border: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 600, padding: '8px 16px' }}
+              >
+                <CheckCircle2 size={16} />
+                <span>Accept Request</span>
+              </button>
+
+              <button
+                onClick={() => openRejectModal(req.id)}
+                disabled={actionLoading}
+                className="btn btn-outline btn-sm"
+                style={{ color: '#ef4444', borderColor: '#fca5a5', display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 600, padding: '8px 16px' }}
+              >
+                <XCircle size={16} />
+                <span>Decline</span>
+              </button>
+            </>
+          )}
+
+          {/* SPRINT 4 DELIVERY WORKFLOW BUTTONS */}
+          {isAccepted && deliveryError && (
+            <div style={{ fontSize: '0.8rem', color: '#dc2626', background: '#fef2f2', padding: '6px 12px', borderRadius: '6px', border: '1px solid #fee2e2', display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 600 }}>
+              <AlertCircle size={15} />
+              <span>Delivery service unavailable</span>
+            </div>
+          )}
+
+          {isAccepted && !delivery && !deliveryError && (
+            <button
+              onClick={() => openArrangeModal(req)}
+              disabled={actionLoading}
+              className="btn btn-sm"
+              style={{ background: 'linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)', color: '#fff', border: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 600, padding: '8px 16px', boxShadow: '0 2px 6px rgba(124, 58, 237, 0.3)' }}
+            >
+              <Truck size={16} />
+              <span>Arrange Collection</span>
+            </button>
+          )}
+
+          {delivery && (
+            <>
+              {/* Status: CollectionArranged -> Donor Button: Mark as Delivered; Org sees awaiting message */}
+              {delivery.status === 'CollectionArranged' && (
+                isDonor ? (
+                  <button
+                    onClick={() => openNotesModal('collect', delivery.id)}
+                    disabled={actionLoading}
+                    className="btn btn-sm"
+                    style={{ background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)', color: '#fff', border: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 600, padding: '8px 16px' }}
+                  >
+                    <PackageCheck size={16} />
+                    <span>Mark as Delivered</span>
+                  </button>
+                ) : (
+                  <span style={{ fontSize: '0.8rem', color: '#4b5563', background: '#eff6ff', padding: '6px 12px', borderRadius: '6px', fontStyle: 'italic' }}>
+                    Awaiting delivery by donor
+                  </span>
+                )
+              )}
+
+              {/* Status: Collected -> Organization Button: Confirm Receipt */}
+              {delivery.status === 'Collected' && (
+                isOrg ? (
+                  <button
+                    onClick={() => openNotesModal('receive', delivery.id)}
+                    disabled={actionLoading}
+                    className="btn btn-sm"
+                    style={{ background: 'linear-gradient(135deg, #0d9488 0%, #0f766e 100%)', color: '#fff', border: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 600, padding: '8px 16px' }}
+                  >
+                    <ShieldCheck size={16} />
+                    <span>Confirm Receipt</span>
+                  </button>
+                ) : (
+                  <span style={{ fontSize: '0.8rem', color: '#4b5563', background: '#eff6ff', padding: '6px 12px', borderRadius: '6px', fontStyle: 'italic' }}>
+                    Awaiting receipt confirmation by organization
+                  </span>
+                )
+              )}
+
+              {/* Status: Received -> Button: Complete Donation */}
+              {delivery.status === 'Received' && (
+                <button
+                  onClick={() => openNotesModal('complete', delivery.id)}
+                  disabled={actionLoading}
+                  className="btn btn-sm"
+                  style={{ background: 'linear-gradient(135deg, #16a34a 0%, #15803d 100%)', color: '#fff', border: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 600, padding: '8px 16px' }}
+                >
+                  <Sparkles size={16} />
+                  <span>Complete Donation</span>
+                </button>
+              )}
+
+              {/* Track Delivery Timeline Button */}
+              <button
+                onClick={() => openTrackingModal(delivery)}
+                className="btn btn-outline btn-sm"
+                style={{ borderColor: '#cbd5e1', color: '#334155', display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 600, padding: '8px 14px' }}
+              >
+                <History size={15} />
+                <span>Track Delivery</span>
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="requests-page animate-fade-in-up">
       {/* Header Banner */}
@@ -553,225 +782,113 @@ export default function RequestsPage() {
                 : 'Your organization has not submitted any donation requests matching the selected filter.'}
             </p>
           </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            {displayedRequests.map((req) => {
-              const rawDelivery = deliveriesMap[req.id];
-              const deliveryError = rawDelivery?._error;
-              const delivery = rawDelivery && !rawDelivery._error ? rawDelivery : null;
-              const isAccepted = req.status?.toUpperCase() === 'ACCEPTED';
+        ) : isDonor ? (
+          /* Donor View: Grouped by Surplus Food Listing with Listing-level Reject All */
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            {donorGroupedRequests.map((group) => {
+              const pendingRequests = group.requests.filter(r => r.status?.toUpperCase() === 'PENDING');
 
               return (
-                <div 
-                  key={req.id}
+                <div
+                  key={group.donationId || group.donationTitle}
                   style={{
                     background: '#fff',
-                    borderRadius: '14px',
+                    borderRadius: '16px',
                     border: '1px solid #e5e7eb',
-                    padding: '20px 24px',
-                    boxShadow: '0 2px 8px rgba(0,0,0,0.03)',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    flexWrap: 'wrap',
-                    gap: '20px'
+                    overflow: 'hidden',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.03)'
                   }}
                 >
-                  {/* Left Request & Delivery Info */}
-                  <div style={{ flex: '1 1 340px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
-                      {getStatusBadge(req)}
-                      <span style={{ fontSize: '0.8rem', color: '#9ca3af' }}>
-                        Request #{req.id} &bull; {new Date(req.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                      </span>
-                    </div>
-
-                    <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: '#111827', margin: '0 0 6px' }}>
-                      {req.donationTitle || 'Surplus Food Donation'}
-                    </h3>
-
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px', fontSize: '0.875rem', color: '#4b5563', flexWrap: 'wrap' }}>
-                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                        {isDonor ? <Building2 size={15} color="#047857" /> : <Store size={15} color="#d97706" />}
-                        <span style={{ fontWeight: 600 }}>
-                          {isDonor ? req.organizationName : 'Donor Listing'}
-                        </span>
+                  {/* Listing Group Header Banner */}
+                  <div
+                    style={{
+                      background: '#f8fafc',
+                      borderBottom: '1px solid #e5e7eb',
+                      padding: '16px 22px',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      flexWrap: 'wrap',
+                      gap: '12px'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                      <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: '#ecfdf5', color: '#047857', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <Utensils size={20} />
                       </div>
-
-                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: '#f3f4f6', padding: '4px 10px', borderRadius: '6px' }}>
-                        <Utensils size={14} color="#6b7280" />
-                        <span>
-                          Requested: <strong>{req.requestedQuantity} {req.unit}</strong>
-                        </span>
-                      </div>
-
-                      {req.status === 'ACCEPTED' && req.acceptedQuantity && (
-                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: '#ecfdf5', color: '#065f46', padding: '4px 10px', borderRadius: '6px' }}>
-                          <CheckCircle2 size={14} />
-                          <span>
-                            Accepted: <strong>{req.acceptedQuantity} {req.unit}</strong>
-                          </span>
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800, color: '#111827' }}>
+                            {group.donationTitle}
+                          </h3>
+                          {group.donationId && (
+                            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569', background: '#e2e8f0', padding: '2px 8px', borderRadius: '6px' }}>
+                              Listing #{group.donationId}
+                            </span>
+                          )}
                         </div>
-                      )}
-                    </div>
-
-                    {/* Delivery Quick Details Banner if Arranged */}
-                    {delivery && (
-                      <div style={{ marginTop: '12px', padding: '10px 14px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.85rem', color: '#334155' }}>
-                        <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', alignItems: 'center' }}>
-                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-                            <MapPin size={14} color="#6366f1" />
-                            <span><strong>Pickup:</strong> {delivery.pickupAddress}</span>
-                          </div>
-                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-                            <Calendar size={14} color="#8b5cf6" />
-                            <span><strong>Collection:</strong> {new Date(delivery.scheduledCollectionTime).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</span>
-                          </div>
+                        <div style={{ fontSize: '0.825rem', color: '#64748b', marginTop: '3px' }}>
+                          {group.requests.length} request{group.requests.length > 1 ? 's' : ''} received
+                          {pendingRequests.length > 0 ? (
+                            <span style={{ color: '#d97706', fontWeight: 600, marginLeft: '8px' }}>
+                              &bull; {pendingRequests.length} pending review
+                            </span>
+                          ) : (
+                            <span style={{ color: '#059669', fontWeight: 600, marginLeft: '8px' }}>
+                              &bull; All reviewed
+                            </span>
+                          )}
                         </div>
                       </div>
-                    )}
+                    </div>
 
-                    {req.notes && (
-                      <div style={{ marginTop: '10px', padding: '8px 12px', background: '#f9fafb', borderRadius: '8px', border: '1px solid #f3f4f6', fontSize: '0.85rem', color: '#4b5563', display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
-                        <MessageSquare size={14} style={{ flexShrink: 0, marginTop: '2px', color: '#9ca3af' }} />
-                        <span><strong>Notes:</strong> {req.notes}</span>
-                      </div>
+                    {/* Listing-level Action: Reject All Pending */}
+                    {pendingRequests.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => openRejectAllModal(group.donationId, group.donationTitle)}
+                        disabled={actionLoading}
+                        className="btn btn-outline btn-sm"
+                        style={{
+                          color: '#dc2626',
+                          borderColor: '#fca5a5',
+                          background: '#fff',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          fontWeight: 600,
+                          padding: '7px 14px',
+                          borderRadius: '8px',
+                          fontSize: '0.825rem',
+                          boxShadow: '0 1px 2px rgba(220,38,38,0.05)'
+                        }}
+                        title="Decline all pending requests if this surplus listing has been fulfilled"
+                      >
+                        <Ban size={15} />
+                        <span>Reject All Pending ({pendingRequests.length})</span>
+                      </button>
                     )}
                   </div>
 
-                  {/* Right Action Buttons */}
-                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-                    {/* Donor PENDING Actions */}
-                    {isDonor && req.status === 'PENDING' && (
-                      <>
-                        <button
-                          onClick={() => handleAcceptRequest(req.id)}
-                          disabled={actionLoading}
-                          className="btn btn-primary btn-sm"
-                          style={{ background: '#10b981', border: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 600, padding: '8px 16px' }}
-                        >
-                          <CheckCircle2 size={16} />
-                          <span>Accept Request</span>
-                        </button>
-
-                        <button
-                          onClick={() => openRejectModal(req.id)}
-                          disabled={actionLoading}
-                          className="btn btn-outline btn-sm"
-                          style={{ color: '#ef4444', borderColor: '#fca5a5', display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 600, padding: '8px 16px' }}
-                        >
-                          <XCircle size={16} />
-                          <span>Decline</span>
-                        </button>
-
-                        <button
-                          onClick={() => openRejectAllModal(req.donationId, req.donationTitle)}
-                          disabled={actionLoading}
-                          className="btn btn-outline btn-sm"
-                          title="Decline all pending requests for this surplus food listing"
-                          style={{ color: '#b91c1c', borderColor: '#fca5a5', display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 600, padding: '8px 14px' }}
-                        >
-                          <Ban size={15} />
-                          <span>Reject All Pending</span>
-                        </button>
-                      </>
-                    )}
-
-                    {/* SPRINT 4 DELIVERY WORKFLOW BUTTONS */}
-                    {isAccepted && deliveryError && (
-                      <div style={{ fontSize: '0.8rem', color: '#dc2626', background: '#fef2f2', padding: '6px 12px', borderRadius: '6px', border: '1px solid #fee2e2', display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 600 }}>
-                        <AlertCircle size={15} />
-                        <span>Delivery service unavailable</span>
-                      </div>
-                    )}
-
-                    {isAccepted && !delivery && !deliveryError && (
-                      <button
-                        onClick={() => openArrangeModal(req)}
-                        disabled={actionLoading}
-                        className="btn btn-sm"
-                        style={{ background: 'linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)', color: '#fff', border: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 600, padding: '8px 16px', boxShadow: '0 2px 6px rgba(124, 58, 237, 0.3)' }}
-                      >
-                        <Truck size={16} />
-                        <span>Arrange Collection</span>
-                      </button>
-                    )}
-
-                    {delivery && (
-                      <>
-                        {/* Status: CollectionArranged -> Donor Button: Mark as Delivered; Org sees awaiting message */}
-                        {delivery.status === 'CollectionArranged' && (
-                          isDonor ? (
-                            <button
-                              onClick={() => openNotesModal('collect', delivery.id)}
-                              disabled={actionLoading}
-                              className="btn btn-sm"
-                              style={{ background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)', color: '#fff', border: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 600, padding: '8px 16px' }}
-                            >
-                              <PackageCheck size={16} />
-                              <span>Mark as Delivered</span>
-                            </button>
-                          ) : (
-                            <span style={{ fontSize: '0.8rem', color: '#4b5563', background: '#eff6ff', padding: '6px 12px', borderRadius: '6px', fontStyle: 'italic' }}>
-                              Awaiting delivery by donor
-                            </span>
-                          )
-                        )}
-
-                        {/* Status: Collected -> Organization Button: Confirm Receipt */}
-                        {delivery.status === 'Collected' && (
-                          isOrg ? (
-                            <button
-                              onClick={() => openNotesModal('receive', delivery.id)}
-                              disabled={actionLoading}
-                              className="btn btn-sm"
-                              style={{ background: 'linear-gradient(135deg, #0d9488 0%, #0f766e 100%)', color: '#fff', border: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 600, padding: '8px 16px' }}
-                            >
-                              <ShieldCheck size={16} />
-                              <span>Confirm Receipt</span>
-                            </button>
-                          ) : (
-                            <span style={{ fontSize: '0.8rem', color: '#4b5563', background: '#eff6ff', padding: '6px 12px', borderRadius: '6px', fontStyle: 'italic' }}>
-                              Awaiting receipt confirmation by organization
-                            </span>
-                          )
-                        )}
-
-                        {/* Status: Received -> Button: Complete Donation */}
-                        {delivery.status === 'Received' && (
-                          <button
-                            onClick={() => openNotesModal('complete', delivery.id)}
-                            disabled={actionLoading}
-                            className="btn btn-sm"
-                            style={{ background: 'linear-gradient(135deg, #16a34a 0%, #15803d 100%)', color: '#fff', border: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 600, padding: '8px 16px' }}
-                          >
-                            <Sparkles size={16} />
-                            <span>Complete Donation</span>
-                          </button>
-                        )}
-
-                        {/* Track Delivery Timeline Button */}
-                        <button
-                          onClick={() => openTrackingModal(delivery)}
-                          className="btn btn-outline btn-sm"
-                          style={{ borderColor: '#cbd5e1', color: '#334155', display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 600, padding: '8px 14px' }}
-                        >
-                          <History size={15} />
-                          <span>Track Delivery</span>
-                        </button>
-                      </>
-                    )}
+                  {/* Requests within this Surplus Listing */}
+                  <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '12px', background: '#fafafa' }}>
+                    {group.requests.map((req) => renderRequestCard(req, true))}
                   </div>
                 </div>
               );
             })}
+          </div>
+        ) : (
+          /* Organization View: Sent Requests List */
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            {displayedRequests.map((req) => renderRequestCard(req, false))}
           </div>
         )}
       </div>
 
       {/* 1. Arrange Collection Modal */}
       {arrangeModalOpen && arrangeTargetRequest && (
-        <div className="modal-overlay animate-fade-in" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '60px 1rem 2rem 1rem', overflowY: 'auto' }}>
+        <div className="modal-overlay animate-fade-in" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '90px 1rem 2rem 1rem', overflowY: 'auto' }}>
           <div className="modal-card animate-scale-up" style={{ margin: '0 auto', background: '#fff', borderRadius: '16px', maxWidth: '560px', width: '100%', padding: '28px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
               <Truck size={22} color="#7c3aed" />
@@ -936,7 +1053,7 @@ export default function RequestsPage() {
 
       {/* 3. Delivery Tracking & History Timeline Modal */}
       {trackingModalOpen && activeTracking && (
-        <div className="modal-overlay animate-fade-in" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '50px 1rem 2rem 1rem', overflowY: 'auto' }}>
+        <div className="modal-overlay animate-fade-in" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '90px 1rem 2rem 1rem', overflowY: 'auto' }}>
           <div className="modal-card animate-scale-up" style={{ margin: '0 auto', background: '#fff', borderRadius: '16px', maxWidth: '640px', width: '100%', padding: '28px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
               <div>
