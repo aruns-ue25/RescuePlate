@@ -273,8 +273,33 @@ public class AdminService : IAdminService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Could not fetch request statistics from RequestWorkflowService");
+            _logger.LogWarning(ex, "Could not fetch request statistics from RequestService");
             requestData = new { status = "UNAVAILABLE", error = ex.Message };
+        }
+
+        object? deliveryData = null;
+        try
+        {
+            var deliveryClient = _httpClientFactory.CreateClient("DeliveryService");
+            if (!string.IsNullOrEmpty(authHeader))
+            {
+                deliveryClient.DefaultRequestHeaders.TryAddWithoutValidation("Authorization", authHeader);
+            }
+            var response = await deliveryClient.GetAsync("/api/deliveries/admin/summary");
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadFromJsonAsync<JsonElement>();
+                deliveryData = json;
+            }
+            else
+            {
+                deliveryData = new { status = "UNAVAILABLE", statusCode = (int)response.StatusCode };
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not fetch delivery statistics from DeliveryWorkflowService");
+            deliveryData = new { status = "UNAVAILABLE", error = ex.Message };
         }
 
         var overview = new MonitoringOverviewDto
@@ -284,6 +309,7 @@ public class AdminService : IAdminService
             ActiveOrganizations = activeOrgs,
             DonationSummary = donationData,
             RequestSummary = requestData,
+            DeliverySummary = deliveryData,
             RecentActivities = recentLogs
         };
 

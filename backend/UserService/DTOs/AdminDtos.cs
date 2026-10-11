@@ -55,5 +55,6 @@ public class MonitoringOverviewDto
     public int ActiveOrganizations { get; set; }
     public object? DonationSummary { get; set; }
     public object? RequestSummary { get; set; }
+    public object? DeliverySummary { get; set; }
     public List<ActivityLogDto> RecentActivities { get; set; } = new();
 }
