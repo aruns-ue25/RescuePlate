@@ -72,6 +72,8 @@ export default function DonorDashboardPage() {
   const detailModalContentRef = useRef(null);
   const editModalOverlayRef = useRef(null);
   const editModalContentRef = useRef(null);
+  const cancelModalOverlayRef = useRef(null);
+  const cancelModalContentRef = useRef(null);
 
   useEffect(() => {
     if (isCreateModalOpen) {
@@ -99,6 +101,16 @@ export default function DonorDashboardPage() {
       }, 0);
     }
   }, [editDonation]);
+
+  useEffect(() => {
+    if (cancelTargetDonation) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      setTimeout(() => {
+        if (cancelModalOverlayRef.current) cancelModalOverlayRef.current.scrollTop = 0;
+        if (cancelModalContentRef.current) cancelModalContentRef.current.scrollTop = 0;
+      }, 0);
+    }
+  }, [cancelTargetDonation]);
 
   // Filter & Search States
   const [searchQuery, setSearchQuery] = useState('');
@@ -283,6 +295,7 @@ export default function DonorDashboardPage() {
     }
 
     setCancelTargetDonation(item);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
     setCancelReason('Surplus food consumed / donated locally');
     setCustomReason('');
     setCancelError(null);
@@ -1002,6 +1015,7 @@ export default function DonorDashboardPage() {
       {/* CANCEL CONFIRMATION MODAL (Task 5 - Scenario 2) */}
       {cancelTargetDonation && (
         <div 
+          ref={cancelModalOverlayRef}
           style={{
             position: 'fixed',
             inset: 0,
@@ -1011,11 +1025,12 @@ export default function DonorDashboardPage() {
             alignItems: 'flex-start',
             justifyContent: 'center',
             zIndex: 9999,
-            padding: '2rem 1rem',
+            padding: '90px 1rem 2rem 1rem',
             overflowY: 'auto'
           }}
         >
           <div 
+            ref={cancelModalContentRef}
             className="animate-fade-in-up"
             style={{
               margin: '0 auto',
@@ -1023,7 +1038,7 @@ export default function DonorDashboardPage() {
               borderRadius: '16px',
               maxWidth: '500px',
               width: '100%',
-              maxHeight: 'calc(100vh - 4rem)',
+              maxHeight: 'calc(100vh - 120px)',
               overflowY: 'auto',
               boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.25)',
               padding: '28px'
