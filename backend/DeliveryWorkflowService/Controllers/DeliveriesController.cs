@@ -91,7 +91,7 @@ public class DeliveriesController : ControllerBase
                 DonationId = requestInfo.DonationId,
                 DonationTitle = string.IsNullOrWhiteSpace(requestInfo.DonationTitle) ? "Surplus Food Donation" : requestInfo.DonationTitle,
                 DonorId = requestInfo.DonorId,
-                DonorName = "Donor User",
+                DonorName = string.IsNullOrWhiteSpace(requestInfo.DonorName) ? "Donor User" : requestInfo.DonorName,
                 OrganizationId = requestInfo.OrganizationId,
                 OrganizationName = string.IsNullOrWhiteSpace(requestInfo.OrganizationName) ? "Organization User" : requestInfo.OrganizationName,
                 PickupAddress = dto.PickupAddress.Trim(),
@@ -518,6 +518,18 @@ public class DeliveriesController : ControllerBase
                 _logger.LogWarning(syncEx, "Optional Requests table sync to COMPLETED skipped for RequestId {RequestId}", arrangement.RequestId);
             }
 
+            // Synchronize completion state to DonorOffers table in database if present
+            try
+            {
+                await _context.Database.ExecuteSqlRawAsync(
+                    "UPDATE \"DonorOffers\" SET \"Status\" = 'COMPLETED' WHERE \"Id\" = {0}",
+                    arrangement.RequestId);
+            }
+            catch (Exception syncEx)
+            {
+                _logger.LogWarning(syncEx, "Optional DonorOffers table sync to COMPLETED skipped for RequestId {RequestId}", arrangement.RequestId);
+            }
+
             await _context.SaveChangesAsync();
             await transaction.CommitAsync();
 
@@ -607,6 +619,7 @@ public class DeliveriesController : ControllerBase
 
     private async Task<VerifiedRequestInfo?> VerifyRequestAcceptanceAsync(int requestId)
     {
+        // 1. Check Requests table (Surplus food listing requests)
         try
         {
             using var command = _context.Database.GetDbConnection().CreateCommand();
@@ -636,6 +649,7 @@ public class DeliveriesController : ControllerBase
                     OrganizationId = reader.IsDBNull(3) ? "" : reader.GetString(3),
                     OrganizationName = reader.IsDBNull(4) ? "" : reader.GetString(4),
                     DonorId = reader.IsDBNull(5) ? "" : reader.GetString(5),
+                    DonorName = "Donor User",
                     Status = reader.IsDBNull(6) ? "PENDING" : reader.GetString(6)
                 };
             }
@@ -644,6 +658,48 @@ public class DeliveriesController : ControllerBase
         {
             _logger.LogError(ex, "Error verifying acceptance for food request {RequestId}", requestId);
         }
+
+        // 2. Check DonorOffers table (Organization food need requests with donor offers)
+        try
+        {
+            using var command = _context.Database.GetDbConnection().CreateCommand();
+            command.CommandText = @"
+                SELECT o.""Id"", o.""OrgFoodNeedRequestId"", o.""OrgFoodNeedRequestTitle"", r.""OrganizationId"", r.""OrganizationName"", o.""DonorId"", o.""DonorName"", o.""Status""
+                FROM ""DonorOffers"" o
+                JOIN ""OrgNeedRequests"" r ON o.""OrgFoodNeedRequestId"" = r.""Id""
+                WHERE o.""Id"" = @reqId";
+
+            var param = command.CreateParameter();
+            param.ParameterName = "@reqId";
+            param.Value = requestId;
+            command.Parameters.Add(param);
+
+            if (command.Connection?.State != System.Data.ConnectionState.Open)
+            {
+                await _context.Database.OpenConnectionAsync();
+            }
+
+            using var reader = await command.ExecuteReaderAsync();
+            if (await reader.ReadAsync())
+            {
+                return new VerifiedRequestInfo
+                {
+                    Id = reader.GetInt32(0),
+                    DonationId = reader.GetInt32(1),
+                    DonationTitle = reader.IsDBNull(2) ? "" : reader.GetString(2),
+                    OrganizationId = reader.IsDBNull(3) ? "" : reader.GetString(3),
+                    OrganizationName = reader.IsDBNull(4) ? "" : reader.GetString(4),
+                    DonorId = reader.IsDBNull(5) ? "" : reader.GetString(5),
+                    DonorName = reader.IsDBNull(6) ? "Donor User" : reader.GetString(6),
+                    Status = reader.IsDBNull(7) ? "PENDING" : reader.GetString(7)
+                };
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error verifying acceptance for donor offer {RequestId}", requestId);
+        }
+
         return null;
     }
 
@@ -696,6 +752,7 @@ public class DeliveriesController : ControllerBase
         public string OrganizationId { get; set; } = string.Empty;
         public string OrganizationName { get; set; } = string.Empty;
         public string DonorId { get; set; } = string.Empty;
+        public string DonorName { get; set; } = string.Empty;
         public string Status { get; set; } = string.Empty;
     }
 }
