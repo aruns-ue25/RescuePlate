@@ -94,7 +94,7 @@ public class RecordCollectionUnitTests
     }
 
     [Fact]
-    public async Task C_U02_IntendedOrganizationRecordsCollection_Returns200OK()
+    public async Task C_U02_IntendedOrganizationRecordsCollection_Returns403Forbidden()
     {
         // Arrange
         var (controller, db, conn) = SetupTest();
@@ -104,17 +104,18 @@ public class RecordCollectionUnitTests
             controller.ControllerContext = ControllerTestHelper.CreateControllerContext("org_c", "ORGANIZATION");
 
             // Act
-            var result = await controller.RecordCollection(arrangement.Id) as OkObjectResult;
+            var result = await controller.RecordCollection(arrangement.Id) as ObjectResult;
 
             // Assert
             result.Should().NotBeNull();
-            result!.StatusCode.Should().Be(200);
+            result!.StatusCode.Should().Be(403);
             var response = result.Value as ApiResponse<DeliveryTrackingResponseDto>;
-            response!.Data!.Status.Should().Be("Collected");
+            response!.Success.Should().BeFalse();
+            response.Message.Should().Contain("Only the donor is authorized to mark this donation as delivered.");
 
-            var history = await db.DeliveryStatusHistories.FirstAsync(h => h.NewStatus == "Collected");
-            history.ChangedByUserId.Should().Be("org_c");
-            history.ChangedByRole.Should().Be("ORGANIZATION");
+            var unchanged = await db.DeliveryArrangements.FirstAsync(d => d.Id == arrangement.Id);
+            unchanged.Status.Should().Be("CollectionArranged");
+            unchanged.CollectedAt.Should().BeNull();
         }
     }
 

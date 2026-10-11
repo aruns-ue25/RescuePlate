@@ -175,11 +175,11 @@ public class DeliveriesController : ControllerBase
             return NotFound(ApiResponse<DeliveryTrackingResponseDto>.Fail($"Delivery arrangement with ID {id} not found."));
         }
 
-        // Strict Authorization Check (Story 2: Donor or Organization ONLY)
-        if (userId != arrangement.DonorId && userId != arrangement.OrganizationId)
+        // Strict Authorization Check: Donor ONLY
+        if (userId != arrangement.DonorId)
         {
             return StatusCode(StatusCodes.Status403Forbidden,
-                ApiResponse<DeliveryTrackingResponseDto>.Fail("You are not authorized to record collection for this donation."));
+                ApiResponse<DeliveryTrackingResponseDto>.Fail("Only the donor is authorized to mark this donation as delivered."));
         }
 
         // Duplicate Check using exact stored string
@@ -506,6 +506,18 @@ public class DeliveriesController : ControllerBase
             AddNotificationIfUnique(arrangement.DonorId, "Donation Completed", notifMsg, "DONATION_COMPLETED", arrangement.Id, now);
             AddNotificationIfUnique(arrangement.OrganizationId, "Donation Completed", notifMsg, "DONATION_COMPLETED", arrangement.Id, now);
 
+            // Synchronize completion state to Requests table in database if present
+            try
+            {
+                await _context.Database.ExecuteSqlRawAsync(
+                    "UPDATE \"Requests\" SET \"Status\" = 'COMPLETED' WHERE \"Id\" = {0}",
+                    arrangement.RequestId);
+            }
+            catch (Exception syncEx)
+            {
+                _logger.LogWarning(syncEx, "Optional Requests table sync to COMPLETED skipped for RequestId {RequestId}", arrangement.RequestId);
+            }
+
             await _context.SaveChangesAsync();
             await transaction.CommitAsync();
 
@@ -526,6 +538,36 @@ public class DeliveriesController : ControllerBase
             return StatusCode(StatusCodes.Status500InternalServerError,
                 ApiResponse<DeliveryTrackingResponseDto>.Fail("An internal error occurred while completing donation."));
         }
+    }
+
+    /// <summary>
+    /// Admin monitoring endpoint exposing complete delivery logistics metrics.
+    /// </summary>
+    [HttpGet("admin/summary")]
+    [Authorize(Roles = "ADMIN")]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetAdminDeliverySummary()
+    {
+        var allDeliveries = await _context.DeliveryArrangements.ToListAsync();
+        var totalCount = allDeliveries.Count;
+        var arrangedCount = allDeliveries.Count(d => d.Status == "CollectionArranged");
+        var collectedCount = allDeliveries.Count(d => d.Status == "FoodCollected");
+        var receivedCount = allDeliveries.Count(d => d.Status == "FoodReceived");
+        var completedCount = allDeliveries.Count(d => d.Status == "Completed");
+        var cancelledCount = allDeliveries.Count(d => d.Status == "Cancelled");
+
+        var summary = new
+        {
+            totalCount,
+            arrangedCount,
+            collectedCount,
+            receivedCount,
+            completedCount,
+            cancelledCount,
+            recentDeliveries = allDeliveries.OrderByDescending(d => d.CreatedAt).Take(10).Select(MapToDto)
+        };
+
+        return Ok(ApiResponse<object>.Ok(summary, "Admin delivery monitoring summary retrieved."));
     }
 
     private void AddNotificationIfUnique(string recipientUserId, string title, string message, string type, int relatedId, DateTime createdAt)
