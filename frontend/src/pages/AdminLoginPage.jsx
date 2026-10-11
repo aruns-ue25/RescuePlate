@@ -95,10 +95,10 @@ export default function AdminLoginPage() {
       justifyContent: 'center',
       background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
       color: '#f8fafc',
-      padding: '2rem'
+      padding: '6rem 1.5rem 2.5rem'
     }}>
       <div className="admin-login-card" style={{
-        maxWidth: '460rem',
+        maxWidth: '460px',
         width: '100%',
         backgroundColor: 'rgba(30, 41, 59, 0.85)',
         backdropFilter: 'blur(12px)',
@@ -265,7 +265,7 @@ export default function AdminLoginPage() {
                 autoFocus
                 value={accessKey}
                 onChange={(e) => setAccessKey(e.target.value)}
-                placeholder="Enter Secure Access Key (e.g. ADMIN-SECURE-KEY-2026)"
+                placeholder="Enter Secure Access Key"
                 style={{
                   width: '100%',
                   padding: '0.85rem 1rem',

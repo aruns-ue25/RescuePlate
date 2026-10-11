@@ -107,9 +107,13 @@ export default function ProfilePage() {
       }
     }
     if (currentUser) {
+      if (currentUser.role === 'ADMIN') {
+        navigate('/admin/dashboard', { replace: true });
+        return;
+      }
       loadProfile();
     }
-  }, [currentUser]);
+  }, [currentUser, navigate]);
 
   // Lock background scroll and autoscroll when modals are open
   useEffect(() => {
@@ -451,16 +455,18 @@ export default function ProfilePage() {
               </div>
             </div>
 
-            <button
-              onClick={() => {
-                setIsEditing(!isEditing);
-                setSaveError('');
-              }}
-              className="btn btn-outline btn-sm"
-              style={{ marginLeft: 'auto' }}
-            >
-              {isEditing ? 'Cancel Edit' : 'Edit Profile'}
-            </button>
+            {currentUser.role !== 'ADMIN' && (
+              <button
+                onClick={() => {
+                  setIsEditing(!isEditing);
+                  setSaveError('');
+                }}
+                className="btn btn-outline btn-sm"
+                style={{ marginLeft: 'auto' }}
+              >
+                {isEditing ? 'Cancel Edit' : 'Edit Profile'}
+              </button>
+            )}
           </div>
 
           {/* Profile Form */}
