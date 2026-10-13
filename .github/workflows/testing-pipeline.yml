@@ -1,0 +1,277 @@
+name: SE3112 - Microservice Testing Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - testing-pipeline
+      - sprint4-modifications
+  pull_request:
+    branches:
+      - main
+      - testing-pipeline
+  workflow_dispatch:
+    inputs:
+      run_unit:
+        description: "Execute Unit Testing (xUnit)?"
+        type: boolean
+        default: true
+      run_mutation:
+        description: "Execute Mutation Testing (Stryker.NET)?"
+        type: boolean
+        default: true
+      run_performance:
+        description: "Execute Load & Performance Testing (Apache JMeter)?"
+        type: boolean
+        default: true
+      run_e2e:
+        description: "Execute UI / E2E Testing (Cypress)?"
+        type: boolean
+        default: true
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ============================================================================
+  # ROLE 1: Unit Testing & Mocking (xUnit, FluentAssertions, Moq)
+  # ============================================================================
+  unit-testing:
+    name: "Role 1: Unit Testing & Mocking"
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_unit }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore Backend Dependencies
+        run: dotnet restore backend/RescuePlate.slnx
+
+      - name: Build Solution
+        run: dotnet build backend/RescuePlate.slnx --no-restore --configuration Release
+
+      - name: Run Sprint 4 DeliveryWorkflowService Unit Tests
+        run: >
+          dotnet test backend/DeliveryWorkflowService.UnitTests/DeliveryWorkflowService.UnitTests.csproj
+          --configuration Release
+          --no-build
+          --logger "trx;LogFileName=delivery-workflow-unit-tests.trx"
+          --collect:"XPlat Code Coverage"
+
+      - name: Run All System Unit Tests
+        run: >
+          dotnet test backend/RescuePlate.slnx
+          --configuration Release
+          --no-build
+          --filter "FullyQualifiedName!~IntegrationTests"
+          --logger "trx;LogFileName=all-services-unit-tests.trx"
+
+      - name: Upload Unit Test Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-results
+          path: |
+            **/TestResults/*.trx
+            **/TestResults/**/*.xml
+
+  # ============================================================================
+  # ROLE 2: Mutation Testing (Stryker.NET)
+  # ============================================================================
+  mutation-testing:
+    name: "Role 2: Mutation Testing (Stryker.NET)"
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_mutation }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore .NET Local Tools (dotnet-stryker)
+        run: dotnet tool restore
+
+      - name: Restore Backend Dependencies
+        run: dotnet restore backend/RescuePlate.slnx
+
+      - name: Execute Stryker Mutation Testing (Sprint 4 DeliveryWorkflowService)
+        working-directory: backend/DeliveryWorkflowService.UnitTests
+        run: dotnet stryker
+
+      - name: Upload Mutation Testing HTML Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutation-testing-report
+          path: backend/DeliveryWorkflowService.UnitTests/StrykerOutput/**/reports/*
+
+  # ============================================================================
+  # ROLE 3: Load & Performance Testing (Apache JMeter)
+  # ============================================================================
+  load-performance-testing:
+    name: "Role 3: Load & Performance Testing (Apache JMeter)"
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_performance }}
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: RescuePlateDB
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d RescuePlateDB"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Setup Java Runtime (for JMeter)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Install Apache JMeter 5.6.3
+        run: |
+          JMETER_VERSION=5.6.3
+          curl -sL "https://archive.apache.org/dist/jmeter/binaries/apache-jmeter-${JMETER_VERSION}.tgz" | tar -xz
+          echo "$GITHUB_WORKSPACE/apache-jmeter-${JMETER_VERSION}/bin" >> $GITHUB_PATH
+
+      - name: Build Backend Microservices
+        run: dotnet build backend/RescuePlate.slnx --configuration Release
+
+      - name: Start Background Microservices (Ports 5000, 5002, 5003)
+        run: |
+          dotnet run --project backend/UserService/UserService.csproj --configuration Release --no-build --urls "http://localhost:5000" &
+          dotnet run --project backend/RequestWorkflowService/RequestWorkflowService.csproj --configuration Release --no-build --urls "http://localhost:5002" &
+          dotnet run --project backend/DeliveryWorkflowService/DeliveryWorkflowService.csproj --configuration Release --no-build --urls "http://localhost:5003" &
+          echo "Services launched in background."
+
+      - name: Await Microservice Health Readiness
+        run: |
+          echo "Polling health endpoints..."
+          for i in {1..20}; do
+            if curl -s -f http://localhost:5003/api/health > /dev/null && \
+               curl -s -f http://localhost:5002/api/health > /dev/null; then
+              echo "Microservices are healthy and online!"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Microservices failed to start in time."
+          exit 1
+
+      - name: Seed Database with Sprint 4 Test Data
+        run: |
+          PGPASSWORD=postgres psql -h localhost -U postgres -d RescuePlateDB -f performance/seed-sprint4-data.sql
+
+      - name: Execute Apache JMeter Sprint 4 Concurrency Test
+        run: |
+          mkdir -p performance/results/dashboard_report
+          jmeter -n \
+            -t performance/scripts/RescuePlate_Sprint4_LoadTest.jmx \
+            -JTHREAD_COUNT=20 \
+            -JRAMP_UP_SECONDS=10 \
+            -JLOOP_COUNT=3 \
+            -l performance/results/sprint4_load_results.jtl \
+            -e -o performance/results/dashboard_report
+
+      - name: Upload JMeter Performance Reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jmeter-performance-report
+          path: |
+            performance/results/sprint4_load_results.jtl
+            performance/results/dashboard_report/**
+
+  # ============================================================================
+  # ROLE 4: UI / End-to-End Testing (Cypress)
+  # ============================================================================
+  ui-e2e-testing:
+    name: "Role 4: UI & End-to-End Testing (Cypress)"
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_e2e }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.x'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Frontend Dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Execute Cypress Sprint 4 End-to-End Tests
+        uses: cypress-io/github-action@v6
+        with:
+          working-directory: frontend
+          start: npm run dev
+          wait-on: 'http://localhost:5173'
+          wait-on-timeout: 60
+          spec: cypress/e2e/sprint4*.cy.js
+
+      - name: Upload Cypress Screenshots and Videos
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cypress-e2e-artifacts
+          path: |
+            frontend/cypress/screenshots/**
+            frontend/cypress/videos/**
+
+  # ============================================================================
+  # UNIFIED REPORTING: Aggregate Dashboard & Step Summary
+  # ============================================================================
+  pipeline-summary:
+    name: "Unified Pipeline Summary"
+    needs:
+      - unit-testing
+      - mutation-testing
+      - load-performance-testing
+      - ui-e2e-testing
+    if: always()
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Generate Pipeline Execution Summary
+        run: |
+          echo "## 🛡️ SE3112 Microservice Testing Pipeline Execution Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Testing Paradigm | Tool / Framework | Target Component | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "| :--- | :--- | :--- | :---: |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Unit Testing & Mocking** | xUnit + FluentAssertions | DeliveryWorkflowService & System | ${{ needs.unit-testing.result == 'success' && '✅ PASSED' || needs.unit-testing.result == 'skipped' && '⚪ SKIPPED' || '❌ FAILED' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Mutation Testing** | Stryker.NET (v5.0.0) | DeliveryWorkflowService (Sprint 4) | ${{ needs.mutation-testing.result == 'success' && '✅ PASSED' || needs.mutation-testing.result == 'skipped' && '⚪ SKIPPED' || '❌ FAILED' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Load & Performance Testing** | Apache JMeter (5.6.3) | DeliveryWorkflow & Request Endpoints | ${{ needs.load-performance-testing.result == 'success' && '✅ PASSED' || needs.load-performance-testing.result == 'skipped' && '⚪ SKIPPED' || '❌ FAILED' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **UI / E2E Testing** | Cypress (16.1.1) | Delivery Workflow & Admin Portal UI | ${{ needs.ui-e2e-testing.result == 'success' && '✅ PASSED' || needs.ui-e2e-testing.result == 'skipped' && '⚪ SKIPPED' || '❌ FAILED' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "> 📊 **Download Reports:** Artifacts for all 4 test categories (Coverage XML, Stryker HTML Report, JMeter HTML Dashboard, and Cypress Screenshots) are attached to this workflow run." >> $GITHUB_STEP_SUMMARY
