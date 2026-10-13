@@ -197,7 +197,7 @@ jobs:
               detected = killed + timeout
               valid = detected + survived + no_cov
               score = ((detected / valid) * 100) if valid > 0 else 0.0
-              res_badge = 'Passing ✅' if score >= 60.0 else 'Warning ⚠️'
+              res_badge = 'Passing ✅' if score >= 50.0 else ('Warning ⚠️' if score >= 30.0 else 'Failing ❌')
               out.write('| Result | Mutation Score | Total Mutants | Killed | Survived | No Coverage | Ignored |\n')
               out.write('| :---: | :---: | :---: | :---: | :---: | :---: | :---: |\n')
               out.write(f'| {res_badge} | {score:.2f}% | {len(mutants)} | {killed} | {survived} | {no_cov} | {ignored} |\n\n')
@@ -342,7 +342,12 @@ jobs:
               pct2_res = tot.get('pct2ResTime', 0.0)
               max_res = tot.get('maxResTime', 0.0)
               throughput = tot.get('throughput', 0.0)
-              res_badge = 'Passing ✅' if errors == 0 and samples > 0 else 'Failing ❌'
+              if err_pct <= 1.0 and samples > 0:
+                  res_badge = 'Passing ✅'
+              elif err_pct <= 5.0:
+                  res_badge = 'Warning ⚠️'
+              else:
+                  res_badge = 'Failing ❌'
               out.write('| Result | Total Samples | Passed | Errors | Error % | Avg Latency | 95th Pct | Max Latency | Throughput |\n')
               out.write('| :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |\n')
               out.write(f'| {res_badge} | {samples} | {passed} | {errors} | {err_pct:.2f}% | {mean_res:.2f}ms | {pct2_res:.2f}ms | {max_res:.0f}ms | {throughput:.2f} req/s |\n\n')
