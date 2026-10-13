@@ -81,6 +81,40 @@ jobs:
             **/TestResults/*.trx
             **/TestResults/**/*.xml
 
+      - name: Generate Unit Test Summary
+        if: always()
+        run: |
+          python3 -c "
+          import glob, os, xml.etree.ElementTree as ET
+          summary_file = os.environ.get('GITHUB_STEP_SUMMARY')
+          if not summary_file: exit(0)
+          with open(summary_file, 'a', encoding='utf-8') as out:
+              out.write('### Role 1: Unit Testing & Mocking (xUnit) Summary\n\n')
+              trx_files = glob.glob('**/TestResults/*.trx', recursive=True)
+              if not trx_files:
+                  out.write('> ⚠️ No unit test result files (.trx) found.\n\n')
+                  exit(0)
+              ns = {'ns': 'http://microsoft.com/schemas/VisualStudio/TeamTest/2010'}
+              total = passed = failed = skipped = 0
+              for f in trx_files:
+                  try:
+                      root = ET.parse(f).getroot()
+                      summary = root.find('.//ns:ResultSummary', ns)
+                      if summary is not None:
+                          counters = summary.find('ns:Counters', ns)
+                          if counters is not None:
+                              total += int(counters.attrib.get('total', 0))
+                              passed += int(counters.attrib.get('passed', 0))
+                              failed += int(counters.attrib.get('failed', 0)) + int(counters.attrib.get('error', 0))
+                              skipped += int(counters.attrib.get('notExecuted', 0))
+                  except Exception:
+                      pass
+              res_badge = 'Passing ✅' if failed == 0 and total > 0 else 'Failing ❌'
+              out.write('| Result | Total Tests | Passed | Failed | Skipped |\n')
+              out.write('| :---: | :---: | :---: | :---: | :---: |\n')
+              out.write(f'| {res_badge} | {total} | {passed} | {failed} | {skipped} |\n\n')
+          "
+
   # ============================================================================
   # ROLE 2: Mutation Testing (Stryker.NET)
   # ============================================================================
@@ -114,6 +148,60 @@ jobs:
         with:
           name: mutation-testing-report
           path: backend/DeliveryWorkflowService.UnitTests/StrykerOutput/**/reports/*
+
+      - name: Generate Mutation Test Summary
+        if: always()
+        run: |
+          python3 -c "
+          import glob, json, os
+          summary_file = os.environ.get('GITHUB_STEP_SUMMARY')
+          if not summary_file: exit(0)
+          with open(summary_file, 'a', encoding='utf-8') as out:
+              out.write('### Role 2: Mutation Testing (Stryker.NET) Summary\n\n')
+              reports = glob.glob('backend/DeliveryWorkflowService.UnitTests/StrykerOutput/**/reports/mutation-report.html', recursive=True)
+              json_reports = glob.glob('backend/DeliveryWorkflowService.UnitTests/StrykerOutput/**/reports/mutation-report.json', recursive=True)
+              data = None
+              if json_reports:
+                  try:
+                      with open(json_reports[0], 'r', encoding='utf-8') as jf:
+                          data = json.load(jf)
+                  except Exception:
+                      pass
+              if not data and reports:
+                  try:
+                      with open(reports[0], 'r', encoding='utf-8') as f:
+                          html = f.read()
+                      key = '.report = '
+                      idx = html.find(key)
+                      if idx != -1:
+                          start = idx + len(key)
+                          end = html.rfind('function updateTheme')
+                          end = html.rfind(';', 0, end)
+                          data = json.loads(html[start:end].strip())
+                  except Exception:
+                      pass
+              if not data:
+                  out.write('> ⚠️ No Stryker mutation report found.\n\n')
+                  exit(0)
+              files = data.get('files', {}).values()
+              mutants = [m for file in files for m in file.get('mutants', [])]
+              statuses = {}
+              for m in mutants:
+                  s = m.get('status', 'Unknown')
+                  statuses[s] = statuses.get(s, 0) + 1
+              killed = statuses.get('Killed', 0)
+              survived = statuses.get('Survived', 0)
+              timeout = statuses.get('Timeout', 0)
+              no_cov = statuses.get('NoCoverage', 0)
+              ignored = statuses.get('Ignored', 0)
+              detected = killed + timeout
+              valid = detected + survived + no_cov
+              score = ((detected / valid) * 100) if valid > 0 else 0.0
+              res_badge = 'Passing ✅' if score >= 60.0 else 'Warning ⚠️'
+              out.write('| Result | Mutation Score | Total Mutants | Killed | Survived | No Coverage | Ignored |\n')
+              out.write('| :---: | :---: | :---: | :---: | :---: | :---: | :---: |\n')
+              out.write(f'| {res_badge} | {score:.2f}% | {len(mutants)} | {killed} | {survived} | {no_cov} | {ignored} |\n\n')
+          "
 
   # ============================================================================
   # ROLE 3: Load & Performance Testing (Apache JMeter)
@@ -153,11 +241,22 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
+      - name: Cache Apache JMeter
+        id: cache-jmeter
+        uses: actions/cache@v4
+        with:
+          path: /opt/apache-jmeter-5.6.3
+          key: jmeter-5.6.3-bin
+
       - name: Install Apache JMeter 5.6.3
+        if: steps.cache-jmeter.outputs.cache-hit != 'true'
         run: |
           JMETER_VERSION=5.6.3
-          curl -sL "https://archive.apache.org/dist/jmeter/binaries/apache-jmeter-${JMETER_VERSION}.tgz" | tar -xz
-          echo "$GITHUB_WORKSPACE/apache-jmeter-${JMETER_VERSION}/bin" >> $GITHUB_PATH
+          sudo mkdir -p /opt
+          sudo curl -sL "https://archive.apache.org/dist/jmeter/binaries/apache-jmeter-${JMETER_VERSION}.tgz" | sudo tar -xz -C /opt
+
+      - name: Add JMeter to PATH
+        run: echo "/opt/apache-jmeter-5.6.3/bin" >> $GITHUB_PATH
 
       - name: Wait for PostgreSQL Container Readiness
         run: |
@@ -218,6 +317,36 @@ jobs:
           path: |
             performance/results/sprint4_load_results.jtl
             performance/results/dashboard_report/**
+
+      - name: Generate JMeter Load & Performance Test Summary
+        if: always()
+        run: |
+          python3 -c "
+          import json, os
+          stats_file = 'performance/results/dashboard_report/statistics.json'
+          summary_file = os.environ.get('GITHUB_STEP_SUMMARY')
+          if not summary_file: exit(0)
+          with open(summary_file, 'a', encoding='utf-8') as out:
+              out.write('### Role 3: Load & Performance Testing (Apache JMeter) Summary\n\n')
+              if not os.path.exists(stats_file):
+                  out.write('> ⚠️ No JMeter statistics report generated.\n\n')
+                  exit(0)
+              with open(stats_file, 'r', encoding='utf-8') as f:
+                  data = json.load(f)
+              tot = data.get('Total', {})
+              samples = tot.get('sampleCount', 0)
+              errors = tot.get('errorCount', 0)
+              passed = samples - errors
+              err_pct = tot.get('errorPct', 0.0)
+              mean_res = tot.get('meanResTime', 0.0)
+              pct2_res = tot.get('pct2ResTime', 0.0)
+              max_res = tot.get('maxResTime', 0.0)
+              throughput = tot.get('throughput', 0.0)
+              res_badge = 'Passing ✅' if errors == 0 and samples > 0 else 'Failing ❌'
+              out.write('| Result | Total Samples | Passed | Errors | Error % | Avg Latency | 95th Pct | Max Latency | Throughput |\n')
+              out.write('| :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |\n')
+              out.write(f'| {res_badge} | {samples} | {passed} | {errors} | {err_pct:.2f}% | {mean_res:.2f}ms | {pct2_res:.2f}ms | {max_res:.0f}ms | {throughput:.2f} req/s |\n\n')
+          "
 
   # ============================================================================
   # ROLE 4: UI / End-to-End Testing (Cypress)

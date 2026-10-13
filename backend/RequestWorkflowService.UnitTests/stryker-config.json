@@ -5,12 +5,15 @@
     "solution": "../RescuePlate.slnx",
     "test-projects": ["RequestWorkflowService.UnitTests.csproj"],
     "mutate": [
-      "Services/RequestService.cs"
+      "Controllers/RequestsController.cs",
+      "Controllers/OrgNeedRequestsController.cs",
+      "Controllers/NotificationsController.cs"
     ],
     "reporters": [
       "progress",
       "cleartext",
-      "html"
+      "html",
+      "json"
     ],
     "thresholds": {
       "high": 80,
