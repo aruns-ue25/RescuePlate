@@ -1,0 +1,22 @@
+{
+  "$schema": "https://raw.githubusercontent.com/stryker-mutator/stryker-net/master/src/Stryker.Core/Stryker.Core/stryker-config.schema.json",
+  "stryker-config": {
+    "project": "RequestWorkflowService.csproj",
+    "solution": "../RescuePlate.slnx",
+    "test-projects": ["RequestWorkflowService.UnitTests.csproj"],
+    "mutate": [
+      "Services/RequestService.cs"
+    ],
+    "reporters": [
+      "progress",
+      "cleartext",
+      "html"
+    ],
+    "thresholds": {
+      "high": 80,
+      "low": 60,
+      "break": 0
+    },
+    "concurrency": 4
+  }
+}
