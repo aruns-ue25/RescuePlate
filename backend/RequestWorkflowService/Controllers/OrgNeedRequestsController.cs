@@ -237,8 +237,8 @@ public class OrgNeedRequestsController : ControllerBase
     }
 
     /// <summary>
-    /// Story 3: Donors view recent & soon-to-expire open food requests.
-    /// Excludes expired & cancelled requests. Surfaced by deadline urgency.
+    /// Story 3: Donors view recent &amp; soon-to-expire open food requests.
+    /// Excludes expired &amp; cancelled requests. Surfaced by deadline urgency.
     /// </summary>
     [HttpGet("active")]
     [Authorize]
@@ -474,7 +474,7 @@ public class OrgNeedRequestsController : ControllerBase
 
     /// <summary>
     /// Story 6 Scenario 2: Organization accepts a donor's pending food offer.
-    /// Supports partial fulfillment & updates request status to PARTIALLY_FULFILLED or CLAIMED.
+    /// Supports partial fulfillment &amp; updates request status to PARTIALLY_FULFILLED or CLAIMED.
     /// </summary>
     [HttpPost("/api/offers/{offerId:int}/accept")]
     [Authorize(Roles = "ORGANIZATION")]

@@ -256,7 +256,7 @@ public class RequestsController : ControllerBase
     }
 
     /// <summary>
-    /// Story 4 & Story 6: Donor accepts a pending food request.
+    /// Story 4 &amp; Story 6: Donor accepts a pending food request.
     /// Deducts requested quantity from available donation stock.
     /// </summary>
     [HttpPost("{id:int}/accept")]
