@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - testing-pipeline
   pull_request:
     branches:
       - main
@@ -412,11 +411,11 @@ jobs:
         run: |
           echo "## 🛡️ SE3112 Microservice Testing Pipeline Execution Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Testing Paradigm | Tool / Framework | Target Component | Status |" >> $GITHUB_STEP_SUMMARY
-          echo "| :--- | :--- | :--- | :---: |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Unit Testing & Mocking** | xUnit + FluentAssertions | DeliveryWorkflowService & System | ${{ needs.unit-testing.result == 'success' && '✅ PASSED' || needs.unit-testing.result == 'skipped' && '⚪ SKIPPED' || '❌ FAILED' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Mutation Testing** | Stryker.NET (v5.0.0) | DeliveryWorkflowService (Sprint 4) | ${{ needs.mutation-testing.result == 'success' && '✅ PASSED' || needs.mutation-testing.result == 'skipped' && '⚪ SKIPPED' || '❌ FAILED' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Load & Performance Testing** | Apache JMeter (5.6.3) | DeliveryWorkflow & Request Endpoints | ${{ needs.load-performance-testing.result == 'success' && '✅ PASSED' || needs.load-performance-testing.result == 'skipped' && '⚪ SKIPPED' || '❌ FAILED' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| **UI / E2E Testing** | Cypress (16.1.1) | Delivery Workflow & Admin Portal UI | ${{ needs.ui-e2e-testing.result == 'success' && '✅ PASSED' || needs.ui-e2e-testing.result == 'skipped' && '⚪ SKIPPED' || '❌ FAILED' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Test Type | Tool / Framework | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "| :--- | :--- | :---: |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Unit Testing & Mocking** | xUnit + FluentAssertions | ${{ needs.unit-testing.result == 'success' && '✅ PASSED' || needs.unit-testing.result == 'skipped' && '⚪ SKIPPED' || '❌ FAILED' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Mutation Testing** | Stryker.NET (v5.0.0) | ${{ needs.mutation-testing.result == 'success' && '✅ PASSED' || needs.mutation-testing.result == 'skipped' && '⚪ SKIPPED' || '❌ FAILED' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Load & Performance Testing** | Apache JMeter (5.6.3) | ${{ needs.load-performance-testing.result == 'success' && '✅ PASSED' || needs.load-performance-testing.result == 'skipped' && '⚪ SKIPPED' || '❌ FAILED' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **UI / E2E Testing** | Cypress (16.1.1) | ${{ needs.ui-e2e-testing.result == 'success' && '✅ PASSED' || needs.ui-e2e-testing.result == 'skipped' && '⚪ SKIPPED' || '❌ FAILED' }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "> 📊 **Download Reports:** Artifacts for all 4 test categories (Coverage XML, Stryker HTML Report, JMeter HTML Dashboard, and Cypress Screenshots) are attached to this workflow run." >> $GITHUB_STEP_SUMMARY
