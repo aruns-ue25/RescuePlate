@@ -9,5 +9,7 @@
   <Project Path="RequestWorkflowService.UnitTests/RequestWorkflowService.UnitTests.csproj" />
   <Project Path="RequestWorkflowService.IntegrationTests/RequestWorkflowService.IntegrationTests.csproj" />
   <Project Path="DeliveryWorkflowService/DeliveryWorkflowService.csproj" />
+  <Project Path="DeliveryWorkflowService.UnitTests/DeliveryWorkflowService.UnitTests.csproj" />
+  <Project Path="DeliveryWorkflowService.IntegrationTests/DeliveryWorkflowService.IntegrationTests.csproj" />
 </Solution>
 

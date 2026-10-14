@@ -133,7 +133,7 @@ public class DonationsController : ControllerBase
     }
 
     /// <summary>
-    /// Retrieves all donations posted by the authenticated Donor (with optional status & search filtering).
+    /// Retrieves all donations posted by the authenticated Donor (with optional status &amp; search filtering).
     /// </summary>
     [HttpGet("my-donations")]
     [Authorize(Roles = "DONOR")]

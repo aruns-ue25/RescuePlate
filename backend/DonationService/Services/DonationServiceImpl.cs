@@ -573,6 +573,12 @@ public class DonationServiceImpl : IDonationService
                 return ApiResponse<DonationResponseDto>.Fail("Donation not found.");
             }
 
+            var inactiveDonorIds = await FetchInactiveUserIdsFromUserServiceAsync();
+            if (inactiveDonorIds.Contains(donation.DonorId))
+            {
+                return ApiResponse<DonationResponseDto>.Fail("Donation not found.");
+            }
+
             return ApiResponse<DonationResponseDto>.Ok(MapToResponseDto(donation), "Donation retrieved.");
         }
         catch (Exception ex)
@@ -589,6 +595,12 @@ public class DonationServiceImpl : IDonationService
             // Scenario 4: Exclude cancelled and completed donations from organization browsing
             var query = _context.Donations
                 .Where(d => d.Status != "Cancelled" && d.Status != "Completed");
+
+            var inactiveDonorIds = await FetchInactiveUserIdsFromUserServiceAsync();
+            if (inactiveDonorIds.Count > 0)
+            {
+                query = query.Where(d => !inactiveDonorIds.Contains(d.DonorId));
+            }
 
             if (!string.IsNullOrWhiteSpace(category) && category.ToUpper() != "ALL")
             {
@@ -629,6 +641,12 @@ public class DonationServiceImpl : IDonationService
         try
         {
             var query = _context.Donations.AsQueryable();
+
+            var inactiveDonorIds = await FetchInactiveUserIdsFromUserServiceAsync();
+            if (inactiveDonorIds.Count > 0)
+            {
+                query = query.Where(d => !inactiveDonorIds.Contains(d.DonorId));
+            }
 
             if (!string.IsNullOrWhiteSpace(search))
             {
@@ -699,6 +717,12 @@ public class DonationServiceImpl : IDonationService
     {
         try
         {
+            var inactiveDonorIds = await FetchInactiveUserIdsFromUserServiceAsync();
+            if (inactiveDonorIds.Contains(donorId))
+            {
+                return ApiResponse<DonorDiscoveryDto>.Fail("Donor not found or has no public activity.");
+            }
+
             var donorListings = await _context.Donations
                 .Where(d => d.DonorId == donorId)
                 .OrderByDescending(d => d.CreatedAt)
@@ -788,7 +812,7 @@ public class DonationServiceImpl : IDonationService
                 },
                 new()
                 {
-                    OrganizationId = "org-colombo-foodbank-2026",
+                    OrganizationId = "org-colombo-foodbank",
                     OrganizationName = "Colombo City Food Bank",
                     OrganizationType = "Food Bank",
                     Location = "Dharmapala Mawatha, Colombo 07",
@@ -827,6 +851,12 @@ public class DonationServiceImpl : IDonationService
                 }
             };
 
+            var inactiveOrgIds = await FetchInactiveUserIdsFromUserServiceAsync();
+            if (inactiveOrgIds.Count > 0)
+            {
+                organizations.RemoveAll(o => inactiveOrgIds.Contains(o.OrganizationId));
+            }
+
             var filtered = organizations.AsQueryable();
 
             if (!string.IsNullOrWhiteSpace(search))
@@ -858,11 +888,21 @@ public class DonationServiceImpl : IDonationService
     {
         try
         {
+            var inactiveOrgIds = await FetchInactiveUserIdsFromUserServiceAsync();
+            if (inactiveOrgIds.Contains(organizationId))
+            {
+                return ApiResponse<OrganizationDiscoveryDto>.Fail("Organization not found or has no public activity.");
+            }
+
             var listResult = await GetParticipatingOrganizationsAsync();
             var org = listResult.Data?.FirstOrDefault(o => o.OrganizationId.Equals(organizationId, StringComparison.OrdinalIgnoreCase));
 
             // Scenario 7: Live update from UserService if available
             var userProfile = await FetchUserProfileFromUserServiceAsync(organizationId);
+            if (userProfile != null && !userProfile.IsActive)
+            {
+                return ApiResponse<OrganizationDiscoveryDto>.Fail("Organization not found or has no public activity.");
+            }
             if (userProfile != null)
             {
                 if (org == null)
@@ -918,7 +958,8 @@ public class DonationServiceImpl : IDonationService
         string? BioOrDescription,
         string? DonorType,
         string? ProfilePictureUrl,
-        List<string>? AcceptedFoodCategories
+        List<string>? AcceptedFoodCategories,
+        bool IsActive = true
     );
 
     private async Task<UserProfilePayload?> FetchUserProfileFromUserServiceAsync(string userId)
@@ -945,6 +986,12 @@ public class DonationServiceImpl : IDonationService
                         }
                     }
 
+                    var isActive = true;
+                    if (dataEl.TryGetProperty("isActive", out var ia) && (ia.ValueKind == JsonValueKind.True || ia.ValueKind == JsonValueKind.False))
+                    {
+                        isActive = ia.GetBoolean();
+                    }
+
                     return new UserProfilePayload(
                         dataEl.TryGetProperty("userId", out var u) ? u.GetString() : null,
                         dataEl.TryGetProperty("role", out var r) ? r.GetString() : null,
@@ -953,7 +1000,8 @@ public class DonationServiceImpl : IDonationService
                         dataEl.TryGetProperty("bioOrDescription", out var bd) ? bd.GetString() : null,
                         dataEl.TryGetProperty("donorType", out var dt) ? dt.GetString() : null,
                         dataEl.TryGetProperty("profilePictureUrl", out var p) ? p.GetString() : null,
-                        accepted
+                        accepted,
+                        isActive
                     );
                 }
             }
@@ -963,6 +1011,37 @@ public class DonationServiceImpl : IDonationService
             _logger.LogDebug(ex, "Could not fetch user profile from UserService for {UserId}", userId);
         }
         return null;
+    }
+
+    private async Task<HashSet<string>> FetchInactiveUserIdsFromUserServiceAsync()
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient();
+            client.Timeout = TimeSpan.FromSeconds(3);
+            var baseUrl = _configuration["UserService:BaseUrl"] ?? _configuration["Services:UserServiceUrl"] ?? "http://localhost:5000";
+            var response = await client.GetAsync($"{baseUrl.TrimEnd('/')}/api/profile/inactive-ids");
+            if (response.IsSuccessStatusCode)
+            {
+                var content = await response.Content.ReadAsStringAsync();
+                using var doc = JsonDocument.Parse(content);
+                if (doc.RootElement.TryGetProperty("data", out var dataEl) && dataEl.ValueKind == JsonValueKind.Array)
+                {
+                    var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    foreach (var item in dataEl.EnumerateArray())
+                    {
+                        var s = item.GetString();
+                        if (!string.IsNullOrWhiteSpace(s)) set.Add(s);
+                    }
+                    return set;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Could not fetch inactive user IDs from UserService");
+        }
+        return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     }
 
     public async Task<ApiResponse<DonationResponseDto>> DeductQuantityAsync(int id, int quantity)
