@@ -49,6 +49,15 @@ export default function FoodNeedsPage() {
   const [categoryFilter, setCategoryFilter] = useState('ALL');
   const [statusFilter, setStatusFilter] = useState('OPEN');
 
+  const getLocalDatetimeLocalString = (date = new Date()) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+  };
+
   // Create Need Request Modal State (Org)
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [createForm, setCreateForm] = useState({
@@ -483,7 +492,7 @@ export default function FoodNeedsPage() {
   // --- Delivery Workflow Handlers (Task 4 & 5) ---
   const openArrangeModal = (offer) => {
     setArrangeTargetOffer(offer);
-    const defaultTime = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString().slice(0, 16);
+    const defaultTime = getLocalDatetimeLocalString(new Date(Date.now() + 2 * 60 * 60 * 1000));
     const defaultDonorAddr = currentUser?.address || currentUser?.location || '';
     const defaultOrgAddr = (viewOffersNeed?.location) || currentUser?.address || currentUser?.location || '';
     setArrangeForm({
@@ -501,23 +510,23 @@ export default function FoodNeedsPage() {
     e.preventDefault();
     if (!arrangeTargetOffer) return;
 
-    const fallbackDonorLocation = currentUser?.location || currentUser?.address || (currentUser?.businessName ? `${currentUser.businessName} Facility` : 'Donor Facility');
+    const fallbackDonorLocation = (arrangeTargetOffer?.pickupLocation) || currentUser?.location || currentUser?.address || (currentUser?.businessName ? `${currentUser.businessName} Facility` : 'Donor Facility');
     const fallbackOrgLocation = (viewOffersNeed?.location) || currentUser?.location || currentUser?.address || (currentUser?.businessName ? `${currentUser.businessName} Facility` : 'Organization Facility');
 
     const pickup = isDonor 
-      ? (arrangeForm.pickupAddress.trim() || fallbackDonorLocation) 
-      : arrangeForm.pickupAddress.trim();
+      ? arrangeForm.pickupAddress.trim() 
+      : (arrangeForm.pickupAddress.trim() || fallbackDonorLocation);
 
     const delivery = !isDonor 
-      ? (arrangeForm.deliveryAddress.trim() || fallbackOrgLocation) 
-      : arrangeForm.deliveryAddress.trim();
+      ? arrangeForm.deliveryAddress.trim() 
+      : (arrangeForm.deliveryAddress.trim() || fallbackOrgLocation);
 
-    if (isDonor && !delivery) {
-      setError('Please specify where to deliver the donation.');
+    if (isDonor && !pickup) {
+      setError('Please specify the pickup address to collect from.');
       return;
     }
-    if (!isDonor && !pickup) {
-      setError('Please specify the pickup address to collect from.');
+    if (!isDonor && !delivery) {
+      setError('Please specify the delivery address (where to deliver).');
       return;
     }
     if (!arrangeForm.contactName.trim() || !arrangeForm.contactPhone.trim()) {
@@ -1386,6 +1395,7 @@ export default function FoodNeedsPage() {
                 <input
                   type="datetime-local"
                   className="form-input"
+                  min={getLocalDatetimeLocalString()}
                   value={createForm.neededByDate}
                   onChange={(e) => setCreateForm({ ...createForm, neededByDate: e.target.value })}
                   required
@@ -1461,6 +1471,7 @@ export default function FoodNeedsPage() {
                 <input
                   type="datetime-local"
                   className="form-input"
+                  min={getLocalDatetimeLocalString()}
                   value={editForm.neededByDate}
                   onChange={(e) => setEditForm({ ...editForm, neededByDate: e.target.value })}
                   required
@@ -1801,9 +1812,9 @@ export default function FoodNeedsPage() {
             </p>
 
             <form onSubmit={handleConfirmArrange}>
-              {isDonor ? (
+              {!isDonor ? (
                 <div className="form-group" style={{ marginBottom: '14px' }}>
-                  <label className="form-label" style={{ fontWeight: 600, fontSize: '0.85rem' }}>Delivery Address (Where to deliver to charity) *</label>
+                  <label className="form-label" style={{ fontWeight: 600, fontSize: '0.85rem' }}>Delivery Address (Where to deliver) *</label>
                   <input
                     type="text"
                     className="form-input"
@@ -1858,6 +1869,7 @@ export default function FoodNeedsPage() {
                 <input
                   type="datetime-local"
                   className="form-input"
+                  min={getLocalDatetimeLocalString()}
                   value={arrangeForm.scheduledCollectionTime}
                   onChange={(e) => setArrangeForm({ ...arrangeForm, scheduledCollectionTime: e.target.value })}
                   required

@@ -282,4 +282,76 @@ public class DonationDiscoveryAndAdministrationUnitTests
         result.Success.Should().BeTrue();
         result.Data.Should().NotBeNull();
     }
+
+    [Fact]
+    public async Task GetAllAvailableDonationsAsync_WhenDonorIsInactive_ExcludesDonationFromResults()
+    {
+        // Arrange
+        var mockHttp = TestHelpers.CreateMockHttpClientFactory(inactiveUserIds: new List<string> { "inactive-donor-1" });
+        var (service, dbContext, _) = TestHelpers.CreateDonationService(httpClientFactory: mockHttp);
+
+        dbContext.Donations.AddRange(
+            new Donation
+            {
+                DonorId = "inactive-donor-1",
+                DonorName = "Inactive Bakery",
+                FoodTitle = "Inactive Pastries",
+                Category = "Bakery",
+                TotalQuantity = 10,
+                RemainingQuantity = 10,
+                Status = "Available",
+                ExpiryTime = DateTime.UtcNow.AddHours(5)
+            },
+            new Donation
+            {
+                DonorId = "active-donor-2",
+                DonorName = "Active Diner",
+                FoodTitle = "Active Meals",
+                Category = "Cooked Meals",
+                TotalQuantity = 10,
+                RemainingQuantity = 10,
+                Status = "Available",
+                ExpiryTime = DateTime.UtcNow.AddHours(5)
+            }
+        );
+        await dbContext.SaveChangesAsync();
+
+        // Act
+        var result = await service.GetAllAvailableDonationsAsync();
+
+        // Assert
+        result.Success.Should().BeTrue();
+        result.Data.Should().NotBeNull();
+        result.Data!.Should().ContainSingle(d => d.DonorId == "active-donor-2");
+        result.Data!.Should().NotContain(d => d.DonorId == "inactive-donor-1");
+    }
+
+    [Fact]
+    public async Task GetDonationByIdAsync_WhenDonorIsInactive_ReturnsNotFound()
+    {
+        // Arrange
+        var mockHttp = TestHelpers.CreateMockHttpClientFactory(inactiveUserIds: new List<string> { "inactive-donor-1" });
+        var (service, dbContext, _) = TestHelpers.CreateDonationService(httpClientFactory: mockHttp);
+
+        var donation = new Donation
+        {
+            DonorId = "inactive-donor-1",
+            DonorName = "Inactive Bakery",
+            FoodTitle = "Inactive Pastries",
+            Category = "Bakery",
+            TotalQuantity = 10,
+            RemainingQuantity = 10,
+            Status = "Available",
+            ExpiryTime = DateTime.UtcNow.AddHours(5)
+        };
+        dbContext.Donations.Add(donation);
+        await dbContext.SaveChangesAsync();
+
+        // Act
+        var result = await service.GetDonationByIdAsync(donation.Id);
+
+        // Assert
+        result.Success.Should().BeFalse();
+        result.Message.Should().Contain("not found");
+    }
 }

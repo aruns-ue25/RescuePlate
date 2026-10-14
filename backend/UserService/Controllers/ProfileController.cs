@@ -104,6 +104,14 @@ public class ProfileController : ControllerBase
         return Ok(new { success = true, message });
     }
 
+    [HttpGet("inactive-ids")]
+    [AllowAnonymous]
+    public async Task<IActionResult> GetInactiveUserIds()
+    {
+        var ids = await _profileService.GetInactiveUserIdsAsync();
+        return Ok(new { success = true, data = ids });
+    }
+
     [HttpGet("{userId:guid}")]
     [AllowAnonymous]
     public async Task<IActionResult> GetPublicProfile(Guid userId)
@@ -127,7 +135,8 @@ public class ProfileController : ControllerBase
                 profile.BioOrDescription,
                 profile.DonorType,
                 profile.AcceptedFoodCategories,
-                profile.ProfilePictureUrl
+                profile.ProfilePictureUrl,
+                profile.IsActive
             }
         });
     }
