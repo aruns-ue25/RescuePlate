@@ -138,13 +138,6 @@ builder.Services.AddSwaggerGen(c =>
             Array.Empty<string>()
         }
     });
-
-    var xmlFile = $"{System.Reflection.Assembly.GetExecutingAssembly().GetName().Name}.xml";
-    var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFile);
-    if (File.Exists(xmlPath))
-    {
-        c.IncludeXmlComments(xmlPath);
-    }
 });
 
 var app = builder.Build();
@@ -161,13 +154,12 @@ catch (Exception ex)
     logger.LogWarning(ex, "Database auto-initialization exception. Ensure PostgreSQL service is running.");
 }
 
-// 7. Middleware Pipeline (Swagger UI enabled across all environments for live evaluation)
-app.UseSwagger();
-app.UseSwaggerUI(c =>
+// 7. Middleware Pipeline
+if (app.Environment.IsDevelopment())
 {
-    c.SwaggerEndpoint("/swagger/v1/swagger.json", "RescuePlate User & Auth API v1");
-    c.RoutePrefix = "swagger";
-});
+    app.UseSwagger();
+    app.UseSwaggerUI();
+}
 
 var wwwRootPath = Path.Combine(app.Environment.ContentRootPath, "wwwroot");
 if (!Directory.Exists(wwwRootPath))

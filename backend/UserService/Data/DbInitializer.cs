@@ -35,60 +35,12 @@ public static class DbInitializer
             // 2. Run EF Core EnsureCreated & Schema Updates
             using var scope = serviceProvider.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<RescuePlateDbContext>();
-            
-            try
-            {
-                db.Database.EnsureCreated();
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "EnsureCreated notice, falling back to explicit schema initialization.");
-            }
+            db.Database.EnsureCreated();
 
             try
             {
+                db.Database.ExecuteSqlRaw("ALTER TABLE \"Users\" ADD COLUMN IF NOT EXISTS \"ProfilePictureUrl\" VARCHAR(500);");
                 db.Database.ExecuteSqlRaw(@"
-                    CREATE TABLE IF NOT EXISTS ""Users"" (
-                        ""Id"" uuid PRIMARY KEY,
-                        ""Email"" character varying(256) NOT NULL,
-                        ""PasswordHash"" text NOT NULL,
-                        ""Role"" text NOT NULL,
-                        ""IsActive"" boolean NOT NULL DEFAULT TRUE,
-                        ""ProfilePictureUrl"" character varying(500),
-                        ""CreatedAt"" timestamp with time zone NOT NULL,
-                        ""UpdatedAt"" timestamp with time zone NOT NULL
-                    );
-                    CREATE UNIQUE INDEX IF NOT EXISTS ""IX_Users_Email"" ON ""Users"" (""Email"");
-
-                    CREATE TABLE IF NOT EXISTS ""DonorProfiles"" (
-                        ""Id"" uuid PRIMARY KEY,
-                        ""UserId"" uuid NOT NULL UNIQUE REFERENCES ""Users""(""Id"") ON DELETE CASCADE,
-                        ""BusinessName"" character varying(200) NOT NULL,
-                        ""ContactPerson"" character varying(100),
-                        ""DonorType"" character varying(50) NOT NULL,
-                        ""Address"" character varying(500) NOT NULL,
-                        ""Phone"" character varying(50),
-                        ""Bio"" character varying(1000),
-                        ""CreatedAt"" timestamp with time zone NOT NULL,
-                        ""UpdatedAt"" timestamp with time zone NOT NULL
-                    );
-
-                    CREATE TABLE IF NOT EXISTS ""OrganizationProfiles"" (
-                        ""Id"" uuid PRIMARY KEY,
-                        ""UserId"" uuid NOT NULL UNIQUE REFERENCES ""Users""(""Id"") ON DELETE CASCADE,
-                        ""OrganizationName"" character varying(200) NOT NULL,
-                        ""ContactPerson"" character varying(100),
-                        ""RegistrationNumber"" character varying(100),
-                        ""Address"" character varying(500) NOT NULL,
-                        ""Phone"" character varying(50),
-                        ""AcceptedFoodCategories"" character varying(500),
-                        ""Description"" character varying(1000),
-                        ""CreatedAt"" timestamp with time zone NOT NULL,
-                        ""UpdatedAt"" timestamp with time zone NOT NULL
-                    );
-
-                    ALTER TABLE ""Users"" ADD COLUMN IF NOT EXISTS ""ProfilePictureUrl"" VARCHAR(500);
-
                     CREATE TABLE IF NOT EXISTS ""AdminActivityLogs"" (
                         ""Id"" uuid PRIMARY KEY,
                         ""Action"" character varying(100) NOT NULL,

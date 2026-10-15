@@ -18,20 +18,17 @@ public class OrgNeedRequestsController : ControllerBase
     private readonly IRequestEventProducer _eventProducer;
     private readonly IConfiguration _configuration;
     private readonly ILogger<OrgNeedRequestsController> _logger;
-    private readonly IHttpClientFactory? _httpClientFactory;
 
     public OrgNeedRequestsController(
         RequestDbContext context,
         IRequestEventProducer eventProducer,
         IConfiguration configuration,
-        ILogger<OrgNeedRequestsController> logger,
-        IHttpClientFactory? httpClientFactory = null)
+        ILogger<OrgNeedRequestsController> logger)
     {
         _context = context;
         _eventProducer = eventProducer;
         _configuration = configuration;
         _logger = logger;
-        _httpClientFactory = httpClientFactory;
     }
 
     /// <summary>
@@ -240,8 +237,8 @@ public class OrgNeedRequestsController : ControllerBase
     }
 
     /// <summary>
-    /// Story 3: Donors view recent &amp; soon-to-expire open food requests.
-    /// Excludes expired &amp; cancelled requests. Surfaced by deadline urgency.
+    /// Story 3: Donors view recent & soon-to-expire open food requests.
+    /// Excludes expired & cancelled requests. Surfaced by deadline urgency.
     /// </summary>
     [HttpGet("active")]
     [Authorize]
@@ -253,12 +250,6 @@ public class OrgNeedRequestsController : ControllerBase
         var now = DateTime.UtcNow;
         var query = _context.OrgNeedRequests
             .Where(r => r.NeededByDate > now && (r.Status == "OPEN" || r.Status == "PARTIALLY_FULFILLED"));
-
-        var inactiveOrgIds = await FetchInactiveUserIdsFromUserServiceAsync();
-        if (inactiveOrgIds.Count > 0)
-        {
-            query = query.Where(r => !inactiveOrgIds.Contains(r.OrganizationId));
-        }
 
         if (!string.IsNullOrWhiteSpace(category) && !category.Equals("ALL", StringComparison.OrdinalIgnoreCase))
         {
@@ -289,12 +280,6 @@ public class OrgNeedRequestsController : ControllerBase
     {
         var request = await _context.OrgNeedRequests.FindAsync(id);
         if (request == null)
-        {
-            return NotFound(ApiResponse<OrgNeedRequestResponseDto>.Fail($"Food need request {id} not found."));
-        }
-
-        var inactiveOrgIds = await FetchInactiveUserIdsFromUserServiceAsync();
-        if (inactiveOrgIds.Contains(request.OrganizationId))
         {
             return NotFound(ApiResponse<OrgNeedRequestResponseDto>.Fail($"Food need request {id} not found."));
         }
@@ -336,17 +321,6 @@ public class OrgNeedRequestsController : ControllerBase
         if (request == null)
         {
             return NotFound(ApiResponse<DonorOfferResponseDto>.Fail($"Food need request {id} not found."));
-        }
-
-        var inactiveUserIds = await FetchInactiveUserIdsFromUserServiceAsync();
-        if (inactiveUserIds.Contains(request.OrganizationId))
-        {
-            return BadRequest(ApiResponse<DonorOfferResponseDto>.Fail("This food request is no longer available as the organization account is deactivated."));
-        }
-
-        if (inactiveUserIds.Contains(donorId))
-        {
-            return BadRequest(ApiResponse<DonorOfferResponseDto>.Fail("Deactivated donor accounts cannot submit food offers."));
         }
 
         ResolveExpiration(request);
@@ -500,7 +474,7 @@ public class OrgNeedRequestsController : ControllerBase
 
     /// <summary>
     /// Story 6 Scenario 2: Organization accepts a donor's pending food offer.
-    /// Supports partial fulfillment &amp; updates request status to PARTIALLY_FULFILLED or CLAIMED.
+    /// Supports partial fulfillment & updates request status to PARTIALLY_FULFILLED or CLAIMED.
     /// </summary>
     [HttpPost("/api/offers/{offerId:int}/accept")]
     [Authorize(Roles = "ORGANIZATION")]
@@ -804,37 +778,5 @@ public class OrgNeedRequestsController : ControllerBase
             CreatedAt = o.CreatedAt,
             UpdatedAt = o.UpdatedAt
         };
-    }
-
-    private async Task<HashSet<string>> FetchInactiveUserIdsFromUserServiceAsync()
-    {
-        if (_httpClientFactory == null) return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        try
-        {
-            var client = _httpClientFactory.CreateClient("UserService");
-            client.Timeout = TimeSpan.FromSeconds(3);
-            var response = await client.GetAsync("/api/profile/inactive-ids");
-            if (response.IsSuccessStatusCode)
-            {
-                var content = await response.Content.ReadAsStringAsync();
-                using var doc = System.Text.Json.JsonDocument.Parse(content);
-                if (doc.RootElement.TryGetProperty("data", out var dataEl) && dataEl.ValueKind == System.Text.Json.JsonValueKind.Array)
-                {
-                    var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                    foreach (var item in dataEl.EnumerateArray())
-                    {
-                        var s = item.GetString();
-                        if (!string.IsNullOrWhiteSpace(s)) set.Add(s);
-                    }
-                    return set;
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogDebug(ex, "Could not fetch inactive user IDs from UserService");
-        }
-        return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     }
 }

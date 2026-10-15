@@ -23,14 +23,11 @@ public static class TestHelpers
         return new DonationDbContext(options);
     }
 
-    public static IHttpClientFactory CreateMockHttpClientFactory(
-        string? address = "123 Test Street, Colombo", 
-        HttpStatusCode statusCode = HttpStatusCode.OK,
-        List<string>? inactiveUserIds = null)
+    public static IHttpClientFactory CreateMockHttpClientFactory(string? address = "123 Test Street, Colombo", HttpStatusCode statusCode = HttpStatusCode.OK)
     {
         var handlerMock = new Mock<HttpMessageHandler>(MockBehavior.Strict);
 
-        var profileResponse = JsonSerializer.Serialize(new
+        var jsonResponse = JsonSerializer.Serialize(new
         {
             success = statusCode == HttpStatusCode.OK,
             data = new
@@ -46,37 +43,18 @@ public static class TestHelpers
             }
         });
 
-        var inactiveResponse = JsonSerializer.Serialize(new
-        {
-            success = true,
-            data = inactiveUserIds ?? new List<string>()
-        });
-
         handlerMock
             .Protected()
             .Setup<Task<HttpResponseMessage>>(
                 "SendAsync",
-                ItExpr.Is<HttpRequestMessage>(req => req.RequestUri != null && req.RequestUri.ToString().Contains("inactive-ids")),
+                ItExpr.IsAny<HttpRequestMessage>(),
                 ItExpr.IsAny<CancellationToken>()
             )
-            .Returns(() => Task.FromResult(new HttpResponseMessage
-            {
-                StatusCode = HttpStatusCode.OK,
-                Content = new StringContent(inactiveResponse, Encoding.UTF8, "application/json")
-            }));
-
-        handlerMock
-            .Protected()
-            .Setup<Task<HttpResponseMessage>>(
-                "SendAsync",
-                ItExpr.Is<HttpRequestMessage>(req => req.RequestUri == null || !req.RequestUri.ToString().Contains("inactive-ids")),
-                ItExpr.IsAny<CancellationToken>()
-            )
-            .Returns(() => Task.FromResult(new HttpResponseMessage
+            .ReturnsAsync(new HttpResponseMessage
             {
                 StatusCode = statusCode,
-                Content = new StringContent(profileResponse, Encoding.UTF8, "application/json")
-            }));
+                Content = new StringContent(jsonResponse, Encoding.UTF8, "application/json")
+            });
 
         var httpClient = new HttpClient(handlerMock.Object);
 

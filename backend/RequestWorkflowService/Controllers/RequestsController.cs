@@ -70,16 +70,6 @@ public class RequestsController : ControllerBase
             return NotFound(ApiResponse<FoodRequestResponseDto>.Fail($"Donation with ID {dto.DonationId} was not found."));
         }
 
-        var inactiveIds = await FetchInactiveUserIdsFromUserServiceAsync();
-        if (inactiveIds.Contains(donation.DonorId))
-        {
-            return BadRequest(ApiResponse<FoodRequestResponseDto>.Fail("This donation listing is no longer available as the donor account is deactivated."));
-        }
-        if (inactiveIds.Contains(orgId))
-        {
-            return BadRequest(ApiResponse<FoodRequestResponseDto>.Fail("Deactivated organization accounts cannot create food requests."));
-        }
-
         // 3. Validation - Expired check (Scenario 5)
         if (donation.ExpiryTime.HasValue && DateTime.UtcNow > donation.ExpiryTime.Value)
         {
@@ -266,7 +256,7 @@ public class RequestsController : ControllerBase
     }
 
     /// <summary>
-    /// Story 4 &amp; Story 6: Donor accepts a pending food request.
+    /// Story 4 & Story 6: Donor accepts a pending food request.
     /// Deducts requested quantity from available donation stock.
     /// </summary>
     [HttpPost("{id:int}/accept")]
@@ -622,35 +612,5 @@ public class RequestsController : ControllerBase
         public string Unit { get; set; } = "portions";
         public string Status { get; set; } = "Available";
         public DateTime? ExpiryTime { get; set; }
-    }
-
-    private async Task<HashSet<string>> FetchInactiveUserIdsFromUserServiceAsync()
-    {
-        try
-        {
-            var client = _httpClientFactory.CreateClient("UserService");
-            client.Timeout = TimeSpan.FromSeconds(3);
-            var response = await client.GetAsync("/api/profile/inactive-ids");
-            if (response.IsSuccessStatusCode)
-            {
-                var content = await response.Content.ReadAsStringAsync();
-                using var doc = JsonDocument.Parse(content);
-                if (doc.RootElement.TryGetProperty("data", out var dataEl) && dataEl.ValueKind == JsonValueKind.Array)
-                {
-                    var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                    foreach (var item in dataEl.EnumerateArray())
-                    {
-                        var s = item.GetString();
-                        if (!string.IsNullOrWhiteSpace(s)) set.Add(s);
-                    }
-                    return set;
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogDebug(ex, "Could not fetch inactive user IDs from UserService");
-        }
-        return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     }
 }

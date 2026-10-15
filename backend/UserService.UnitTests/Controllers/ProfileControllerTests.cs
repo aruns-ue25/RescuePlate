@@ -331,20 +331,4 @@ public class ProfileControllerTests
         okResult.Should().NotBeNull();
         okResult!.StatusCode.Should().Be(200); // Verify it returns 200 OK
     }
-
-    [Fact]
-    public async Task GetInactiveUserIds_ReturnsOkWithList()
-    {
-        // Arrange
-        var inactiveIds = new List<string> { Guid.NewGuid().ToString(), Guid.NewGuid().ToString() };
-        _profileServiceMock.Setup(s => s.GetInactiveUserIdsAsync()).ReturnsAsync(inactiveIds);
-
-        // Act
-        var result = await _controller.GetInactiveUserIds();
-
-        // Assert
-        var okResult = result as OkObjectResult;
-        okResult.Should().NotBeNull();
-        okResult!.StatusCode.Should().Be(200);
-    }
 }

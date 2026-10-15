@@ -270,20 +270,20 @@ export default function RequestsPage() {
     const fallbackOrgLocation = currentUser?.location || currentUser?.address || (currentUser?.businessName ? `${currentUser.businessName} Facility` : 'Organization Facility');
 
     const pickup = isDonor 
-      ? arrangeForm.pickupAddress.trim() 
-      : (arrangeForm.pickupAddress.trim() || fallbackDonorLocation);
+      ? (arrangeForm.pickupAddress.trim() || fallbackDonorLocation) 
+      : arrangeForm.pickupAddress.trim();
 
     const delivery = !isDonor 
-      ? arrangeForm.deliveryAddress.trim() 
-      : (arrangeForm.deliveryAddress.trim() || fallbackOrgLocation);
+      ? (arrangeForm.deliveryAddress.trim() || fallbackOrgLocation) 
+      : arrangeForm.deliveryAddress.trim();
 
     // Validation based on role
-    if (isDonor && !pickup) {
-      setError('Please specify the pickup address to collect from.');
+    if (isDonor && !delivery) {
+      setError('Please specify where to deliver the donation.');
       return;
     }
-    if (!isDonor && !delivery) {
-      setError('Please specify the delivery address (where to deliver).');
+    if (!isDonor && !pickup) {
+      setError('Please specify the pickup address to collect from.');
       return;
     }
 
@@ -901,7 +901,7 @@ export default function RequestsPage() {
             </p>
 
             <form onSubmit={handleConfirmArrange}>
-              {!isDonor ? (
+              {isDonor ? (
                 <div className="form-group" style={{ marginBottom: '14px' }}>
                   <label className="form-label" style={{ fontWeight: 600, fontSize: '0.85rem' }}>Delivery Address (Where to deliver) *</label>
                   <input
@@ -958,7 +958,6 @@ export default function RequestsPage() {
                 <input
                   type="datetime-local"
                   className="form-input"
-                  min={getLocalDatetimeLocalString(new Date())}
                   value={arrangeForm.scheduledCollectionTime}
                   onChange={(e) => setArrangeForm({ ...arrangeForm, scheduledCollectionTime: e.target.value })}
                   required

@@ -12,7 +12,6 @@ public interface IProfileService
     Task<(bool Success, string Message, UserProfileDto? Data)> UpdateProfileAsync(Guid userId, UpdateProfileDto dto);
     Task<(bool Success, string Message, string? ProfilePictureUrl)> UploadProfilePictureAsync(Guid userId, IFormFile? file, string webRootPath);
     Task<(bool Success, string Message)> RemoveProfilePictureAsync(Guid userId, string webRootPath);
-    Task<List<string>> GetInactiveUserIdsAsync();
 }
 
 public class ProfileService : IProfileService
@@ -284,13 +283,5 @@ public class ProfileService : IProfileService
         {
             // Ignore file deletion errors to prevent blocking DB operations
         }
-    }
-
-    public async Task<List<string>> GetInactiveUserIdsAsync()
-    {
-        return await _db.Users
-            .Where(u => !u.IsActive)
-            .Select(u => u.Id.ToString())
-            .ToListAsync();
     }
 }
