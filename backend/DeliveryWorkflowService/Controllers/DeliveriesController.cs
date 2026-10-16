@@ -51,7 +51,7 @@ public class DeliveriesController : ControllerBase
         var (userId, userRole) = GetCallerIdentity();
 
         // 1. Authoritative verification of Request acceptance from PostgreSQL database
-        var requestInfo = await VerifyRequestAcceptanceAsync(dto.RequestId);
+        var requestInfo = await VerifyRequestAcceptanceAsync(dto.RequestId, userId, dto.RequestType);
         if (requestInfo == null)
         {
             return NotFound(ApiResponse<DeliveryTrackingResponseDto>.Fail($"Donation request with ID {dto.RequestId} was not found."));
@@ -73,7 +73,7 @@ public class DeliveriesController : ControllerBase
         // 3. Duplicate arrangement check (Concurrency & Unique Index guard)
         var existingArrangement = await _context.DeliveryArrangements
             .AsNoTracking()
-            .AnyAsync(d => d.RequestId == dto.RequestId);
+            .AnyAsync(d => d.RequestId == dto.RequestId && d.RequestType == requestInfo.RequestType);
         if (existingArrangement)
         {
             return BadRequest(ApiResponse<DeliveryTrackingResponseDto>.Fail(
@@ -88,6 +88,7 @@ public class DeliveriesController : ControllerBase
             var arrangement = new DeliveryArrangement
             {
                 RequestId = dto.RequestId,
+                RequestType = requestInfo.RequestType,
                 DonationId = requestInfo.DonationId,
                 DonationTitle = string.IsNullOrWhiteSpace(requestInfo.DonationTitle) ? "Surplus Food Donation" : requestInfo.DonationTitle,
                 DonorId = requestInfo.DonorId,
@@ -400,25 +401,44 @@ public class DeliveriesController : ControllerBase
     [ProducesResponseType(typeof(ApiResponse<DeliveryTrackingResponseDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> GetTrackingByRequestId(int requestId)
+    public async Task<IActionResult> GetTrackingByRequestId(int requestId, [FromQuery] string? type = null)
     {
         var (userId, userRole) = GetCallerIdentity();
 
-        var arrangement = await _context.DeliveryArrangements
+        var query = _context.DeliveryArrangements
             .AsNoTracking()
             .Include(d => d.History)
-            .FirstOrDefaultAsync(d => d.RequestId == requestId);
+            .Where(d => d.RequestId == requestId);
 
-        if (arrangement == null)
+        if (!string.IsNullOrWhiteSpace(type))
+        {
+            var normalizedType = type.Trim().ToUpperInvariant();
+            if (normalizedType == "FOOD_OFFER") normalizedType = "OFFER";
+            if (normalizedType == "FOOD_REQUEST") normalizedType = "REQUEST";
+            query = query.Where(d => d.RequestType == normalizedType);
+        }
+
+        var matchingList = await query.ToListAsync();
+
+        if (matchingList.Count == 0)
         {
             return NotFound(ApiResponse<DeliveryTrackingResponseDto>.Fail($"Tracking information for food request {requestId} was not found."));
         }
 
-        // Authorization Check (Story 4: Donor, Organization, or ADMIN)
-        if (userId != arrangement.DonorId && userId != arrangement.OrganizationId && !userRole.Equals("ADMIN", StringComparison.OrdinalIgnoreCase))
+        // Find arrangement where caller is Donor or Organization
+        var arrangement = matchingList.FirstOrDefault(d => d.DonorId == userId || d.OrganizationId == userId);
+
+        if (arrangement == null)
         {
-            return StatusCode(StatusCodes.Status403Forbidden,
-                ApiResponse<DeliveryTrackingResponseDto>.Fail("You are not authorized to view tracking information for this donation."));
+            if (userRole.Equals("ADMIN", StringComparison.OrdinalIgnoreCase))
+            {
+                arrangement = matchingList.First();
+            }
+            else
+            {
+                return StatusCode(StatusCodes.Status403Forbidden,
+                    ApiResponse<DeliveryTrackingResponseDto>.Fail("You are not authorized to view tracking information for this donation."));
+            }
         }
 
         return Ok(ApiResponse<DeliveryTrackingResponseDto>.Ok(MapToDto(arrangement)));
@@ -506,28 +526,47 @@ public class DeliveriesController : ControllerBase
             AddNotificationIfUnique(arrangement.DonorId, "Donation Completed", notifMsg, "DONATION_COMPLETED", arrangement.Id, now);
             AddNotificationIfUnique(arrangement.OrganizationId, "Donation Completed", notifMsg, "DONATION_COMPLETED", arrangement.Id, now);
 
-            // Synchronize completion state to Requests table in database if present
-            try
+            // Synchronize completion state to corresponding table in database
+            if (arrangement.RequestType == "OFFER")
             {
-                await _context.Database.ExecuteSqlRawAsync(
-                    "UPDATE \"Requests\" SET \"Status\" = 'COMPLETED' WHERE \"Id\" = {0}",
-                    arrangement.RequestId);
+                try
+                {
+                    await _context.Database.ExecuteSqlRawAsync(
+                        "UPDATE \"DonorOffers\" SET \"Status\" = 'COMPLETED' WHERE \"Id\" = {0}",
+                        arrangement.RequestId);
+                }
+                catch (Exception syncEx)
+                {
+                    _logger.LogWarning(syncEx, "Optional DonorOffers table sync to COMPLETED skipped for RequestId {RequestId}", arrangement.RequestId);
+                }
             }
-            catch (Exception syncEx)
+            else
             {
-                _logger.LogWarning(syncEx, "Optional Requests table sync to COMPLETED skipped for RequestId {RequestId}", arrangement.RequestId);
-            }
+                int rowsUpdated = 0;
+                try
+                {
+                    rowsUpdated = await _context.Database.ExecuteSqlRawAsync(
+                        "UPDATE \"Requests\" SET \"Status\" = 'COMPLETED' WHERE \"Id\" = {0}",
+                        arrangement.RequestId);
+                }
+                catch (Exception syncEx)
+                {
+                    _logger.LogWarning(syncEx, "Optional Requests table sync to COMPLETED skipped for RequestId {RequestId}", arrangement.RequestId);
+                }
 
-            // Synchronize completion state to DonorOffers table in database if present
-            try
-            {
-                await _context.Database.ExecuteSqlRawAsync(
-                    "UPDATE \"DonorOffers\" SET \"Status\" = 'COMPLETED' WHERE \"Id\" = {0}",
-                    arrangement.RequestId);
-            }
-            catch (Exception syncEx)
-            {
-                _logger.LogWarning(syncEx, "Optional DonorOffers table sync to COMPLETED skipped for RequestId {RequestId}", arrangement.RequestId);
+                if (rowsUpdated == 0)
+                {
+                    try
+                    {
+                        await _context.Database.ExecuteSqlRawAsync(
+                            "UPDATE \"DonorOffers\" SET \"Status\" = 'COMPLETED' WHERE \"Id\" = {0}",
+                            arrangement.RequestId);
+                    }
+                    catch (Exception syncEx)
+                    {
+                        _logger.LogWarning(syncEx, "Optional DonorOffers table sync to COMPLETED skipped for RequestId {RequestId}", arrangement.RequestId);
+                    }
+                }
             }
 
             await _context.SaveChangesAsync();
@@ -617,90 +656,141 @@ public class DeliveriesController : ControllerBase
         return (userId, role);
     }
 
-    private async Task<VerifiedRequestInfo?> VerifyRequestAcceptanceAsync(int requestId)
+    private async Task<VerifiedRequestInfo?> VerifyRequestAcceptanceAsync(int requestId, string callerUserId, string? requestedType = null)
     {
-        // 1. Check Requests table (Surplus food listing requests)
-        try
+        var normalizedType = requestedType?.Trim().ToUpperInvariant();
+        if (normalizedType == "FOOD_OFFER") normalizedType = "OFFER";
+        if (normalizedType == "FOOD_REQUEST") normalizedType = "REQUEST";
+
+        async Task<VerifiedRequestInfo?> QueryRequestsAsync()
         {
-            using var command = _context.Database.GetDbConnection().CreateCommand();
-            command.CommandText = @"
-                SELECT ""Id"", ""DonationId"", ""DonationTitle"", ""OrganizationId"", ""OrganizationName"", ""DonorId"", ""Status""
-                FROM ""Requests""
-                WHERE ""Id"" = @reqId";
-
-            var param = command.CreateParameter();
-            param.ParameterName = "@reqId";
-            param.Value = requestId;
-            command.Parameters.Add(param);
-
-            if (command.Connection?.State != System.Data.ConnectionState.Open)
+            try
             {
-                await _context.Database.OpenConnectionAsync();
-            }
+                using var command = _context.Database.GetDbConnection().CreateCommand();
+                command.CommandText = @"
+                    SELECT ""Id"", ""DonationId"", ""DonationTitle"", ""OrganizationId"", ""OrganizationName"", ""DonorId"", ""Status""
+                    FROM ""Requests""
+                    WHERE ""Id"" = @reqId";
 
-            using var reader = await command.ExecuteReaderAsync();
-            if (await reader.ReadAsync())
-            {
-                return new VerifiedRequestInfo
+                var param = command.CreateParameter();
+                param.ParameterName = "@reqId";
+                param.Value = requestId;
+                command.Parameters.Add(param);
+
+                if (command.Connection?.State != System.Data.ConnectionState.Open)
                 {
-                    Id = reader.GetInt32(0),
-                    DonationId = reader.GetInt32(1),
-                    DonationTitle = reader.IsDBNull(2) ? "" : reader.GetString(2),
-                    OrganizationId = reader.IsDBNull(3) ? "" : reader.GetString(3),
-                    OrganizationName = reader.IsDBNull(4) ? "" : reader.GetString(4),
-                    DonorId = reader.IsDBNull(5) ? "" : reader.GetString(5),
-                    DonorName = "Donor User",
-                    Status = reader.IsDBNull(6) ? "PENDING" : reader.GetString(6)
-                };
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error verifying acceptance for food request {RequestId}", requestId);
-        }
+                    await _context.Database.OpenConnectionAsync();
+                }
 
-        // 2. Check DonorOffers table (Organization food need requests with donor offers)
-        try
-        {
-            using var command = _context.Database.GetDbConnection().CreateCommand();
-            command.CommandText = @"
-                SELECT o.""Id"", o.""OrgFoodNeedRequestId"", o.""OrgFoodNeedRequestTitle"", r.""OrganizationId"", r.""OrganizationName"", o.""DonorId"", o.""DonorName"", o.""Status""
-                FROM ""DonorOffers"" o
-                JOIN ""OrgNeedRequests"" r ON o.""OrgFoodNeedRequestId"" = r.""Id""
-                WHERE o.""Id"" = @reqId";
-
-            var param = command.CreateParameter();
-            param.ParameterName = "@reqId";
-            param.Value = requestId;
-            command.Parameters.Add(param);
-
-            if (command.Connection?.State != System.Data.ConnectionState.Open)
-            {
-                await _context.Database.OpenConnectionAsync();
-            }
-
-            using var reader = await command.ExecuteReaderAsync();
-            if (await reader.ReadAsync())
-            {
-                return new VerifiedRequestInfo
+                using var reader = await command.ExecuteReaderAsync();
+                if (await reader.ReadAsync())
                 {
-                    Id = reader.GetInt32(0),
-                    DonationId = reader.GetInt32(1),
-                    DonationTitle = reader.IsDBNull(2) ? "" : reader.GetString(2),
-                    OrganizationId = reader.IsDBNull(3) ? "" : reader.GetString(3),
-                    OrganizationName = reader.IsDBNull(4) ? "" : reader.GetString(4),
-                    DonorId = reader.IsDBNull(5) ? "" : reader.GetString(5),
-                    DonorName = reader.IsDBNull(6) ? "Donor User" : reader.GetString(6),
-                    Status = reader.IsDBNull(7) ? "PENDING" : reader.GetString(7)
-                };
+                    return new VerifiedRequestInfo
+                    {
+                        Id = reader.GetInt32(0),
+                        RequestType = "REQUEST",
+                        DonationId = reader.GetInt32(1),
+                        DonationTitle = reader.IsDBNull(2) ? "" : reader.GetString(2),
+                        OrganizationId = reader.IsDBNull(3) ? "" : reader.GetString(3),
+                        OrganizationName = reader.IsDBNull(4) ? "" : reader.GetString(4),
+                        DonorId = reader.IsDBNull(5) ? "" : reader.GetString(5),
+                        DonorName = "Donor User",
+                        Status = reader.IsDBNull(6) ? "PENDING" : reader.GetString(6)
+                    };
+                }
             }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error verifying acceptance for donor offer {RequestId}", requestId);
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error verifying acceptance for food request {RequestId}", requestId);
+            }
+            return null;
         }
 
-        return null;
+        async Task<VerifiedRequestInfo?> QueryOffersAsync()
+        {
+            try
+            {
+                using var command = _context.Database.GetDbConnection().CreateCommand();
+                command.CommandText = @"
+                    SELECT o.""Id"", o.""OrgFoodNeedRequestId"", o.""OrgFoodNeedRequestTitle"", r.""OrganizationId"", r.""OrganizationName"", o.""DonorId"", o.""DonorName"", o.""Status""
+                    FROM ""DonorOffers"" o
+                    JOIN ""OrgNeedRequests"" r ON o.""OrgFoodNeedRequestId"" = r.""Id""
+                    WHERE o.""Id"" = @reqId";
+
+                var param = command.CreateParameter();
+                param.ParameterName = "@reqId";
+                param.Value = requestId;
+                command.Parameters.Add(param);
+
+                if (command.Connection?.State != System.Data.ConnectionState.Open)
+                {
+                    await _context.Database.OpenConnectionAsync();
+                }
+
+                using var reader = await command.ExecuteReaderAsync();
+                if (await reader.ReadAsync())
+                {
+                    return new VerifiedRequestInfo
+                    {
+                        Id = reader.GetInt32(0),
+                        RequestType = "OFFER",
+                        DonationId = reader.GetInt32(1),
+                        DonationTitle = reader.IsDBNull(2) ? "" : reader.GetString(2),
+                        OrganizationId = reader.IsDBNull(3) ? "" : reader.GetString(3),
+                        OrganizationName = reader.IsDBNull(4) ? "" : reader.GetString(4),
+                        DonorId = reader.IsDBNull(5) ? "" : reader.GetString(5),
+                        DonorName = reader.IsDBNull(6) ? "Donor User" : reader.GetString(6),
+                        Status = reader.IsDBNull(7) ? "PENDING" : reader.GetString(7)
+                    };
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error verifying acceptance for donor offer {RequestId}", requestId);
+            }
+            return null;
+        }
+
+        if (normalizedType == "OFFER")
+        {
+            return await QueryOffersAsync();
+        }
+
+        if (normalizedType == "REQUEST")
+        {
+            return await QueryRequestsAsync();
+        }
+
+        // When type is not explicitly provided, query both and disambiguate based on caller participation and ACCEPTED status
+        var reqInfo = await QueryRequestsAsync();
+        var offerInfo = await QueryOffersAsync();
+
+        if (reqInfo != null && offerInfo != null)
+        {
+            bool callerInOffer = (callerUserId == offerInfo.DonorId || callerUserId == offerInfo.OrganizationId);
+            bool callerInReq = (callerUserId == reqInfo.DonorId || callerUserId == reqInfo.OrganizationId);
+
+            if (callerInOffer && offerInfo.Status == "ACCEPTED" && (!callerInReq || reqInfo.Status != "ACCEPTED"))
+            {
+                return offerInfo;
+            }
+            if (callerInReq && reqInfo.Status == "ACCEPTED" && (!callerInOffer || offerInfo.Status != "ACCEPTED"))
+            {
+                return reqInfo;
+            }
+            if (callerInOffer && !callerInReq)
+            {
+                return offerInfo;
+            }
+            if (callerInReq && !callerInOffer)
+            {
+                return reqInfo;
+            }
+            if (offerInfo.Status == "ACCEPTED") return offerInfo;
+            return reqInfo;
+        }
+
+        return reqInfo ?? offerInfo;
     }
 
     private static DeliveryTrackingResponseDto MapToDto(DeliveryArrangement d)
@@ -709,6 +799,7 @@ public class DeliveriesController : ControllerBase
         {
             Id = d.Id,
             RequestId = d.RequestId,
+            RequestType = d.RequestType,
             DonationId = d.DonationId,
             DonationTitle = d.DonationTitle,
             DonorId = d.DonorId,
@@ -747,6 +838,7 @@ public class DeliveriesController : ControllerBase
     private class VerifiedRequestInfo
     {
         public int Id { get; set; }
+        public string RequestType { get; set; } = "REQUEST";
         public int DonationId { get; set; }
         public string DonationTitle { get; set; } = string.Empty;
         public string OrganizationId { get; set; } = string.Empty;

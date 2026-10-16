@@ -302,4 +302,186 @@ public class FoodOfferDeliveryUnitTests
             offerStatus.Should().Be("COMPLETED");
         }
     }
+
+    [Fact]
+    public async Task FOD_Collision_Offer16_Accepted_While_Request16_Completed_ArrangesOfferSuccessfully()
+    {
+        // Arrange: Seed Request 16 as COMPLETED (different user) and Offer 16 as ACCEPTED (Kathisan Foods)
+        var (controller, db, conn) = SetupTest();
+        using (conn)
+        {
+            TestDbContextFactory.SeedRequest(
+                db,
+                requestId: 16,
+                donationId: 10,
+                donorId: "donor_old",
+                orgId: "org_old",
+                status: "COMPLETED",
+                title: "Old Surplus Apples");
+
+            TestDbContextFactory.SeedFoodOffer(
+                db,
+                offerId: 16,
+                orgFoodNeedRequestId: 25,
+                donorId: "donor_active",
+                orgId: "org_kathisan",
+                status: "ACCEPTED",
+                needTitle: "Request dry foods for 50 peoples",
+                donorName: "Arun Foods",
+                orgName: "Kathisan Foods");
+
+            db.ChangeTracker.Clear();
+            controller.ControllerContext = ControllerTestHelper.CreateControllerContext("org_kathisan", "ORGANIZATION");
+
+            var dto = new ArrangeCollectionDto
+            {
+                RequestId = 16,
+                RequestType = "OFFER",
+                PickupAddress = "Arun Foods Kitchen",
+                DeliveryAddress = "Kathisan Shelter Dock",
+                ContactName = "Kathisan Manager",
+                ContactPhone = "+1 555-0199",
+                ScheduledCollectionTime = DateTimeOffset.UtcNow.AddHours(2),
+                Notes = "Dry food pickup"
+            };
+
+            // Act
+            var result = await controller.ArrangeCollection(dto) as CreatedAtActionResult;
+
+            // Assert: Must succeed with 201 Created instead of 400 Bad Request
+            result.Should().NotBeNull();
+            result!.StatusCode.Should().Be(201);
+            var response = result.Value as ApiResponse<DeliveryTrackingResponseDto>;
+            response.Should().NotBeNull();
+            response!.Success.Should().BeTrue();
+            response.Data!.RequestType.Should().Be("OFFER");
+            response.Data.OrganizationName.Should().Be("Kathisan Foods");
+            response.Data.DonationTitle.Should().Be("Request dry foods for 50 peoples");
+
+            var arrangement = await db.DeliveryArrangements.FirstOrDefaultAsync(d => d.RequestId == 16 && d.RequestType == "OFFER");
+            arrangement.Should().NotBeNull();
+            arrangement!.OrganizationId.Should().Be("org_kathisan");
+        }
+    }
+
+    [Fact]
+    public async Task FOD_Collision_Request19_And_Offer19_TrackIndependently_Without403()
+    {
+        // Arrange: Offer 19 is arranged between Donor A and Org A.
+        // Request 19 has NO delivery arranged yet for Donor B and Org B.
+        var (controller, db, conn) = SetupTest();
+        using (conn)
+        {
+            var offerDelivery = new DeliveryArrangement
+            {
+                RequestId = 19,
+                RequestType = "OFFER",
+                DonationId = 88,
+                DonationTitle = "Offer 19 Meal",
+                DonorId = "donor_A",
+                DonorName = "Donor A",
+                OrganizationId = "org_A",
+                OrganizationName = "Org A",
+                PickupAddress = "123 Street",
+                DeliveryAddress = "456 Avenue",
+                ContactName = "Person A",
+                ContactPhone = "111111",
+                ScheduledCollectionTime = DateTime.UtcNow.AddDays(1),
+                Status = "CollectionArranged",
+                ArrangedAt = DateTime.UtcNow
+            };
+            db.DeliveryArrangements.Add(offerDelivery);
+            await db.SaveChangesAsync();
+
+            // Act 1: Donor B queries tracking for Request 19 (which has NO delivery)
+            controller.ControllerContext = ControllerTestHelper.CreateControllerContext("donor_B", "DONOR");
+            var resB = await controller.GetTrackingByRequestId(19, type: "REQUEST") as ObjectResult;
+
+            // Assert 1: Must return 404 Not Found so frontend can render Arrange button (NOT 403 Forbidden!)
+            resB.Should().NotBeNull();
+            resB!.StatusCode.Should().Be(404);
+
+            // Act 2: Org A queries tracking for Offer 19
+            controller.ControllerContext = ControllerTestHelper.CreateControllerContext("org_A", "ORGANIZATION");
+            var resA = await controller.GetTrackingByRequestId(19, type: "OFFER") as OkObjectResult;
+
+            // Assert 2: Must return 200 OK with Offer 19 tracking
+            resA.Should().NotBeNull();
+            resA!.StatusCode.Should().Be(200);
+            var responseA = resA.Value as ApiResponse<DeliveryTrackingResponseDto>;
+            responseA.Should().NotBeNull();
+            responseA!.Data!.DonationTitle.Should().Be("Offer 19 Meal");
+        }
+    }
+
+    [Fact]
+    public async Task FOD_Collision_CompleteOffer_DoesNotCorruptRequestWithSameId()
+    {
+        var (controller, db, conn) = SetupTest();
+        using (conn)
+        {
+            // Seed Request 77 as ACCEPTED
+            TestDbContextFactory.SeedRequest(
+                db,
+                requestId: 77,
+                donationId: 10,
+                donorId: "donor_req",
+                orgId: "org_req",
+                status: "ACCEPTED",
+                title: "Surplus Listing 77");
+
+            // Seed Offer 77 as ACCEPTED
+            TestDbContextFactory.SeedFoodOffer(
+                db,
+                offerId: 77,
+                orgFoodNeedRequestId: 30,
+                donorId: "donor_off",
+                orgId: "org_off",
+                status: "ACCEPTED",
+                needTitle: "Food Need Offer 77");
+
+            // Create Delivery for Offer 77 in Received status
+            var offerDelivery = new DeliveryArrangement
+            {
+                RequestId = 77,
+                RequestType = "OFFER",
+                DonationId = 30,
+                DonationTitle = "Food Need Offer 77",
+                DonorId = "donor_off",
+                DonorName = "Donor Off",
+                OrganizationId = "org_off",
+                OrganizationName = "Org Off",
+                PickupAddress = "Pickup",
+                DeliveryAddress = "Delivery",
+                ContactName = "Contact",
+                ContactPhone = "999",
+                ScheduledCollectionTime = DateTime.UtcNow.AddDays(-1),
+                Status = "Received",
+                ArrangedAt = DateTime.UtcNow.AddDays(-1),
+                ReceivedAt = DateTime.UtcNow.AddHours(-1)
+            };
+            db.DeliveryArrangements.Add(offerDelivery);
+            await db.SaveChangesAsync();
+
+            // Act: Complete delivery for Offer 77
+            controller.ControllerContext = ControllerTestHelper.CreateControllerContext("org_off", "ORGANIZATION");
+            var result = await controller.CompleteDonation(offerDelivery.Id) as OkObjectResult;
+            result.Should().NotBeNull();
+            result!.StatusCode.Should().Be(200);
+
+            // Assert: DonorOffers 77 must be COMPLETED, but Requests 77 must remain ACCEPTED!
+            var rawConn = db.Database.GetDbConnection();
+            if (rawConn.State != ConnectionState.Open) rawConn.Open();
+
+            using var cmd1 = rawConn.CreateCommand();
+            cmd1.CommandText = "SELECT \"Status\" FROM \"DonorOffers\" WHERE \"Id\" = 77";
+            var offerStatus = (string?)cmd1.ExecuteScalar();
+            offerStatus.Should().Be("COMPLETED");
+
+            using var cmd2 = rawConn.CreateCommand();
+            cmd2.CommandText = "SELECT \"Status\" FROM \"Requests\" WHERE \"Id\" = 77";
+            var reqStatus = (string?)cmd2.ExecuteScalar();
+            reqStatus.Should().Be("ACCEPTED"); // Must NOT be corrupted to COMPLETED!
+        }
+    }
 }

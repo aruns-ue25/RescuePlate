@@ -7,6 +7,9 @@ public class ArrangeCollectionDto
     [Required(ErrorMessage = "RequestId is required.")]
     public int RequestId { get; set; }
 
+    [StringLength(20, ErrorMessage = "RequestType cannot exceed 20 characters.")]
+    public string? RequestType { get; set; }
+
     [Required(ErrorMessage = "PickupAddress is required.")]
     [StringLength(255, ErrorMessage = "PickupAddress cannot exceed 255 characters.")]
     public string PickupAddress { get; set; } = string.Empty;
