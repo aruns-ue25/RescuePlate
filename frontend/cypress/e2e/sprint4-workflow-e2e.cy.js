@@ -234,7 +234,7 @@ describe('Sprint 4 Comprehensive E2E Test Suite - Delivery Workflow & Platform E
       }).as('getMyRequests');
 
       let currentDelivery = null;
-      cy.intercept('GET', '**/api/deliveries/request/req-301', (req) => {
+      cy.intercept('GET', '**/api/deliveries/request/req-301*', (req) => {
         if (currentDelivery) {
           req.reply({ statusCode: 200, body: { success: true, data: currentDelivery } });
         } else {
@@ -292,7 +292,7 @@ describe('Sprint 4 Comprehensive E2E Test Suite - Delivery Workflow & Platform E
         body: { success: true, data: acceptedRequests }
       }).as('getReceivedRequests');
 
-      cy.intercept('GET', '**/api/deliveries/request/req-301', {
+      cy.intercept('GET', '**/api/deliveries/request/req-301*', {
         statusCode: 200,
         body: { success: true, data: mockDeliveryArranged }
       }).as('getDeliveryArranged');
@@ -340,7 +340,7 @@ describe('Sprint 4 Comprehensive E2E Test Suite - Delivery Workflow & Platform E
         body: { success: true, data: acceptedRequests }
       }).as('getMyRequests');
 
-      cy.intercept('GET', '**/api/deliveries/request/req-301', (req) => {
+      cy.intercept('GET', '**/api/deliveries/request/req-301*', (req) => {
         req.reply({ statusCode: 200, body: { success: true, data: deliveryState } });
       }).as('getDeliveryState');
 
@@ -387,7 +387,7 @@ describe('Sprint 4 Comprehensive E2E Test Suite - Delivery Workflow & Platform E
         body: { success: true, data: acceptedRequests }
       }).as('getReceivedRequests');
 
-      cy.intercept('GET', '**/api/deliveries/request/req-301', (req) => {
+      cy.intercept('GET', '**/api/deliveries/request/req-301*', (req) => {
         req.reply({ statusCode: 200, body: { success: true, data: deliveryState } });
       }).as('getDeliveryState');
 
@@ -396,10 +396,38 @@ describe('Sprint 4 Comprehensive E2E Test Suite - Delivery Workflow & Platform E
         status: 'Completed',
         completedAt: new Date().toISOString(),
         statusHistory: [
-          { id: 1, previousStatus: 'Created', newStatus: 'CollectionArranged', timestamp: new Date(Date.now() - 7200000).toISOString(), changedByUserId: 'usr-org-1', changedByRole: 'Organization' },
-          { id: 2, previousStatus: 'CollectionArranged', newStatus: 'Collected', timestamp: new Date(Date.now() - 3600000).toISOString(), changedByUserId: 'usr-donor-1', changedByRole: 'Donor' },
-          { id: 3, previousStatus: 'Collected', newStatus: 'Received', timestamp: new Date(Date.now() - 1800000).toISOString(), changedByUserId: 'usr-org-1', changedByRole: 'Organization' },
-          { id: 4, previousStatus: 'Received', newStatus: 'Completed', timestamp: new Date().toISOString(), changedByUserId: 'usr-donor-1', changedByRole: 'Donor' }
+          {
+            id: 1,
+            previousStatus: 'Created',
+            newStatus: 'CollectionArranged',
+            timestamp: new Date(Date.now() - 7200000).toISOString(),
+            changedByUserId: 'usr-org-1',
+            changedByRole: 'Organization'
+          },
+          {
+            id: 2,
+            previousStatus: 'CollectionArranged',
+            newStatus: 'Collected',
+            timestamp: new Date(Date.now() - 3600000).toISOString(),
+            changedByUserId: 'usr-donor-1',
+            changedByRole: 'Donor'
+          },
+          {
+            id: 3,
+            previousStatus: 'Collected',
+            newStatus: 'Received',
+            timestamp: new Date(Date.now() - 1800000).toISOString(),
+            changedByUserId: 'usr-org-1',
+            changedByRole: 'Organization'
+          },
+          {
+            id: 4,
+            previousStatus: 'Received',
+            newStatus: 'Completed',
+            timestamp: new Date().toISOString(),
+            changedByUserId: 'usr-donor-1',
+            changedByRole: 'Donor'
+          }
         ]
       };
 
@@ -524,7 +552,7 @@ describe('Sprint 4 Comprehensive E2E Test Suite - Delivery Workflow & Platform E
       }).as('acceptOffer');
 
       let offerDeliveryState = null;
-      cy.intercept('GET', '**/api/deliveries/request/offer-601', (req) => {
+      cy.intercept('GET', '**/api/deliveries/request/offer-601*', (req) => {
         if (offerDeliveryState) {
           req.reply({ statusCode: 200, body: { success: true, data: offerDeliveryState } });
         } else {
@@ -606,7 +634,7 @@ describe('Sprint 4 Comprehensive E2E Test Suite - Delivery Workflow & Platform E
         body: { success: true, data: [acceptedOffer] }
       }).as('getMyOffers');
 
-      cy.intercept('GET', '**/api/deliveries/request/offer-601', {
+      cy.intercept('GET', '**/api/deliveries/request/offer-601*', {
         statusCode: 200,
         body: { success: true, data: offerDelivery }
       }).as('getOfferDelivery');
