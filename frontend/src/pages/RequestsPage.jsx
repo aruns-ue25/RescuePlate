@@ -149,14 +149,14 @@ export default function RequestsPage() {
     await Promise.all(
       acceptedRequests.map(async (req) => {
         try {
-          const res = await deliveryApi.getTrackingByRequestId(req.id);
+          const res = await deliveryApi.getTrackingByRequestId(req.id, 'REQUEST');
           if (res && res.data) {
             newMap[req.id] = res.data;
           }
         } catch (e) {
-          // Only 404 means no arrangement created yet.
-          // Non-404 errors (500, network error) indicate service error.
-          const isNotFound = e?.status === 404 || e?.response?.status === 404 || (e?.message && e.message.includes('not found'));
+          // 404 or authorization refusal on foreign arrangement means no arrangement created yet for this request
+          const isNotFound = e?.status === 404 || e?.response?.status === 404 || 
+            (e?.message && (e.message.includes('not found') || e.message.includes('not authorized')));
           if (isNotFound) {
             newMap[req.id] = null;
           } else {
@@ -305,6 +305,7 @@ export default function RequestsPage() {
     try {
       const payload = {
         requestId: arrangeTargetRequest.id,
+        requestType: 'REQUEST',
         pickupAddress: pickup,
         deliveryAddress: delivery,
         contactName: arrangeForm.contactName.trim(),
