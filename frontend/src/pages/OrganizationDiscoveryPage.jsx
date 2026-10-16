@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { donationApi, getProfileImageUrl } from '../services/api';
+import { donationApi, authApi, getProfileImageUrl } from '../services/api';
 import { 
   Building2, 
   MapPin, 
@@ -35,6 +35,7 @@ export default function OrganizationDiscoveryPage() {
   const [organizations, setOrganizations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [inactiveUserIds, setInactiveUserIds] = useState(new Set());
 
   // Search & Filter States
   const [searchQuery, setSearchQuery] = useState('');
@@ -44,6 +45,7 @@ export default function OrganizationDiscoveryPage() {
   const [selectedOrg, setSelectedOrg] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailData, setDetailData] = useState(null);
+  const [detailError, setDetailError] = useState(null);
 
   const foodCategories = [
     'ALL', 
@@ -58,13 +60,20 @@ export default function OrganizationDiscoveryPage() {
     try {
       setLoading(true);
       setError(null);
-      const res = await donationApi.getParticipatingOrganizations({
-        search: search.trim() ? search.trim() : undefined,
-        foodCategory: category === 'ALL' ? undefined : category
-      });
+      const [res, inactiveIds] = await Promise.all([
+        donationApi.getParticipatingOrganizations({
+          search: search.trim() ? search.trim() : undefined,
+          foodCategory: category === 'ALL' ? undefined : category
+        }),
+        authApi.getInactiveUserIds().catch(() => [])
+      ]);
+
+      const inactiveSet = new Set((inactiveIds || []).map(id => id.toLowerCase()));
+      setInactiveUserIds(inactiveSet);
 
       if (res.success && res.data) {
-        setOrganizations(res.data);
+        const filtered = res.data.filter(o => !inactiveSet.has(o.organizationId?.toLowerCase()));
+        setOrganizations(filtered);
       } else {
         setOrganizations([]);
       }
@@ -99,14 +108,27 @@ export default function OrganizationDiscoveryPage() {
 
   // Scenario 2 & 4: Select Organization
   const handleSelectOrg = async (org) => {
+    if (inactiveUserIds.has(org.organizationId?.toLowerCase())) {
+      setSelectedOrg(null);
+      setDetailData(null);
+      setDetailError('This organization account is currently inactive or deactivated. Profile details cannot be viewed.');
+      return;
+    }
     setSelectedOrg(org);
     setDetailLoading(true);
     setDetailData(null);
+    setDetailError(null);
 
     try {
       const res = await donationApi.getOrganizationProfile(org.organizationId);
       if (res.success && res.data) {
-        setDetailData(res.data);
+        if (inactiveUserIds.has(res.data.organizationId?.toLowerCase()) || res.data.isActive === false) {
+          setSelectedOrg(null);
+          setDetailData(null);
+          setDetailError('This organization account is currently inactive or deactivated. Profile details cannot be viewed.');
+        } else {
+          setDetailData(res.data);
+        }
       } else {
         setDetailData(org);
       }
@@ -120,14 +142,34 @@ export default function OrganizationDiscoveryPage() {
   const handleSelectOrgById = async (id) => {
     setDetailLoading(true);
     setDetailData(null);
+    setDetailError(null);
     try {
-      const res = await donationApi.getOrganizationProfile(id);
+      const [res, inactiveIds] = await Promise.all([
+        donationApi.getOrganizationProfile(id),
+        inactiveUserIds.size > 0 ? Promise.resolve(null) : authApi.getInactiveUserIds().catch(() => [])
+      ]);
+
+      let inactiveSet = inactiveUserIds;
+      if (inactiveIds) {
+        inactiveSet = new Set((inactiveIds || []).map(x => x.toLowerCase()));
+        setInactiveUserIds(inactiveSet);
+      }
+
+      if (inactiveSet.has(id?.toLowerCase()) || (res?.data && res.data.isActive === false)) {
+        setSelectedOrg(null);
+        setDetailData(null);
+        setDetailError('This organization account is currently inactive or deactivated. Profile details cannot be viewed.');
+        return;
+      }
+
       if (res.success && res.data) {
         setSelectedOrg(res.data);
         setDetailData(res.data);
+      } else {
+        setDetailError('Organization profile could not be loaded.');
       }
     } catch (err) {
-      console.error(err);
+      setDetailError(err.message || 'Failed to retrieve organization profile.');
     } finally {
       setDetailLoading(false);
     }
@@ -154,6 +196,7 @@ export default function OrganizationDiscoveryPage() {
   const handleCloseModal = () => {
     setSelectedOrg(null);
     setDetailData(null);
+    setDetailError(null);
     if (searchParams.get('orgId') || searchParams.get('view')) {
       const nextParams = new URLSearchParams(searchParams);
       nextParams.delete('orgId');
@@ -423,8 +466,8 @@ export default function OrganizationDiscoveryPage() {
         )}
       </div>
 
-      {/* Scenario 4: Selected Organization Detail Modal */}
-      {selectedOrg && (
+      {/* Scenario 4: Selected Organization Detail Modal / Error Modal */}
+      {(selectedOrg || detailError) && (
         <div 
           style={{
             position: 'fixed',
@@ -452,7 +495,29 @@ export default function OrganizationDiscoveryPage() {
               overflowY: 'auto'
             }}
           >
-            {/* Modal Header */}
+            {detailError ? (
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                  <h3 style={{ margin: 0, color: '#991b1b', fontSize: '1.2rem', fontWeight: 700 }}>Organization Profile Unavailable</h3>
+                  <button 
+                    onClick={handleCloseModal}
+                    style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', padding: '4px' }}
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
+                <div style={{ padding: '16px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', color: '#991b1b', fontSize: '0.9rem', marginBottom: '20px' }}>
+                  {detailError}
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <button onClick={handleCloseModal} className="btn btn-outline btn-md">
+                    Close
+                  </button>
+                </div>
+              </div>
+            ) : selectedOrg && (
+              <>
+                {/* Modal Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 {selectedOrg.profilePictureUrl ? (
@@ -624,6 +689,8 @@ export default function OrganizationDiscoveryPage() {
                 Close Profile
               </button>
             </div>
+            </>
+          )}
           </div>
         </div>
       )}

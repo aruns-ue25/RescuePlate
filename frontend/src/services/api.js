@@ -172,6 +172,25 @@ export const authApi = {
     } catch (error) {
       throw error.response?.data || { message: 'Failed to fetch activity logs' };
     }
+  },
+
+  getInactiveUserIds: async () => {
+    try {
+      const response = await api.get('/profile/inactive-ids');
+      return response.data?.data || [];
+    } catch (error) {
+      console.warn('Failed to fetch inactive user IDs:', error);
+      return [];
+    }
+  },
+
+  getPublicProfile: async (userId) => {
+    try {
+      const response = await api.get(`/profile/${userId}`);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { message: 'Failed to fetch public profile' };
+    }
   }
 };
 
@@ -679,9 +698,10 @@ export const deliveryApi = {
     }
   },
 
-  getTrackingByRequestId: async (requestId) => {
+  getTrackingByRequestId: async (requestId, type = null) => {
     try {
-      const response = await deliveryClient.get(`/deliveries/request/${requestId}`);
+      const params = type ? { type } : {};
+      const response = await deliveryClient.get(`/deliveries/request/${requestId}`, { params });
       return response.data;
     } catch (error) {
       throw error.response?.data || { message: 'Failed to fetch tracking by request ID' };
