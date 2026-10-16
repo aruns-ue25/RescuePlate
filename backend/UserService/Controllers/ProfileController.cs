@@ -60,7 +60,7 @@ public class ProfileController : ControllerBase
 
     [HttpPost("me/picture")]
     [Consumes("multipart/form-data")]
-    public async Task<IActionResult> UploadProfilePicture([FromForm] IFormFile? file)
+    public async Task<IActionResult> UploadProfilePicture(IFormFile? file)
     {
         var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))

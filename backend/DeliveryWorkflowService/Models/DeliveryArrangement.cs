@@ -14,6 +14,10 @@ public class DeliveryArrangement
     public int RequestId { get; set; }
 
     [Required]
+    [MaxLength(20)]
+    public string RequestType { get; set; } = "REQUEST"; // REQUEST, OFFER
+
+    [Required]
     public int DonationId { get; set; }
 
     [Required]

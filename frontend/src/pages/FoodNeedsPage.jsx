@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { needRequestApi, deliveryApi } from '../services/api';
+import { needRequestApi, deliveryApi, authApi } from '../services/api';
 import { 
   HeartHandshake, 
   PlusCircle, 
@@ -133,7 +133,7 @@ export default function FoodNeedsPage() {
     const map = {};
     await Promise.all(accepted.map(async (o) => {
       try {
-        const d = await deliveryApi.getTrackingByRequestId(o.id);
+        const d = await deliveryApi.getTrackingByRequestId(o.id, 'OFFER');
         if (d && d.data) {
           map[o.id] = d.data;
         }
@@ -196,12 +196,19 @@ export default function FoodNeedsPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await needRequestApi.getActiveNeedRequests({
-        category: categoryFilter,
-        search: searchQuery
-      });
+      const [res, inactiveIds] = await Promise.all([
+        needRequestApi.getActiveNeedRequests({
+          category: categoryFilter,
+          search: searchQuery
+        }),
+        authApi.getInactiveUserIds().catch(() => [])
+      ]);
+
+      const inactiveSet = new Set((inactiveIds || []).map(id => id.toLowerCase()));
+
       if (res && res.data) {
-        setNeedRequests(res.data);
+        const filtered = res.data.filter(r => !inactiveSet.has(r.organizationId?.toLowerCase()));
+        setNeedRequests(filtered);
       } else {
         setNeedRequests([]);
       }
@@ -547,6 +554,7 @@ export default function FoodNeedsPage() {
     try {
       const payload = {
         requestId: arrangeTargetOffer.id,
+        requestType: 'OFFER',
         pickupAddress: pickup,
         deliveryAddress: delivery,
         contactName: arrangeForm.contactName.trim(),

@@ -375,13 +375,17 @@ jobs:
         working-directory: frontend
         run: npm ci
 
+      - name: Build Frontend for CI
+        working-directory: frontend
+        run: npm run build
+
       - name: Execute Cypress Sprint 4 End-to-End Tests
         uses: cypress-io/github-action@v6
         with:
           working-directory: frontend
-          start: npm run dev
+          start: npm run preview -- --host 0.0.0.0 --port 5173
           wait-on: 'http://localhost:5173'
-          wait-on-timeout: 60
+          wait-on-timeout: 120
           spec: cypress/e2e/sprint4*.cy.js
 
       - name: Upload Cypress Screenshots and Videos

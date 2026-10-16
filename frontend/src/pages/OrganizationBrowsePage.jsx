@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { donationApi, requestApi } from '../services/api';
+import { donationApi, requestApi, authApi } from '../services/api';
 import { 
   HeartHandshake, 
   Sparkles, 
@@ -35,6 +35,7 @@ export default function OrganizationBrowsePage() {
   const [donations, setDonations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [inactiveUserIds, setInactiveUserIds] = useState(new Set());
 
   // Filter States
   const [searchQuery, setSearchQuery] = useState('');
@@ -56,12 +57,20 @@ export default function OrganizationBrowsePage() {
     try {
       setLoading(true);
       setError(null);
-      const res = await donationApi.getAvailableDonations(
-        category === 'ALL' ? undefined : category,
-        search.trim() ? search.trim() : undefined
-      );
+      const [res, inactiveIds] = await Promise.all([
+        donationApi.getAvailableDonations(
+          category === 'ALL' ? undefined : category,
+          search.trim() ? search.trim() : undefined
+        ),
+        authApi.getInactiveUserIds().catch(() => [])
+      ]);
+
+      const inactiveSet = new Set((inactiveIds || []).map(id => id.toLowerCase()));
+      setInactiveUserIds(inactiveSet);
+
       if (res.success && res.data) {
-        setDonations(res.data);
+        const filtered = res.data.filter(d => !inactiveSet.has(d.donorId?.toLowerCase()));
+        setDonations(filtered);
       } else {
         setDonations([]);
       }
@@ -98,13 +107,23 @@ export default function OrganizationBrowsePage() {
   }, [searchParams]);
 
   const handleSelectDonation = async (item) => {
+    if (inactiveUserIds.has(item.donorId?.toLowerCase())) {
+      setSelectedDonation(null);
+      setDetailError('This donation listing is no longer available as the donor account has been deactivated.');
+      return;
+    }
     setSelectedDonation(item);
     setDetailLoading(true);
     setDetailError(null);
     try {
       const res = await donationApi.getDonationById(item.id);
       if (res.success && res.data) {
-        setSelectedDonation(res.data);
+        if (inactiveUserIds.has(res.data.donorId?.toLowerCase())) {
+          setSelectedDonation(null);
+          setDetailError('This donation listing is no longer available as the donor account has been deactivated.');
+        } else {
+          setSelectedDonation(res.data);
+        }
       }
     } catch (err) {
       // Keep existing item data on network error
@@ -117,9 +136,24 @@ export default function OrganizationBrowsePage() {
     setDetailLoading(true);
     setDetailError(null);
     try {
-      const res = await donationApi.getDonationById(id);
+      const [res, inactiveIds] = await Promise.all([
+        donationApi.getDonationById(id),
+        inactiveUserIds.size > 0 ? Promise.resolve(null) : authApi.getInactiveUserIds().catch(() => [])
+      ]);
+
+      let inactiveSet = inactiveUserIds;
+      if (inactiveIds) {
+        inactiveSet = new Set((inactiveIds || []).map(x => x.toLowerCase()));
+        setInactiveUserIds(inactiveSet);
+      }
+
       if (res.success && res.data) {
-        setSelectedDonation(res.data);
+        if (inactiveSet.has(res.data.donorId?.toLowerCase())) {
+          setSelectedDonation(null);
+          setDetailError('This donation listing is no longer available as the donor account has been deactivated.');
+        } else {
+          setSelectedDonation(res.data);
+        }
       } else {
         setDetailError('Donation details could not be found or loaded.');
       }

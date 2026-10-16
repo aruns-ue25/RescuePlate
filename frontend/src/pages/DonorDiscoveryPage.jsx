@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { donationApi, getProfileImageUrl } from '../services/api';
+import { donationApi, authApi, getProfileImageUrl } from '../services/api';
 import { 
   Building2, 
   MapPin, 
@@ -32,6 +32,7 @@ export default function DonorDiscoveryPage() {
   const [donors, setDonors] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [inactiveUserIds, setInactiveUserIds] = useState(new Set());
 
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -59,13 +60,20 @@ export default function DonorDiscoveryPage() {
     try {
       setLoading(true);
       setError(null);
-      const res = await donationApi.getParticipatingDonors({
-        search: search.trim() ? search.trim() : undefined,
-        donorType: type === 'ALL' ? undefined : type
-      });
+      const [res, inactiveIds] = await Promise.all([
+        donationApi.getParticipatingDonors({
+          search: search.trim() ? search.trim() : undefined,
+          donorType: type === 'ALL' ? undefined : type
+        }),
+        authApi.getInactiveUserIds().catch(() => [])
+      ]);
+
+      const inactiveSet = new Set((inactiveIds || []).map(id => id.toLowerCase()));
+      setInactiveUserIds(inactiveSet);
 
       if (res.success && res.data) {
-        setDonors(res.data);
+        const filtered = res.data.filter(d => !inactiveSet.has(d.donorId?.toLowerCase()));
+        setDonors(filtered);
       } else {
         setDonors([]);
       }
@@ -100,6 +108,12 @@ export default function DonorDiscoveryPage() {
 
   // Scenario 1 & 3: Select a Donor
   const handleSelectDonor = async (donor) => {
+    if (inactiveUserIds.has(donor.donorId?.toLowerCase())) {
+      setSelectedDonor(null);
+      setDetailData(null);
+      setDetailError('This donor account is currently inactive or deactivated. Profile details and surplus food donations are not available.');
+      return;
+    }
     setSelectedDonor(donor);
     setDetailLoading(true);
     setDetailError(null);
@@ -108,7 +122,13 @@ export default function DonorDiscoveryPage() {
     try {
       const res = await donationApi.getDonorProfile(donor.donorId);
       if (res.success && res.data) {
-        setDetailData(res.data);
+        if (inactiveUserIds.has(res.data.donorId?.toLowerCase()) || res.data.isActive === false) {
+          setSelectedDonor(null);
+          setDetailData(null);
+          setDetailError('This donor account is currently inactive or deactivated. Profile details and surplus food donations are not available.');
+        } else {
+          setDetailData(res.data);
+        }
       } else {
         setDetailData(donor);
       }
@@ -124,7 +144,24 @@ export default function DonorDiscoveryPage() {
     setDetailLoading(true);
     setDetailError(null);
     try {
-      const res = await donationApi.getDonorProfile(id);
+      const [res, inactiveIds] = await Promise.all([
+        donationApi.getDonorProfile(id),
+        inactiveUserIds.size > 0 ? Promise.resolve(null) : authApi.getInactiveUserIds().catch(() => [])
+      ]);
+
+      let inactiveSet = inactiveUserIds;
+      if (inactiveIds) {
+        inactiveSet = new Set((inactiveIds || []).map(x => x.toLowerCase()));
+        setInactiveUserIds(inactiveSet);
+      }
+
+      if (inactiveSet.has(id?.toLowerCase()) || (res?.data && res.data.isActive === false)) {
+        setSelectedDonor(null);
+        setDetailData(null);
+        setDetailError('This donor account is currently inactive or deactivated. Profile details and surplus food donations are not available.');
+        return;
+      }
+
       if (res.success && res.data) {
         setSelectedDonor(res.data);
         setDetailData(res.data);
@@ -409,8 +446,8 @@ export default function DonorDiscoveryPage() {
         )}
       </div>
 
-      {/* Scenario 4: Donor Details Modal */}
-      {selectedDonor && (
+      {/* Scenario 4: Donor Details Modal / Error Modal */}
+      {(selectedDonor || detailError) && (
         <div 
           style={{
             position: 'fixed',
@@ -438,7 +475,29 @@ export default function DonorDiscoveryPage() {
               overflowY: 'auto'
             }}
           >
-            {/* Modal Header */}
+            {detailError ? (
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                  <h3 style={{ margin: 0, color: '#991b1b', fontSize: '1.2rem', fontWeight: 700 }}>Donor Profile Unavailable</h3>
+                  <button 
+                    onClick={handleCloseModal}
+                    style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', padding: '4px' }}
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
+                <div style={{ padding: '16px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', color: '#991b1b', fontSize: '0.9rem', marginBottom: '20px' }}>
+                  {detailError}
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <button onClick={handleCloseModal} className="btn btn-outline btn-md">
+                    Close
+                  </button>
+                </div>
+              </div>
+            ) : selectedDonor && (
+              <>
+                {/* Modal Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 {selectedDonor.profilePictureUrl ? (
@@ -618,6 +677,8 @@ export default function DonorDiscoveryPage() {
                 Close Profile
               </button>
             </div>
+            </>
+          )}
           </div>
         </div>
       )}

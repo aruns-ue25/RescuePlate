@@ -32,6 +32,14 @@ public class ProfileIntegrationTests : IAsyncLifetime
     public Task DisposeAsync() => Task.CompletedTask;
 
     [Fact]
+    public async Task SwaggerJson_Returns200Ok()
+    {
+        var response = await _client.GetAsync("/swagger/v1/swagger.json");
+        var content = await response.Content.ReadAsStringAsync();
+        response.StatusCode.Should().Be(HttpStatusCode.OK, content);
+    }
+
+    [Fact]
     public async Task GetMyProfile_AuthenticatedDonor_Returns200OkWithDonorData()
     {
         // Arrange (TC-PROF-01)

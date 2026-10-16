@@ -16,10 +16,10 @@ public class DeliveryDbContext : DbContext
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
-
         modelBuilder.Entity<DeliveryArrangement>(entity =>
         {
-            entity.HasIndex(e => e.RequestId).IsUnique();
+            entity.HasIndex(e => new { e.RequestId, e.RequestType }).IsUnique();
+            entity.HasIndex(e => e.RequestType);
             entity.HasIndex(e => e.DonationId);
             entity.HasIndex(e => e.DonorId);
             entity.HasIndex(e => e.OrganizationId);

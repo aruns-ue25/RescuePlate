@@ -4,6 +4,7 @@ public class DeliveryTrackingResponseDto
 {
     public int Id { get; set; }
     public int RequestId { get; set; }
+    public string RequestType { get; set; } = "REQUEST";
     public int DonationId { get; set; }
     public string DonationTitle { get; set; } = string.Empty;
     public string DonorId { get; set; } = string.Empty;
