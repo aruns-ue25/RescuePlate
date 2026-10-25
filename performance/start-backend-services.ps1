@@ -4,6 +4,8 @@
 
 $projectRoot = Split-Path -Parent $PSScriptRoot
 
+$env:ConnectionStrings__PostgreSQLConnection = "Host=localhost;Port=5432;Database=RescuePlateDB;Username=postgres;Password=ArunS1573@DMS"
+
 Write-Host "Starting RescuePlate Backend Microservices..." -ForegroundColor Cyan
 
 $services = @(
@@ -15,10 +17,12 @@ $services = @(
 
 $processes = @()
 
+$connStr = "Host=localhost;Port=5432;Database=RescuePlateDB;Username=postgres;Password=ArunS1573@DMS"
+
 foreach ($svc in $services) {
     $fullPath = Join-Path $projectRoot $svc.Path
     $dllPath = Join-Path $fullPath "bin\Debug\net10.0\$($svc.Name).dll"
-    $p = Start-Process dotnet -ArgumentList "`"$dllPath`" --urls http://localhost:$($svc.Port)" -WorkingDirectory $fullPath -PassThru -WindowStyle Hidden
+    $p = Start-Process dotnet -ArgumentList "`"$dllPath`" --urls http://localhost:$($svc.Port) --ConnectionStrings:PostgreSQLConnection `"$connStr`"" -WorkingDirectory $fullPath -PassThru -WindowStyle Hidden
     $processes += @{ Name = $svc.Name; Id = $p.Id; Port = $svc.Port }
 }
 
