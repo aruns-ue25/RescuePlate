@@ -1,6 +1,11 @@
 import { defineConfig } from "cypress";
 
 export default defineConfig({
+  reporter: "junit",
+  reporterOptions: {
+    mochaFile: "cypress/results/output-[hash].xml",
+    toConsole: false,
+  },
   e2e: {
     baseUrl: "http://localhost:5173",
     trashAssetsBeforeRuns: false,
