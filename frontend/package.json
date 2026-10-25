@@ -9,6 +9,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test:e2e": "cypress run",
+    "test:e2e:all": "cypress run --spec 'cypress/e2e/sprint1-user-service-e2e.cy.js,cypress/e2e/sprint2-donation-service-e2e.cy.js,cypress/e2e/sprint3-request-workflow-e2e.cy.js,cypress/e2e/sprint4-workflow-e2e.cy.js,cypress/e2e/sprint4-admin-workflow-e2e.cy.js'",
     "test:e2e:sprint4": "cypress run --spec 'cypress/e2e/sprint4*.cy.js'"
   },
   "dependencies": {
