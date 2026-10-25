@@ -521,7 +521,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '24.x'
+          node-version: '20.x'
           cache: 'npm'
           cache-dependency-path: frontend/package-lock.json
 
@@ -533,13 +533,26 @@ jobs:
         working-directory: frontend
         run: npm run build
 
+      - name: Start Frontend Preview Server
+        working-directory: frontend
+        run: |
+          npm run preview -- --host 0.0.0.0 --port 5173 &
+          echo "Waiting for frontend preview server on port 5173..."
+          for i in {1..30}; do
+            if curl -s -f http://localhost:5173 > /dev/null || curl -s -f http://127.0.0.1:5173 > /dev/null; then
+              echo "Frontend preview server is online and ready!"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Frontend preview server failed to start within 30 seconds."
+          exit 1
+
       - name: Execute Cypress End-to-End Tests (All Sprints & Services)
         uses: cypress-io/github-action@v6
         with:
           working-directory: frontend
-          start: npm run preview -- --host 0.0.0.0 --port 5173
-          wait-on: 'http://localhost:5173'
-          wait-on-timeout: 120
+          install: false
           spec: cypress/e2e/sprint1-user-service-e2e.cy.js,cypress/e2e/sprint2-donation-service-e2e.cy.js,cypress/e2e/sprint3-request-workflow-e2e.cy.js,cypress/e2e/sprint4-workflow-e2e.cy.js,cypress/e2e/sprint4-admin-workflow-e2e.cy.js
 
       - name: Upload Cypress Test Reports and Artifacts
@@ -555,7 +568,7 @@ jobs:
       - name: Generate UI / E2E Test Summary
         if: always()
         run: |
-          python3 -c "
+          python3 - << 'EOF'
           import glob, os, xml.etree.ElementTree as ET
           summary_file = os.environ.get('GITHUB_STEP_SUMMARY')
           if not summary_file: exit(0)
@@ -638,9 +651,9 @@ jobs:
                       total_duration += spec_time
 
                       res_badge = 'Passing ✅' if failed == 0 and tests > 0 else 'Failing ❌'
-                      out.write(f'| **{service_name}** | {sprint_name} | `{spec_filename}` | {res_badge} | {tests} | {passed} | {failed} | {spec_time:.1f}s |\n')
+                      out.write(f'| **{service_name}** | {sprint_name} | <code>{spec_filename}</code> | {res_badge} | {tests} | {passed} | {failed} | {spec_time:.1f}s |\n')
                   except Exception as e:
-                      out.write(f'| Error parsing `{os.path.basename(xf)}` | - | - | ❌ Error | - | - | - | - |\n')
+                      out.write(f'| Error parsing <code>{os.path.basename(xf)}</code> | - | - | ❌ Error | - | - | - | - |\n')
 
               tot_badge = 'Passing ✅' if total_failed == 0 and total_tests > 0 else 'Failing ❌'
               out.write(f'| **Overall Platform Total** | **All Sprints** | **{len(xml_files)} Spec Files** | **{tot_badge}** | **{total_tests}** | **{total_passed}** | **{total_failed}** | **{total_duration:.1f}s** |\n\n')
@@ -654,7 +667,7 @@ jobs:
                       svc_label = svc.split(' (')[0]
                       out.write(f'| {svc_label} | {sp} | {clean_title} | {st} | {dur:.2f}s |\n')
                   out.write('\n</details>\n\n')
-          "
+          EOF
 
   # ============================================================================
   # UNIFIED REPORTING: Aggregate Dashboard & Step Summary
