@@ -137,16 +137,33 @@ jobs:
       - name: Restore Backend Dependencies
         run: dotnet restore backend/RescuePlate.slnx
 
-      - name: Execute Stryker Mutation Testing (Sprint 4 DeliveryWorkflowService)
+      - name: Execute Stryker Mutation Testing (Sprint 1 & 2 - UserService)
+        working-directory: backend/UserService.UnitTests
+        run: dotnet stryker
+        continue-on-error: true
+
+      - name: Execute Stryker Mutation Testing (Sprint 2 - DonationService)
+        working-directory: backend/DonationService.UnitTests
+        run: dotnet stryker
+        continue-on-error: true
+
+      - name: Execute Stryker Mutation Testing (Sprint 3 - RequestWorkflowService)
+        working-directory: backend/RequestWorkflowService.UnitTests
+        run: dotnet stryker
+        continue-on-error: true
+
+      - name: Execute Stryker Mutation Testing (Sprint 4 - DeliveryWorkflowService)
         working-directory: backend/DeliveryWorkflowService.UnitTests
         run: dotnet stryker
+        continue-on-error: true
 
       - name: Upload Mutation Testing HTML Report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: mutation-testing-report
-          path: backend/DeliveryWorkflowService.UnitTests/StrykerOutput/**/reports/*
+          name: mutation-testing-reports
+          path: |
+            backend/**/StrykerOutput/**/reports/*
 
       - name: Generate Mutation Test Summary
         if: always()
@@ -155,51 +172,89 @@ jobs:
           import glob, json, os
           summary_file = os.environ.get('GITHUB_STEP_SUMMARY')
           if not summary_file: exit(0)
+
+          services = [
+              ('UserService (Sprint 1 & 2)', 'backend/UserService.UnitTests/StrykerOutput/**/reports/mutation-report.json', 'backend/UserService.UnitTests/StrykerOutput/**/reports/mutation-report.html'),
+              ('DonationService (Sprint 2)', 'backend/DonationService.UnitTests/StrykerOutput/**/reports/mutation-report.json', 'backend/DonationService.UnitTests/StrykerOutput/**/reports/mutation-report.html'),
+              ('RequestWorkflowService (Sprint 3)', 'backend/RequestWorkflowService.UnitTests/StrykerOutput/**/reports/mutation-report.json', 'backend/RequestWorkflowService.UnitTests/StrykerOutput/**/reports/mutation-report.html'),
+              ('DeliveryWorkflowService (Sprint 4)', 'backend/DeliveryWorkflowService.UnitTests/StrykerOutput/**/reports/mutation-report.json', 'backend/DeliveryWorkflowService.UnitTests/StrykerOutput/**/reports/mutation-report.html'),
+          ]
+
           with open(summary_file, 'a', encoding='utf-8') as out:
-              out.write('### Role 2: Mutation Testing (Stryker.NET) Summary\n\n')
-              reports = glob.glob('backend/DeliveryWorkflowService.UnitTests/StrykerOutput/**/reports/mutation-report.html', recursive=True)
-              json_reports = glob.glob('backend/DeliveryWorkflowService.UnitTests/StrykerOutput/**/reports/mutation-report.json', recursive=True)
-              data = None
-              if json_reports:
-                  try:
-                      with open(json_reports[0], 'r', encoding='utf-8') as jf:
-                          data = json.load(jf)
-                  except Exception:
-                      pass
-              if not data and reports:
-                  try:
-                      with open(reports[0], 'r', encoding='utf-8') as f:
-                          html = f.read()
-                      key = '.report = '
-                      idx = html.find(key)
-                      if idx != -1:
-                          start = idx + len(key)
-                          end = html.rfind('function updateTheme')
-                          end = html.rfind(';', 0, end)
-                          data = json.loads(html[start:end].strip())
-                  except Exception:
-                      pass
-              if not data:
-                  out.write('> ⚠️ No Stryker mutation report found.\n\n')
-                  exit(0)
-              files = data.get('files', {}).values()
-              mutants = [m for file in files for m in file.get('mutants', [])]
-              statuses = {}
-              for m in mutants:
-                  s = m.get('status', 'Unknown')
-                  statuses[s] = statuses.get(s, 0) + 1
-              killed = statuses.get('Killed', 0)
-              survived = statuses.get('Survived', 0)
-              timeout = statuses.get('Timeout', 0)
-              no_cov = statuses.get('NoCoverage', 0)
-              ignored = statuses.get('Ignored', 0)
-              detected = killed + timeout
-              valid = detected + survived + no_cov
-              score = ((detected / valid) * 100) if valid > 0 else 0.0
-              res_badge = 'Passing ✅' if score >= 50.0 else ('Warning ⚠️' if score >= 30.0 else 'Failing ❌')
-              out.write('| Result | Mutation Score | Total Mutants | Killed | Survived | No Coverage | Ignored |\n')
-              out.write('| :---: | :---: | :---: | :---: | :---: | :---: | :---: |\n')
-              out.write(f'| {res_badge} | {score:.2f}% | {len(mutants)} | {killed} | {survived} | {no_cov} | {ignored} |\n\n')
+              out.write('### Role 2: Mutation Testing (Stryker.NET) Multi-Service Summary\n\n')
+              out.write('| Service / Domain | Sprint | Result | Mutation Score | Total Mutants | Killed | Survived | No Coverage | Ignored |\n')
+              out.write('| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |\n')
+
+              tot_mutants = tot_killed = tot_survived = tot_timeout = tot_nocov = tot_ignored = 0
+              found_any = False
+
+              for display_name, jpat, hpat in services:
+                  parts = display_name.split(' (')
+                  svc_name = parts[0]
+                  sprint_name = parts[1].replace(')', '') if len(parts) > 1 else 'All'
+
+                  jfiles = glob.glob(jpat, recursive=True)
+                  hfiles = glob.glob(hpat, recursive=True)
+                  data = None
+
+                  if jfiles:
+                      try:
+                          latest_j = max(jfiles, key=os.path.getmtime)
+                          with open(latest_j, 'r', encoding='utf-8') as jf:
+                              data = json.load(jf)
+                      except Exception:
+                          pass
+
+                  if not data and hfiles:
+                      try:
+                          latest_h = max(hfiles, key=os.path.getmtime)
+                          with open(latest_h, 'r', encoding='utf-8') as hf:
+                              html = hf.read()
+                          key = '.report = '
+                          idx = html.find(key)
+                          if idx != -1:
+                              start = idx + len(key)
+                              end = html.rfind('function updateTheme')
+                              end = html.rfind(';', 0, end)
+                              data = json.loads(html[start:end].strip())
+                      except Exception:
+                          pass
+
+                  if data:
+                      found_any = True
+                      files = data.get('files', {}).values()
+                      mutants = [m for f in files for m in f.get('mutants', [])]
+                      st = {}
+                      for m in mutants:
+                          s = m.get('status', 'Unknown')
+                          st[s] = st.get(s, 0) + 1
+                      k = st.get('Killed', 0)
+                      s = st.get('Survived', 0)
+                      to = st.get('Timeout', 0)
+                      nc = st.get('NoCoverage', 0)
+                      ig = st.get('Ignored', 0)
+                      det = k + to
+                      val = det + s + nc
+                      score = ((det / val) * 100) if val > 0 else 0.0
+                      res_badge = 'Passing ✅' if score >= 50.0 else ('Warning ⚠️' if score >= 30.0 else 'Failing ❌')
+                      out.write(f'| **{svc_name}** | {sprint_name} | {res_badge} | {score:.2f}% | {len(mutants)} | {k} | {s} | {nc} | {ig} |\n')
+                      tot_mutants += len(mutants)
+                      tot_killed += k
+                      tot_survived += s
+                      tot_timeout += to
+                      tot_nocov += nc
+                      tot_ignored += ig
+                  else:
+                      out.write(f'| **{svc_name}** | {sprint_name} | ⚠️ Not Run | N/A | - | - | - | - | - |\n')
+
+              if found_any:
+                  tot_det = tot_killed + tot_timeout
+                  tot_val = tot_det + tot_survived + tot_nocov
+                  tot_score = ((tot_det / tot_val) * 100) if tot_val > 0 else 0.0
+                  tot_badge = 'Passing ✅' if tot_score >= 50.0 else ('Warning ⚠️' if tot_score >= 30.0 else 'Failing ❌')
+                  out.write(f'| **Overall Platform Total** | **All Sprints** | **{tot_badge}** | **{tot_score:.2f}%** | **{tot_mutants}** | **{tot_killed}** | **{tot_survived}** | **{tot_nocov}** | **{tot_ignored}** |\n\n')
+              else:
+                  out.write('> ⚠️ No Stryker mutation reports found for any service.\n\n')
           "
 
   # ============================================================================
@@ -280,11 +335,12 @@ jobs:
       - name: Await Microservice Health Readiness
         run: |
           echo "Polling health endpoints..."
-          for i in {1..25}; do
+          for i in {1..30}; do
             if curl -s -f http://localhost:5003/api/health > /dev/null && \
                curl -s -f http://localhost:5002/api/health > /dev/null && \
+               curl -s -f http://localhost:5001/api/health > /dev/null && \
                curl -s -f http://localhost:5000/health > /dev/null; then
-              echo "Microservices are healthy and online!"
+              echo "All 4 microservices are healthy and online!"
               exit 0
             fi
             sleep 2
@@ -292,64 +348,162 @@ jobs:
           echo "Microservices failed to start in time."
           exit 1
 
+      - name: Seed Database with Multi-Service Test Data (Sprints 1-3)
+        run: |
+          PGPASSWORD=postgres psql -h localhost -U postgres -d RescuePlateDB -f performance/seed-services-perf-data.sql
+
+      - name: Execute Apache JMeter Multi-Service Concurrency Test (Sprints 1-3)
+        run: |
+          rm -rf performance/results/multiservice_dashboard_report performance/results/multiservice_load_results.jtl
+          mkdir -p performance/results
+          jmeter -n \
+            -t performance/scripts/RescuePlate_MultiService_LoadTest.jmx \
+            -JTHREAD_COUNT=15 \
+            -JRAMP_UP_SECONDS=5 \
+            -JLOOP_COUNT=2 \
+            -l performance/results/multiservice_load_results.jtl \
+            -e -o performance/results/multiservice_dashboard_report
+
       - name: Seed Database with Sprint 4 Test Data
         run: |
           PGPASSWORD=postgres psql -h localhost -U postgres -d RescuePlateDB -f performance/seed-sprint4-data.sql
 
       - name: Execute Apache JMeter Sprint 4 Concurrency Test
         run: |
-          rm -rf performance/results/dashboard_report performance/results/sprint4_load_results.jtl
-          mkdir -p performance/results
+          rm -rf performance/results/sprint4_dashboard_report performance/results/sprint4_load_results.jtl
           jmeter -n \
             -t performance/scripts/RescuePlate_Sprint4_LoadTest.jmx \
-            -JTHREAD_COUNT=20 \
-            -JRAMP_UP_SECONDS=10 \
-            -JLOOP_COUNT=3 \
+            -JTHREAD_COUNT=15 \
+            -JRAMP_UP_SECONDS=5 \
+            -JLOOP_COUNT=2 \
             -l performance/results/sprint4_load_results.jtl \
-            -e -o performance/results/dashboard_report
+            -e -o performance/results/sprint4_dashboard_report
 
       - name: Upload JMeter Performance Reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: jmeter-performance-report
+          name: jmeter-performance-reports
           path: |
+            performance/results/multiservice_load_results.jtl
+            performance/results/multiservice_dashboard_report/**
             performance/results/sprint4_load_results.jtl
-            performance/results/dashboard_report/**
+            performance/results/sprint4_dashboard_report/**
 
       - name: Generate JMeter Load & Performance Test Summary
         if: always()
         run: |
           python3 -c "
           import json, os
-          stats_file = 'performance/results/dashboard_report/statistics.json'
           summary_file = os.environ.get('GITHUB_STEP_SUMMARY')
           if not summary_file: exit(0)
+
+          multi_stats_path = 'performance/results/multiservice_dashboard_report/statistics.json'
+          sprint4_stats_path = 'performance/results/sprint4_dashboard_report/statistics.json'
+
+          multi_data = {}
+          sprint4_data = {}
+
+          if os.path.exists(multi_stats_path):
+              try:
+                  with open(multi_stats_path, 'r', encoding='utf-8') as f:
+                      multi_data = json.load(f)
+              except Exception:
+                  pass
+
+          if os.path.exists(sprint4_stats_path):
+              try:
+                  with open(sprint4_stats_path, 'r', encoding='utf-8') as f:
+                      sprint4_data = json.load(f)
+              except Exception:
+                  pass
+
           with open(summary_file, 'a', encoding='utf-8') as out:
-              out.write('### Role 3: Load & Performance Testing (Apache JMeter) Summary\n\n')
-              if not os.path.exists(stats_file):
-                  out.write('> ⚠️ No JMeter statistics report generated.\n\n')
+              out.write('### Role 3: Load & Performance Testing (Apache JMeter) Multi-Service Summary\n\n')
+              if not multi_data and not sprint4_data:
+                  out.write('> ⚠️ No JMeter performance statistics reports found.\n\n')
                   exit(0)
-              with open(stats_file, 'r', encoding='utf-8') as f:
-                  data = json.load(f)
-              tot = data.get('Total', {})
-              samples = tot.get('sampleCount', 0)
-              errors = tot.get('errorCount', 0)
-              passed = samples - errors
-              err_pct = tot.get('errorPct', 0.0)
-              mean_res = tot.get('meanResTime', 0.0)
-              pct2_res = tot.get('pct2ResTime', 0.0)
-              max_res = tot.get('maxResTime', 0.0)
-              throughput = tot.get('throughput', 0.0)
-              if err_pct <= 1.0 and samples > 0:
-                  res_badge = 'Passing ✅'
-              elif err_pct <= 5.0:
-                  res_badge = 'Warning ⚠️'
+
+              out.write('| Service / Component | Sprint | Result | Total Samples | Passed | Errors | Error % | Avg Latency | 95th Pct | Throughput |\n')
+              out.write('| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |\n')
+
+              grand_samples = grand_errors = 0
+              grand_latency_sum = 0.0
+              grand_throughput = 0.0
+              all_tx_details = []
+
+              service_configs = [
+                  ('UserService', 'Sprint 1 & 2', 'PT-USR-'),
+                  ('DonationService', 'Sprint 2', 'PT-DON-'),
+                  ('RequestWorkflowService', 'Sprint 3', 'PT-REQ-')
+              ]
+
+              for svc_name, sprint_name, prefix in service_configs:
+                  matched = [(k, v) for k, v in multi_data.items() if k.startswith(prefix)]
+                  if matched:
+                      s = sum(m[1].get('sampleCount', 0) for m in matched)
+                      e = sum(m[1].get('errorCount', 0) for m in matched)
+                      p = s - e
+                      err_pct = (e / s * 100.0) if s > 0 else 0.0
+                      avg_lat = sum(m[1].get('meanResTime', 0.0) * m[1].get('sampleCount', 0) for m in matched) / s if s > 0 else 0.0
+                      p95 = max((m[1].get('pct2ResTime', 0.0) for m in matched), default=0.0)
+                      tp = sum(m[1].get('throughput', 0.0) for m in matched)
+                      badge = 'Passing ✅' if err_pct <= 1.0 and s > 0 else ('Warning ⚠️' if err_pct <= 5.0 else 'Failing ❌')
+                      out.write(f'| **{svc_name}** | {sprint_name} | {badge} | {s} | {p} | {e} | {err_pct:.2f}% | {avg_lat:.1f}ms | {p95:.1f}ms | {tp:.2f} req/s |\n')
+                      grand_samples += s
+                      grand_errors += e
+                      grand_latency_sum += (avg_lat * s)
+                      grand_throughput += tp
+                      for k, v in matched:
+                          all_tx_details.append((svc_name, sprint_name, k, v))
+                  else:
+                      out.write(f'| **{svc_name}** | {sprint_name} | ⚠️ Not Run | N/A | - | - | - | - | - | - |\n')
+
+              s4_tot = sprint4_data.get('Total')
+              if s4_tot:
+                  s = s4_tot.get('sampleCount', 0)
+                  e = s4_tot.get('errorCount', 0)
+                  p = s - e
+                  err_pct = s4_tot.get('errorPct', 0.0)
+                  avg_lat = s4_tot.get('meanResTime', 0.0)
+                  p95 = s4_tot.get('pct2ResTime', 0.0)
+                  tp = s4_tot.get('throughput', 0.0)
+                  badge = 'Passing ✅' if err_pct <= 1.0 and s > 0 else ('Warning ⚠️' if err_pct <= 5.0 else 'Failing ❌')
+                  out.write(f'| **DeliveryWorkflowService** | Sprint 4 | {badge} | {s} | {p} | {e} | {err_pct:.2f}% | {avg_lat:.1f}ms | {p95:.1f}ms | {tp:.2f} req/s |\n')
+                  grand_samples += s
+                  grand_errors += e
+                  grand_latency_sum += (avg_lat * s)
+                  grand_throughput += tp
+                  for k, v in sprint4_data.items():
+                      if k.startswith('TC-'):
+                          all_tx_details.append(('DeliveryWorkflowService', 'Sprint 4', k, v))
               else:
-                  res_badge = 'Failing ❌'
-              out.write('| Result | Total Samples | Passed | Errors | Error % | Avg Latency | 95th Pct | Max Latency | Throughput |\n')
-              out.write('| :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |\n')
-              out.write(f'| {res_badge} | {samples} | {passed} | {errors} | {err_pct:.2f}% | {mean_res:.2f}ms | {pct2_res:.2f}ms | {max_res:.0f}ms | {throughput:.2f} req/s |\n\n')
+                  out.write('| **DeliveryWorkflowService** | Sprint 4 | ⚠️ Not Run | N/A | - | - | - | - | - | - |\n')
+
+              if grand_samples > 0:
+                  grand_passed = grand_samples - grand_errors
+                  grand_err_pct = (grand_errors / grand_samples) * 100.0
+                  grand_avg_lat = grand_latency_sum / grand_samples
+                  grand_badge = 'Passing ✅' if grand_err_pct <= 1.0 else ('Warning ⚠️' if grand_err_pct <= 5.0 else 'Failing ❌')
+                  out.write(f'| **Overall Platform Total** | **All Sprints** | **{grand_badge}** | **{grand_samples}** | **{grand_passed}** | **{grand_errors}** | **{grand_err_pct:.2f}%** | **{grand_avg_lat:.1f}ms** | **-** | **{grand_throughput:.2f} req/s** |\n\n')
+              else:
+                  out.write('\n')
+
+              if all_tx_details:
+                  out.write(\"<details>\\n<summary><b>📋 Detailed Transaction-Level Performance Breakdown (\" + str(len(all_tx_details)) + \" Transactions)</b></summary>\\n\\n\")
+                  out.write('| Service | Sprint | Transaction | Samples | Passed | Errors | Error % | Avg Latency | 95th Pct | Throughput |\n')
+                  out.write('| :--- | :---: | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |\n')
+                  for svc, sp, tx_name, stats in all_tx_details:
+                      cnt = stats.get('sampleCount', 0)
+                      err = stats.get('errorCount', 0)
+                      ok = cnt - err
+                      epct = stats.get('errorPct', 0.0)
+                      mean_ms = stats.get('meanResTime', 0.0)
+                      p95_ms = stats.get('pct2ResTime', 0.0)
+                      tput = stats.get('throughput', 0.0)
+                      clean_tx = tx_name.replace('|', '-').strip()
+                      out.write(f'| {svc} | {sp} | {clean_tx} | {cnt} | {ok} | {err} | {epct:.2f}% | {mean_ms:.1f}ms | {p95_ms:.1f}ms | {tput:.2f} req/s |\n')
+                  out.write('\\n</details>\\n\\n')
           "
 
   # ============================================================================
@@ -379,23 +533,128 @@ jobs:
         working-directory: frontend
         run: npm run build
 
-      - name: Execute Cypress Sprint 4 End-to-End Tests
+      - name: Execute Cypress End-to-End Tests (All Sprints & Services)
         uses: cypress-io/github-action@v6
         with:
           working-directory: frontend
           start: npm run preview -- --host 0.0.0.0 --port 5173
           wait-on: 'http://localhost:5173'
           wait-on-timeout: 120
-          spec: cypress/e2e/sprint4*.cy.js
+          spec: cypress/e2e/sprint1-user-service-e2e.cy.js,cypress/e2e/sprint2-donation-service-e2e.cy.js,cypress/e2e/sprint3-request-workflow-e2e.cy.js,cypress/e2e/sprint4-workflow-e2e.cy.js,cypress/e2e/sprint4-admin-workflow-e2e.cy.js
 
-      - name: Upload Cypress Screenshots and Videos
+      - name: Upload Cypress Test Reports and Artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: cypress-e2e-artifacts
           path: |
+            frontend/cypress/results/*.xml
             frontend/cypress/screenshots/**
             frontend/cypress/videos/**
+
+      - name: Generate UI / E2E Test Summary
+        if: always()
+        run: |
+          python3 -c "
+          import glob, os, xml.etree.ElementTree as ET
+          summary_file = os.environ.get('GITHUB_STEP_SUMMARY')
+          if not summary_file: exit(0)
+
+          spec_map = {
+              'sprint1-user-service-e2e': ('UserService (Auth, Registration, Profile)', 'Sprint 1'),
+              'sprint2-donation-service-e2e': ('DonationService (Postings, Marketplace, Directory)', 'Sprint 2'),
+              'sprint3-request-workflow-e2e': ('RequestWorkflowService (Needs, Offers, Approvals)', 'Sprint 3'),
+              'sprint4-workflow-e2e': ('DeliveryWorkflowService (Delivery Coordination & Receipts)', 'Sprint 4'),
+              'sprint4-admin-workflow-e2e': ('UserService Admin (2FA PIN, Telemetry, Moderation)', 'Sprint 4')
+          }
+
+          xml_files = sorted(glob.glob('frontend/cypress/results/*.xml'))
+
+          with open(summary_file, 'a', encoding='utf-8') as out:
+              out.write('### Role 4: UI & End-to-End Testing (Cypress) Multi-Service Summary\n\n')
+
+              if not xml_files:
+                  out.write('> ⚠️ No Cypress JUnit test result XML files found.\n\n')
+                  exit(0)
+
+              out.write('| Service / Domain | Sprint | Spec File | Result | Tests | Passed | Failed | Duration |\n')
+              out.write('| :--- | :---: | :--- | :---: | :---: | :---: | :---: | :---: |\n')
+
+              total_tests = total_passed = total_failed = 0
+              total_duration = 0.0
+              all_testcases = []
+
+              for xf in xml_files:
+                  try:
+                      tree = ET.parse(xf)
+                      root = tree.getroot()
+                      spec_filename = ''
+                      for ts in root.iter('testsuite'):
+                          f = ts.attrib.get('file', '')
+                          if f:
+                              spec_filename = os.path.basename(f.replace('\\\\', '/'))
+                              break
+
+                      if not spec_filename:
+                          for ts in root.iter('testsuite'):
+                              nm = ts.attrib.get('name', '').lower()
+                              for k in spec_map.keys():
+                                  if k in nm:
+                                      spec_filename = k + '.cy.js'
+                                      break
+                              if spec_filename:
+                                  break
+
+                      key_match = None
+                      for k in spec_map.keys():
+                          if k in spec_filename:
+                              key_match = k
+                              break
+
+                      service_name, sprint_name = spec_map.get(key_match, (spec_filename or 'E2E Suite', 'N/A'))
+
+                      tests = passed = failed = 0
+                      spec_time = float(root.attrib.get('time', 0.0))
+
+                      for tc in root.iter('testcase'):
+                          tests += 1
+                          t_name = tc.attrib.get('classname', '') or tc.attrib.get('name', 'Unknown')
+                          t_time = float(tc.attrib.get('time', 0.0))
+                          has_fail = tc.find('failure') is not None or tc.find('error') is not None
+                          is_skip = tc.find('skipped') is not None
+                          if has_fail:
+                              failed += 1
+                              status_str = '❌ Failed'
+                          elif is_skip:
+                              status_str = '⚪ Skipped'
+                          else:
+                              passed += 1
+                              status_str = '✅ Passed'
+                          all_testcases.append((service_name, sprint_name, t_name, status_str, t_time))
+
+                      total_tests += tests
+                      total_passed += passed
+                      total_failed += failed
+                      total_duration += spec_time
+
+                      res_badge = 'Passing ✅' if failed == 0 and tests > 0 else 'Failing ❌'
+                      out.write(f'| **{service_name}** | {sprint_name} | `{spec_filename}` | {res_badge} | {tests} | {passed} | {failed} | {spec_time:.1f}s |\n')
+                  except Exception as e:
+                      out.write(f'| Error parsing `{os.path.basename(xf)}` | - | - | ❌ Error | - | - | - | - |\n')
+
+              tot_badge = 'Passing ✅' if total_failed == 0 and total_tests > 0 else 'Failing ❌'
+              out.write(f'| **Overall Platform Total** | **All Sprints** | **{len(xml_files)} Spec Files** | **{tot_badge}** | **{total_tests}** | **{total_passed}** | **{total_failed}** | **{total_duration:.1f}s** |\n\n')
+
+              if all_testcases:
+                  out.write('<details>\n<summary><b>📋 Detailed E2E Test Cases Breakdown (' + str(total_passed) + '/' + str(total_tests) + ' Passed)</b></summary>\n\n')
+                  out.write('| Service | Sprint | Test Case Title | Status | Duration |\n')
+                  out.write('| :--- | :---: | :--- | :---: | :---: |\n')
+                  for svc, sp, title, st, dur in all_testcases:
+                      clean_title = title.replace('|', '-').replace('\n', ' ').strip()
+                      svc_label = svc.split(' (')[0]
+                      out.write(f'| {svc_label} | {sp} | {clean_title} | {st} | {dur:.2f}s |\n')
+                  out.write('\n</details>\n\n')
+          "
 
   # ============================================================================
   # UNIFIED REPORTING: Aggregate Dashboard & Step Summary
@@ -422,4 +681,4 @@ jobs:
           echo "| **Load & Performance Testing** | Apache JMeter (5.6.3) | ${{ needs.load-performance-testing.result == 'success' && '✅ PASSED' || needs.load-performance-testing.result == 'skipped' && '⚪ SKIPPED' || '❌ FAILED' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| **UI / E2E Testing** | Cypress (16.1.1) | ${{ needs.ui-e2e-testing.result == 'success' && '✅ PASSED' || needs.ui-e2e-testing.result == 'skipped' && '⚪ SKIPPED' || '❌ FAILED' }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "> 📊 **Download Reports:** Artifacts for all 4 test categories (Coverage XML, Stryker HTML Report, JMeter HTML Dashboard, and Cypress Screenshots) are attached to this workflow run." >> $GITHUB_STEP_SUMMARY
+          echo "> 📊 **Download Reports:** Artifacts for all 4 test categories (Coverage XML, Stryker HTML Report, JMeter HTML Dashboard, and Cypress Test Reports & Screenshots) are attached to this workflow run." >> $GITHUB_STEP_SUMMARY
